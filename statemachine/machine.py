@@ -26,11 +26,11 @@ class State(object):
 
     def on_entry(self, obj):
         for callback in self._on_entry:
-            callback(obj, state=self.name)
+            callback(obj)
 
     def on_exit(self, obj):
         for callback in self._on_exit:
-            callback(obj, state=self.name)
+            callback(obj)
 
 
 class Transition(object):
@@ -44,7 +44,7 @@ class Transition(object):
 
     def on_transfer(self, obj):
         for callback in self._on_transfer:
-            callback(obj, old_state=self.old_state.name, new_state=self.new_state.name)
+            callback(obj)
 
     def execute(self, obj):
         if self.condition(obj):
@@ -151,11 +151,13 @@ class BaseStateObject(object):
 
 if __name__ == "__main__":
 
+    import random
+
     def printline(obj):
         print "---"
 
-    def printer(obj, **kwargs):
-        print "called 'printer' for '%s' with %s" % (str(obj), kwargs)
+    def printer(obj):
+        print "called 'printer' for '%s'" % str(obj)
 
     class Matter(BaseStateObject):
 
