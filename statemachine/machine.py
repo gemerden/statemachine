@@ -27,27 +27,27 @@ class State(object):
         self._on_entry = listify(on_entry)
         self._on_exit = listify(on_exit)
 
-    def on_entry(self, obj):
+    def on_entry(self, obj, old_state, new_state):
         for callback in self._on_entry:
-            callback(obj)
+            callback(obj, old_state, new_state)
 
-    def on_exit(self, obj):
+    def on_exit(self, obj, old_state, new_state):
         for callback in self._on_exit:
-            callback(obj)
+            callback(obj, old_state, new_state)
 
 
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
-    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=lambda obj: True):
+    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=lambda obj, o, n: True):
         self.machine = machine
         self.old_state = old_state
         self.new_state = new_state
         self._on_transfer = listify(on_transfer)
         self.condition = condition
 
-    def on_transfer(self, obj):
+    def on_transfer(self, obj, old_state, new_state):
         for callback in self._on_transfer:
-            callback(obj)
+            callback(obj, old_state, new_state)
 
     def execute(self, obj):
         """
@@ -55,13 +55,15 @@ class Transition(object):
         returns True).
         :param obj: object of which the state is managed
         """
-        if self.condition(obj):
-            self.machine.before_any_exit(obj)
-            self.old_state.on_exit(obj)
-            self.on_transfer(obj)
-            obj._change_state(self.new_state.name)
-            self.new_state.on_entry(obj)
-            self.machine.after_any_entry(obj)
+        old_state = self.old_state.name
+        new_state = self.new_state.name
+        if self.condition(obj, old_state, new_state):
+            self.machine.before_any_exit(obj, old_state, new_state)
+            self.old_state.on_exit(obj, old_state, new_state)
+            self.on_transfer(obj, old_state, new_state)
+            obj._change_state(new_state)
+            self.new_state.on_entry(obj, old_state, new_state)
+            self.machine.after_any_entry(obj, old_state, new_state)
 
     def __str__(self):
         """string representing the transition"""
@@ -80,21 +82,24 @@ class StateMachine(object):
         :param states: a list of state properties:
         {
             "name": "solid",  # the state name
-            "on_entry":[some_method],  # callback function(obj) called when an objects enter the state (single or list)
-            "on_exit":[some_method]  # callback function(obj) called when an objects exits the state (single or list)
+            "on_entry":[some_method],  # callback function called when an objects enter the state (single or list)
+            "on_exit":[some_method]  # callback function called when an objects exits the state (single or list)
         }
         :param transitions: a list of transition properties:
         {
             "old_state": "solid",  # the name of the 'from' state of the transition
             "new_state": "liquid",  # the name of the 'to' state of the transition
             "triggers": ["melt", "heat"],  # name of the triggers triggering the transition: e.g. obj.heat()
-            "on_transfer": [printer],# callback function(obj) called when an objects transfers from state to
+            "on_transfer": [printer],# callback function called when an objects transfers from state to
                 state(single or list)
             "condition": function(obj); called to determine whether a transtion will actually take place (return
                 True to cause state change)
         }
-        :param before_any_exit: callback function(obj) called before an objects exits any state (single or list)
-        :param after_any_entry: callback function(obj) called after an objects enters any state (single or list)
+        :param before_any_exit: callback function called before an objects exits any state (single or list)
+        :param after_any_entry: callback function called after an objects enters any state (single or list)
+
+        Note that all callback functions (including 'condition') have the signature:
+            func(obj, old_state, new_state), with old_state and new_state as strings
         """
         self.name = name
         self.states = self._create_states(states)
@@ -122,7 +127,7 @@ class StateMachine(object):
                                                old_state=self.states[trans["old_state"]],
                                                new_state=self.states[trans["new_state"]],
                                                on_transfer=trans.get("on_transfer", ()),
-                                               condition=trans.get("condition", lambda obj: True))
+                                               condition=trans.get("condition", lambda obj, o, n: True))
             transition_dict[(trans["old_state"], trans["new_state"])] = transition
         return transition_dict
 
@@ -137,15 +142,15 @@ class StateMachine(object):
                 trigger_dict[key] = self.transitions[(trans["old_state"], trans["new_state"])]
         return trigger_dict
 
-    def before_any_exit(self, obj):
+    def before_any_exit(self, obj, old_state, new_state):
         """called before any transition"""
         for callback in self._before_any_exit:
-            callback(obj)
+            callback(obj, old_state, new_state)
 
-    def after_any_entry(self, obj):
+    def after_any_entry(self, obj, old_state, new_state):
         """called after any transitions"""
         for callback in self._after_any_entry:
-            callback(obj)
+            callback(obj, old_state, new_state)
 
     def do_trigger(self, trigger, obj):
         """executes the transition when called through a trigger"""
@@ -219,10 +224,10 @@ if __name__ == "__main__":
     Small usage example
     """
 
-    def printline(obj):
+    def printline(obj, old_state, new_state):
         print "---"
 
-    def printer(obj):
+    def printer(obj, old_state, new_state):
         print "called 'printer' for '%s'" % str(obj)
 
     class Matter(BaseStateObject):
@@ -259,7 +264,7 @@ if __name__ == "__main__":
     try:
         lumpy.evaporate()
     except TransitionError as e:
-        print ">>> JEEP: error intercepted: " + e.message
+        print ">>> Ho ho: error intercepted: " + e.message
 
     lumpy.heat()
     lumpy.heat()
@@ -268,7 +273,7 @@ if __name__ == "__main__":
     try:
         lumpy.cool()
     except TransitionError as e:
-        print ">>> JEEP: error intercepted: " + e.message
+        print ">>> Ho ho: error intercepted: " + e.message
 
     lumpy.state = "liquid"
     lumpy.state = "gas"
@@ -277,6 +282,6 @@ if __name__ == "__main__":
     try:
         lumpy.state = "gas"
     except TransitionError as e:
-        print ">>> JEEP: error intercepted: " + e.message
+        print ">>> Ho ho: error intercepted: " + e.message
 
 

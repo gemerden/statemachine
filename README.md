@@ -14,11 +14,11 @@ This state machine implementation is developed with the following goals:
 ## basic usage
 Lets start with a (runnable) example:
 ``` python   
-    def printline(obj):  # simple callback function
+    def printline(obj, old_state, new_state):  # simple callback function
         print "---"
     
     # somewhat more verbose callback function
-    def printer(obj):  
+    def printer(obj, old_state, new_state):
         print "called 'printer' for '%s'" % str(obj)
     
     # inherit from BaseStateObject to let it store state and be able to call triggers

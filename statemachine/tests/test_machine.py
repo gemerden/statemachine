@@ -11,12 +11,12 @@ class StateMachineTest(unittest.TestCase):
         self.callback_counter = 0
         self.temp_ignore = True
 
-        def callback(obj, **kwargs):
+        def callback(obj, old_state, new_state):
             self.assertEqual(type(obj), Matter)
             self.callback_counter += 1
 
         def temp_checker(min, max):
-            def inner(obj, **kwargs):
+            def inner(obj, old_state, new_state):
                 return min < obj.temperature <= max or self.temp_ignore
             return inner
 
