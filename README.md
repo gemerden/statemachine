@@ -15,8 +15,8 @@ This state machine implementation is developed with the following goals:
 Lets start with an example:
 
 `
-    # simple callback function
-    def printline(obj):  
+    
+    def printline(obj):  # simple callback function
         print "---"
     
     # somewhat more verbose callback function
