@@ -50,8 +50,10 @@ Lets start with an example:
         def __str__(self):
             return self.name + "(%s)" % self.state
     
-    # instantiate
-    block = Matter("block")
+    
+    # so far for using the API, now lets see what we have:
+    
+    block = Matter("block")  # instantiate an object
 
     # now call the trigger functions to cause a state change
     block.melt()  # the state is now 'liquid'
