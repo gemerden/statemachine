@@ -1,7 +1,5 @@
 from functools import partial
 
-from graph import StateGraph
-
 
 def listify(list_or_item):
     try:
@@ -50,12 +48,12 @@ class Transition(object):
 
     def execute(self, obj):
         if self.condition(obj):
-            self.machine.before_any_transfer(obj)
+            self.machine.before_any_exit(obj)
             self.old_state.on_exit(obj)
             self.on_transfer(obj)
             obj.change_state(self.new_state.name)
             self.new_state.on_entry(obj)
-            self.machine.after_any_transfer(obj)
+            self.machine.after_any_entry(obj)
 
     def __str__(self):
         return "<%s, %s>" %(self.old_state.name, self.new_state.name)
@@ -66,27 +64,32 @@ class StateMachine(object):
     state_class = State
     transition_class = Transition
 
-    def __init__(self, name, states, transitions, before_any_transfer=(), after_any_transfer=()):
+    def __init__(self, name, states, transitions, before_any_exit=(), after_any_entry=()):
         self.name = name
         self.states = self._create_states(states)
         self.transitions = self._create_transitions(transitions)
         self.triggers = self._create_trigger_dict(transitions)
-        self._before_any_transfer = listify(before_any_transfer)
-        self._after_any_transfer = listify(after_any_transfer)
+        self._before_any_exit = listify(before_any_exit)
+        self._after_any_entry = listify(after_any_entry)
 
     def _create_states(self, states):
         state_dict = {}
         for state in states:
+            if state["name"] in state_dict:
+                raise MachineError("two states with the same name in state machine")
             state_dict[state["name"]] = self.state_class(machine=self, **state)
         return state_dict
 
     def _create_transitions(self, transitions):
         transition_dict = {}
         for trans in transitions:
+            if (trans["old_state"], trans["new_state"]) in transition_dict:
+                raise MachineError("two transitions between same states in state machine")
             transition = self.transition_class(machine=self,
                                                old_state=self.states[trans["old_state"]],
                                                new_state=self.states[trans["new_state"]],
-                                               on_transfer=trans.get("on_transfer",()))
+                                               on_transfer=trans.get("on_transfer", ()),
+                                               condition=trans.get("condition", lambda obj: True))
             transition_dict[(trans["old_state"], trans["new_state"])] = transition
         return transition_dict
 
@@ -100,12 +103,12 @@ class StateMachine(object):
                 trigger_dict[key] = self.transitions[(trans["old_state"], trans["new_state"])]
         return trigger_dict
 
-    def before_any_transfer(self, obj):
-        for callback in self._before_any_transfer:
+    def before_any_exit(self, obj):
+        for callback in self._before_any_exit:
             callback(obj)
 
-    def after_any_transfer(self, obj):
-        for callback in self._after_any_transfer:
+    def after_any_entry(self, obj):
+        for callback in self._after_any_entry:
             callback(obj)
 
     def do_trigger(self, trigger, obj):
@@ -119,9 +122,6 @@ class StateMachine(object):
             self.transitions[(obj.state, state)].execute(obj)
         except KeyError:
             raise TransitionError("transition <%s, %s> does not exist" % (obj.state, state))
-
-    def save(self, filename=None, ext="png"):
-        StateGraph(machine=self).save(filename, ext)
 
 
 class BaseStateObject(object):
@@ -142,6 +142,8 @@ class BaseStateObject(object):
         return self._new_state
 
     def set_state(self, state):
+        if state == self._new_state:
+            return
         self.machine.set_state(state, self)
 
     state = property(get_state, set_state)
@@ -170,7 +172,7 @@ if __name__ == "__main__":
                 {"old_state": "gas", "new_state": "liquid", "triggers": ["condense", "cool"], "on_transfer": [printer]},
                 {"old_state": "liquid", "new_state": "solid", "triggers": ["freeze", "cool"], "on_transfer": [printer]}
             ],
-            after_any_transfer=printline
+            after_any_entry=printline
         )
 
         def __init__(self, name):
@@ -209,4 +211,4 @@ if __name__ == "__main__":
     except TransitionError as e:
         print ">>> JEEP: error intercepted: " + e.message
 
-    Matter.machine.save()
+
