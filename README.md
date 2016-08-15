@@ -12,7 +12,7 @@ This state machine implementation is developed with the following goals:
 
 
 ## basic usage
-Lets start with an example:
+Lets start with a (runnable) example:
 ``` python   
     def printline(obj):  # simple callback function
         print "---"
