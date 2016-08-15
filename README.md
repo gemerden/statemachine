@@ -76,7 +76,7 @@ Lets start with an example:
 
 Apart from changing the state of the Matter object, the main thing the state machine does is to call a number of callbacks that are given in the constructor. The order these callbacks can be seen in the Transition class:
 
- `
+```
     def execute(self, obj):  # called on any trigger or obj.state = "new_state"
         if self.condition(obj):  # optional function parameter in the config of each transition (not shown above)
             self.machine.before_any_exit(obj)  # same callback method for all state transitions
@@ -86,7 +86,7 @@ Apart from changing the state of the Matter object, the main thing the state mac
             self.new_state.on_entry(obj)
             self.machine.after_any_entry(obj)  # same callback method for all state transitions
 
- `
+```
 
  Notes:
 
