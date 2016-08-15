@@ -53,7 +53,7 @@ class Transition(object):
         """
         Method calling all the callbacks of a state transition ans changing the actual object state (if condition
         returns True).
-        :param obj: object of which the stae is managed
+        :param obj: object of which the state is managed
         """
         if self.condition(obj):
             self.machine.before_any_exit(obj)
