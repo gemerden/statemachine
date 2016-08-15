@@ -13,9 +13,7 @@ This state machine implementation is developed with the following goals:
 
 ## basic usage
 Lets start with an example:
-
-`
-    
+```    
     def printline(obj):  # simple callback function
         print "---"
     
@@ -74,8 +72,7 @@ Lets start with an example:
         block.state = "gas"  # 'solid' can still not be evaporated
     except TransitionError as e:
         print ">>> Oh oh: error intercepted: " + e.message
-
-`
+```
 
 Apart from changing the state of the Matter object, the main thing the state machine does is to call a number of callbacks that are given in the constructor. The order these callbacks can be seen in the Transition class:
 
