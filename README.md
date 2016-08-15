@@ -93,4 +93,5 @@ Apart from changing the state of the Matter object, the main thing the state mac
   * This method is always called on any state transition (if it exists)
   * 'condition' and all callbacks are configured in the constructor of the state machine (on_entry=.., on_transfer=..),
   * 'on_exit', etc. can be initiated with a single function or a list of functions (all callback except for 'condition')
+  * All callbacks are optional, if no callback is given a no-action callback is used.
 
