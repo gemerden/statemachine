@@ -7,7 +7,7 @@ This state machine implementation is developed with the following goals:
 * Easy to use API
 * Usable for any (almost, I'm sure) python class with a finite number of states
 * Readable, straightforward, easy-to-adapt code
-* One state machine instance can manage state of many objects
+* One state machine instance can manage the state of many objects
 * Reasonably fast
 
 
@@ -76,4 +76,24 @@ Lets start with an example:
         print ">>> Oh oh: error intercepted: " + e.message
 
 `
+
+Apart from changing the state of the Matter object, the main thing the state machine does is to call a number of callbacks that are given in the constructor. The order these callbacks can be seen in the Transition class:
+
+ `
+    def execute(self, obj):  # called on any trigger or obj.state = "new_state"
+        if self.condition(obj):  # optional function parameter in the config of each transition (not shown above)
+            self.machine.before_any_exit(obj)  # same callback method for all state transitions
+            self.old_state.on_exit(obj)
+            self.on_transfer(obj)
+            obj.change_state(self.new_state.name)  # here the actual change of the state of the object takes place
+            self.new_state.on_entry(obj)
+            self.machine.after_any_entry(obj)  # same callback method for all state transitions
+
+ `
+
+ Notes:
+
+  * This method is always called on any state transition (if it exists)
+  * 'condition' and all callbacks are configured in the constructor of the state machine (on_entry=.., on_transfer=..),
+  * 'on_exit', etc. can be initiated with a single function or a list of functions (all callback except for 'condition')
 
