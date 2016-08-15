@@ -82,7 +82,7 @@ Apart from changing the state of the Matter object, the main thing the state mac
             self.machine.before_any_exit(obj)  # same callback method for all state transitions
             self.old_state.on_exit(obj)
             self.on_transfer(obj)
-            obj.change_state(self.new_state.name)  # here the actual change of the state of the object takes place
+            obj._change_state(self.new_state.name)  # here the actual change of the state of the object takes place
             self.new_state.on_entry(obj)
             self.machine.after_any_entry(obj)  # same callback method for all state transitions
 
