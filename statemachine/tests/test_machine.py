@@ -9,7 +9,7 @@ class StateMachineTest(unittest.TestCase):
 
     def setUp(self):
         self.callback_counter = 0
-        self.temp_ignore = True
+        self.temperature_ignore = True
 
         def callback(obj, old_state, new_state):
             self.assertEqual(type(obj), Matter)
@@ -17,7 +17,7 @@ class StateMachineTest(unittest.TestCase):
 
         def temp_checker(min, max):
             def inner(obj, old_state, new_state):
-                return min < obj.temperature <= max or self.temp_ignore
+                return min < obj.temperature <= max or self.temperature_ignore
             return inner
 
         self.machine = StateMachine(
@@ -109,7 +109,7 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(self.callback_counter, 15)
 
     def test_condition(self):
-        self.temp_ignore = False
+        self.temperature_ignore = False
         lump = self.object_class("lump", temperature=-10)
 
         lump.heat_by(5)
