@@ -120,6 +120,7 @@ class StateMachine(object):
     def _create_transitions(self, transitions):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
         transition_dict = {}
+        transitions = self._create_wildcard_transitions(transitions)
         for trans in transitions:
             if (trans["old_state"], trans["new_state"]) in transition_dict:
                 raise MachineError("two transitions between same states in state machine")
@@ -133,6 +134,25 @@ class StateMachine(object):
             except KeyError:
                 raise MachineError("non-existing state when constructing transitions")
         return transition_dict
+
+    def _create_wildcard_transitions(self, transitions):
+        current = [(t["old_state"], t["new_state"]) for t in transitions]
+        for trans in [t for t in transitions if t["old_state"] == "*"]:
+            for state_name in self.states.iterkeys():
+                if state_name != trans["new_state"] and (state_name, trans["new_state"]) not in current:
+                    new_trans = trans.copy()
+                    new_trans["old_state"] = state_name
+                    transitions.append(new_trans)
+            transitions.remove(trans)
+        current = [(t["old_state"], t["new_state"]) for t in transitions]
+        for trans in [t for t in transitions if t["new_state"] == "*"]:
+            for state_name in self.states.iterkeys():
+                if state_name != trans["old_state"] and (trans["old_state"], state_name) not in current:
+                    new_trans = trans.copy()
+                    new_trans["new_state"] = state_name
+                    transitions.append(new_trans)
+            transitions.remove(trans)
+        return transitions
 
     def _create_trigger_dict(self, transitions):
         """creates a dictionary of (old state name, trigger name): Transition key value pairs"""

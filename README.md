@@ -95,6 +95,7 @@ Lets start with an example:
   * Argument 'condition' (not shown) of a transition can be used to block a transition
   * All callbacks have the signature func(obj, old_state, new_state), with old_state and new_state as strings (str)
   * 'condition' and all callbacks are configured in the constructor of the state machine (on_entry=.., on_transfer=..),
-  * callbacks can be initiated with a single function or a list of functions, apart from 'condition'
   * All callbacks are optional, if no callback is given a no-action callback is used.
+  * Callbacks can be initiated with a single function or a list of functions, apart from 'condition'
+  * Wildcards "*" can be used for old_state or new_state in transition configuration so that all transitions to or from that state are created.
 
