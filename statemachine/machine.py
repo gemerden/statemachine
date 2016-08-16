@@ -136,6 +136,7 @@ class StateMachine(object):
         return transition_dict
 
     def _mutiply_transitions(self, transitions):
+        """replaces transitions with '*' wildcards and list of states with multiple one-to-one transitions"""
         current = [(t["old_state"], t["new_state"]) for t in transitions]
         for trans in transitions[:]:
             if trans["old_state"] == "*" or isinstance(trans["old_state"], (list, tuple)):
