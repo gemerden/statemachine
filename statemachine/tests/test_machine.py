@@ -8,18 +8,22 @@ __author__ = "lars van gemerden"
 class StateMachineTest(unittest.TestCase):
 
     def setUp(self):
-        self.callback_counter = 0
-        self.temperature_ignore = True
+        """called before any individual test method"""
+        self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
+        self.temperature_ignore = True  # used to switch condition function on or off
 
         def callback(obj, old_state, new_state):
+            """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
             self.assertEqual(type(obj), Matter)
             self.callback_counter += 1
 
         def temp_checker(min, max):
+            """some configurable condition function; only in effect when temperature_ignore==False (some tests)"""
             def inner(obj, old_state, new_state):
                 return min < obj.temperature <= max or self.temperature_ignore
             return inner
 
+        # create a machine based on phase changes of matter (solid, liquid, gas)
         self.machine = StateMachine(
             name="matter machine",
             states=[
@@ -38,19 +42,21 @@ class StateMachineTest(unittest.TestCase):
         )
 
         class Matter(BaseStateObject):
-
+            """object class fo which the state is managed"""
             machine = self.machine
 
             def __init__(self, name, temperature=0):
                 super(Matter, self).__init__(initial="solid")
                 self.name = name
-                self.temperature = temperature
+                self.temperature = temperature  # used in tests of condition callback in transition class
 
             def heat_by(self, delta):
+                """used to check condition on transition"""
                 self.temperature += delta
                 self.heat()
 
             def cool_by(self, delta):
+                """used to check condition on transition"""
                 self.temperature -= delta
                 self.cool()
 
@@ -60,11 +66,13 @@ class StateMachineTest(unittest.TestCase):
         self.object_class = Matter
 
     def test_setup(self):
+        """test whether all states, transitions and triggers are in place"""
         self.assertEqual(len(self.machine.states), 3)
         self.assertEqual(len(self.machine.transitions), 4)
         self.assertEqual(len(self.machine.triggers), 8)
 
     def test_triggers(self):
+        """test the basio trigger functions and the resultig states"""
         lump = self.object_class("lump")
         lump.melt()
         self.assertEqual(lump.state, "liquid")
@@ -75,7 +83,8 @@ class StateMachineTest(unittest.TestCase):
         lump.freeze()
         self.assertEqual(lump.state, "solid")
 
-    def test_same_triggers(self):
+    def test_shared_triggers(self):
+        """test the shared trigger functions (same name for multiple transitions) and the resulting states"""
         lump = self.object_class("lump")
         lump.heat()
         self.assertEqual(lump.state, "liquid")
@@ -87,6 +96,7 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(lump.state, "solid")
 
     def test_set_state(self):
+        """tests changing states with the state property of BaseStateObject"""
         lump = self.object_class("lump")
         lump.state = "liquid"
         self.assertEqual(lump.state, "liquid")
@@ -100,6 +110,7 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(lump.state, "solid")
 
     def test_callback(self):
+        """tests whether all callbacks are called during transitions"""
         lump = self.object_class("lump")
         lump.melt()
         self.assertEqual(self.callback_counter, 5)
@@ -109,6 +120,7 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(self.callback_counter, 15)
 
     def test_condition(self):
+        """tests whether the condition callback works: if the condition fails, no transition takes place"""
         self.temperature_ignore = False
         lump = self.object_class("lump", temperature=-10)
 
@@ -126,6 +138,7 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(self.callback_counter, 10)
 
     def test_transition_exceptions(self):
+        """tests whether non-existent transitions are detected"""
         lump = self.object_class("lump")
         with self.assertRaises(TransitionError):
             lump.evaporate()
@@ -135,6 +148,7 @@ class StateMachineTest(unittest.TestCase):
             lump.state = "gas"
 
     def test_machine_errors(self):
+        """tests whether double state names, transitions and triggers and non-existing state names are detected"""
         with self.assertRaises(MachineError):
             StateMachine(
                 name="matter machine",
@@ -152,8 +166,33 @@ class StateMachineTest(unittest.TestCase):
                     {"name": "liquid"},
                 ],
                 transitions=[
+                    {"old_state": "solid", "new_state": "gas", "triggers": ["melt"]}
+                ]
+            )
+        with self.assertRaises(MachineError):
+            StateMachine(
+                name="matter machine",
+                states=[
+                    {"name": "solid"},
+                    {"name": "liquid"},
+                ],
+                transitions=[
                     {"old_state": "solid", "new_state": "liquid", "triggers": ["melt"]},
                     {"old_state": "solid", "new_state": "liquid", "triggers": ["melt"]},
+                ]
+            )
+        with self.assertRaises(MachineError):
+            StateMachine(
+                name="matter machine",
+                states=[
+                    {"name": "solid"},
+                    {"name": "liquid"},
+                    {"name": "gas"},
+                ],
+                transitions=[
+                    {"old_state": "solid", "new_state": "liquid", "triggers": ["melt"]},
+                    {"old_state": "liquid", "new_state": "gas", "triggers": ["evaporate"]},
+                    {"old_state": "liquid", "new_state": "solid", "triggers": ["evaporate"]},
                 ]
             )
 

@@ -123,12 +123,15 @@ class StateMachine(object):
         for trans in transitions:
             if (trans["old_state"], trans["new_state"]) in transition_dict:
                 raise MachineError("two transitions between same states in state machine")
-            transition = self.transition_class(machine=self,
-                                               old_state=self.states[trans["old_state"]],
-                                               new_state=self.states[trans["new_state"]],
-                                               on_transfer=trans.get("on_transfer", ()),
-                                               condition=trans.get("condition", lambda obj, o, n: True))
-            transition_dict[(trans["old_state"], trans["new_state"])] = transition
+            try:
+                transition = self.transition_class(machine=self,
+                                                   old_state=self.states[trans["old_state"]],
+                                                   new_state=self.states[trans["new_state"]],
+                                                   on_transfer=trans.get("on_transfer", ()),
+                                                   condition=trans.get("condition", lambda obj, o, n: True))
+                transition_dict[(trans["old_state"], trans["new_state"])] = transition
+            except KeyError:
+                raise MachineError("non-existing state when constructing transitions")
         return transition_dict
 
     def _create_trigger_dict(self, transitions):
@@ -221,67 +224,48 @@ class BaseStateObject(object):
 
 if __name__ == "__main__":
     """
-    Small usage example
+    Small usage example: a minimal state machine (see also the tests)
     """
+    def printer(action):
+        def func(obj, old_state, new_state):
+            print "'%s' for '%s' results in transition <%s, %s>" % (action, str(obj), old_state, new_state)
+        return func
 
-    def printline(obj, old_state, new_state):
-        print "---"
-
-    def printer(obj, old_state, new_state):
-        print "called 'printer' for '%s'" % str(obj)
-
-    class Matter(BaseStateObject):
+    class Switch(BaseStateObject):
 
         machine = StateMachine(
             name="matter machine",
             states=[
-                {"name": "solid", "on_entry":[printer], "on_exit":[printer]},
-                {"name": "liquid", "on_entry": [printer], "on_exit": [printer]},
-                {"name": "gas", "on_entry": [printer], "on_exit": [printer]}
+                {"name": "on"},
+                {"name": "off"},
             ],
             transitions=[
-                {"old_state": "solid", "new_state": "liquid", "triggers": ["melt", "heat"], "on_transfer": [printer]},
-                {"old_state": "liquid", "new_state": "gas", "triggers": ["evaporate", "heat"], "on_transfer": [printer]},
-                {"old_state": "gas", "new_state": "liquid", "triggers": ["condense", "cool"], "on_transfer": [printer]},
-                {"old_state": "liquid", "new_state": "solid", "triggers": ["freeze", "cool"], "on_transfer": [printer]}
+                {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "switch"], "on_transfer": printer("turn on")},
+                {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "switch"], "on_transfer": printer("turn off")},
             ],
-            after_any_entry=printline
         )
 
-        def __init__(self, name):
-            super(Matter, self).__init__(initial="solid")
+        def __init__(self, name, initial="off"):
+            super(Switch, self).__init__(initial=initial)
             self.name = name
 
         def __str__(self):
-            return self.name + "(%s)" % self.state
+            return self.name + " (%s)" % self.state
 
-    lumpy = Matter("lumpy")
+    light_switch = Switch("lights")
 
-    lumpy.melt()
-    lumpy.evaporate()
-    lumpy.condense()
-    lumpy.freeze()
+    light_switch.turn_on()
+    light_switch.turn_off()
     try:
-        lumpy.evaporate()
+        light_switch.turn_off()
     except TransitionError as e:
-        print ">>> Ho ho: error intercepted: " + e.message
-
-    lumpy.heat()
-    lumpy.heat()
-    lumpy.cool()
-    lumpy.cool()
-    try:
-        lumpy.cool()
-    except TransitionError as e:
-        print ">>> Ho ho: error intercepted: " + e.message
-
-    lumpy.state = "liquid"
-    lumpy.state = "gas"
-    lumpy.state = "liquid"
-    lumpy.state = "solid"
-    try:
-        lumpy.state = "gas"
-    except TransitionError as e:
-        print ">>> Ho ho: error intercepted: " + e.message
+        print "error: " + e.message
+    print
+    light_switch.switch()
+    light_switch.switch()
+    print
+    light_switch.state = "on"
+    light_switch.state = "off"
+    light_switch.state = "off"  # does not result in any callbacks because the switch is already off
 
 
