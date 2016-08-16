@@ -10,16 +10,32 @@ This state machine implementation is developed with the following goals:
 * One state machine instance can manage the state of many objects
 * Reasonably fast
 
+## general
+The following concepts are used
 
-## basic usage
-Lets start with a (runnable) example:
+* State: some condition of an object; objects can be in one state at the time
+* Transition: transition of the object from one state to another resulting in a number of callbacks
+* Trigger: method called on an object that results in a state change (can have condition)
+* State machine: class that manages the states of objects according to predefined states and transitions
+* Callback: function (func(obj, old_state, new_state)) called on transitions by the state machine, in order:
+    * StateMachine.before_any_exit,
+    * State.on_exit,
+    * Transition.on_transfer, # after this the state is changed on the object
+    * State.on_entry,
+    * StateMachine.after_any_entry
+* Condition: condition for a specific state transition to take place, this is checked before any (other) callbacks
+
+The exact execution of callbacks and conditions can be seen in the Transition.execute method.
+
+## basic usage example
+Lets start with an example:
 ``` python   
     def printline(obj, old_state, new_state):  # simple callback function
         print "---"
     
     # somewhat more verbose callback function
     def printer(obj, old_state, new_state):
-        print "called 'printer' for '%s'" % str(obj)
+        print "transition <%s, %s> on %s" % ( old_state, new_state, str(obj))
     
     # inherit from BaseStateObject to let it store state and be able to call triggers
     class Matter(BaseStateObject):  
@@ -74,24 +90,11 @@ Lets start with a (runnable) example:
         print ">>> Oh oh: error intercepted: " + e.message
 ```
 
-Apart from changing the state of the Matter object, the main thing the state machine does is to call a number of callbacks that are given in the constructor. The order these callbacks can be seen in the Transition class:
-
-``` python
-    def execute(self, obj):  # called on any trigger or obj.state = "new_state"
-        if self.condition(obj):  # optional function parameter in the config of each transition (not shown above)
-            self.machine.before_any_exit(obj)  # same callback method for all state transitions
-            self.old_state.on_exit(obj)
-            self.on_transfer(obj)
-            obj._change_state(self.new_state.name)  # here the actual change of the state of the object takes place
-            self.new_state.on_entry(obj)
-            self.machine.after_any_entry(obj)  # same callback method for all state transitions
-
-```
-
  Notes:
 
-  * This method is always called on any state transition (if it exists)
+  * Argument 'condition' (not shown) of a transition can be used to block a transition
+  * All callbacks have the signature func(obj, old_state, new_state), with old_state and new_state as strings (str)
   * 'condition' and all callbacks are configured in the constructor of the state machine (on_entry=.., on_transfer=..),
-  * 'on_exit', etc. can be initiated with a single function or a list of functions (all callback except for 'condition')
+  * callbacks can be initiated with a single function or a list of functions, apart from 'condition'
   * All callbacks are optional, if no callback is given a no-action callback is used.
 
