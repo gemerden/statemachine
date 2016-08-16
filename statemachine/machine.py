@@ -3,9 +3,9 @@ from functools import partial
 
 def listify(list_or_item):
     """utitity function to ensure an argument becomes a list if it is not one yet"""
-    try:
+    if isinstance(list_or_item, (list, tuple)):
         return list(list_or_item)
-    except TypeError:
+    else:
         return [list_or_item]
 
 
@@ -120,7 +120,7 @@ class StateMachine(object):
     def _create_transitions(self, transitions):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
         transition_dict = {}
-        transitions = self._create_wildcard_transitions(transitions)
+        transitions = self._mutiply_transitions(transitions)
         for trans in transitions:
             if (trans["old_state"], trans["new_state"]) in transition_dict:
                 raise MachineError("two transitions between same states in state machine")
@@ -135,23 +135,27 @@ class StateMachine(object):
                 raise MachineError("non-existing state when constructing transitions")
         return transition_dict
 
-    def _create_wildcard_transitions(self, transitions):
+    def _mutiply_transitions(self, transitions):
         current = [(t["old_state"], t["new_state"]) for t in transitions]
-        for trans in [t for t in transitions if t["old_state"] == "*"]:
-            for state_name in self.states.iterkeys():
-                if state_name != trans["new_state"] and (state_name, trans["new_state"]) not in current:
-                    new_trans = trans.copy()
-                    new_trans["old_state"] = state_name
-                    transitions.append(new_trans)
-            transitions.remove(trans)
+        for trans in transitions[:]:
+            if trans["old_state"] == "*" or isinstance(trans["old_state"], (list, tuple)):
+                old_state_names = self.states.keys() if trans["old_state"] == "*" else trans["old_state"]
+                for state_name in old_state_names:
+                    if state_name != trans["new_state"] and (state_name, trans["new_state"]) not in current:
+                        new_trans = trans.copy()
+                        new_trans["old_state"] = state_name
+                        transitions.append(new_trans)
+                transitions.remove(trans)
         current = [(t["old_state"], t["new_state"]) for t in transitions]
-        for trans in [t for t in transitions if t["new_state"] == "*"]:
-            for state_name in self.states.iterkeys():
-                if state_name != trans["old_state"] and (trans["old_state"], state_name) not in current:
-                    new_trans = trans.copy()
-                    new_trans["new_state"] = state_name
-                    transitions.append(new_trans)
-            transitions.remove(trans)
+        for trans in transitions[:]:
+            if trans["new_state"] == "*" or isinstance(trans["new_state"], (list, tuple)):
+                new_state_names = self.states.keys() if trans["new_state"] == "*" else trans["new_state"]
+                for state_name in new_state_names:
+                    if state_name != trans["old_state"] and (trans["old_state"], state_name) not in current:
+                        new_trans = trans.copy()
+                        new_trans["new_state"] = state_name
+                        transitions.append(new_trans)
+                transitions.remove(trans)
         return transitions
 
     def _create_trigger_dict(self, transitions):

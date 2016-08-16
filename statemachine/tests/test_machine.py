@@ -197,7 +197,7 @@ class StateMachineTest(unittest.TestCase):
             )
 
 
-class WildcardStateMachineTest(unittest.TestCase):
+class MultiTransitionStateMachineTest(unittest.TestCase):
     """test the case where transition configuration contains wildcards '*' """
     def setUp(self):
         """called before any individual test method"""
@@ -347,7 +347,7 @@ class WildcardStateMachineTest(unittest.TestCase):
         self.assertEqual(len(Matter.machine.triggers), 0)
 
         # transitions can only be made with state property (wildcards would creae double triggers in this case)
-        block = self.object_class("block")
+        block = Matter("block")
         block.state = "liquid"
         self.assertEqual(block.state, "liquid")
         block.state = "gas"
@@ -359,7 +359,50 @@ class WildcardStateMachineTest(unittest.TestCase):
         block.state = "solid"
         self.assertEqual(block.state, "solid")
 
+    def test_listed_states(self):
+        self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
+
+        def callback(obj, old_state, new_state):
+            """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
+            self.assertEqual(type(obj), Matter)
+            self.callback_counter += 1
+
+        # create a machine based on phase changes of matter (solid, liquid, gas)
+        class Matter(BaseStateObject):
+            """object class fo which the state is managed"""
+            machine = StateMachine(
+                name="matter machine",
+                states=[
+                    {"name": "solid"},
+                    {"name": "liquid"},
+                    {"name": "gas"},
+                ],
+                transitions=[
+                    {"old_state": ["solid", "liquid"], "new_state": "gas", "triggers": ["zap"]},
+                    {"old_state": "gas", "new_state": ["solid", "liquid"]},
+                ],
+            )
+
+            def __init__(self, name, initial="solid"):
+                super(Matter, self).__init__(initial=initial)
+                self.name = name
+
+            def __str__(self):
+                return self.name + "(%s)" % self.state
+
+        # test whether all states, transitions and triggers are in place
+        self.assertEqual(len(Matter.machine.states), 3)
+        self.assertEqual(len(Matter.machine.transitions), 4)
+        self.assertEqual(len(Matter.machine.triggers), 2)
+
+        # transitions can only be made with state property (wildcards would creae double triggers in this case)
+        block = Matter("block")
+        block.zap()
+        self.assertEqual(block.state, "gas")
+        block.state = "solid"
+        self.assertEqual(block.state, "solid")
+
         with self.assertRaises(TransitionError):
-            block.state = "gas"
+            block.state = "liquid"
 
 
