@@ -33,9 +33,9 @@ class StateMachineTest(unittest.TestCase):
             ],
             transitions=[
                 {"old_state": "solid", "new_state": "liquid", "triggers": ["melt", "heat"], "on_transfer": [callback], "condition": temp_checker(0, 100)},
-                {"old_state": "liquid", "new_state": "gas", "triggers": ["evaporate", "heat"], "on_transfer": [callback], "condition": temp_checker(100, 10000)},
+                {"old_state": "liquid", "new_state": "gas", "triggers": ["evaporate", "heat"], "on_transfer": [callback], "condition": temp_checker(100, float("inf"))},
                 {"old_state": "gas", "new_state": "liquid", "triggers": ["condense", "cool"], "on_transfer": [callback], "condition": temp_checker(0, 100)},
-                {"old_state": "liquid", "new_state": "solid", "triggers": ["freeze", "cool"], "on_transfer": [callback], "condition": temp_checker(-273, 0)}
+                {"old_state": "liquid", "new_state": "solid", "triggers": ["freeze", "cool"], "on_transfer": [callback], "condition": temp_checker(-274, 0)}
             ],
             before_any_exit=callback,
             after_any_entry=callback
@@ -52,13 +52,15 @@ class StateMachineTest(unittest.TestCase):
 
             def heat_by(self, delta):
                 """used to check condition on transition"""
+                assert delta >= 0
                 self.temperature += delta
-                self.heat()
+                return self.heat()
 
             def cool_by(self, delta):
                 """used to check condition on transition"""
+                assert delta >= 0
                 self.temperature -= delta
-                self.cool()
+                return self.cool()
 
             def __str__(self):
                 return self.name + "(%s)" % self.state
@@ -124,16 +126,23 @@ class StateMachineTest(unittest.TestCase):
         self.temperature_ignore = False
         block = self.object_class("block", temperature=-10)
 
-        block.heat_by(5)
+        trans = block.heat_by(5)
+        self.assertEqual(trans, False)
         self.assertEqual(block.state, "solid")
         self.assertEqual(self.callback_counter, 0)
-        block.heat_by(10)
+
+        trans = block.heat_by(10)
+        self.assertEqual(trans, True)
         self.assertEqual(block.state, "liquid")
         self.assertEqual(self.callback_counter, 5)
-        block.heat_by(10)
+
+        trans = block.heat_by(10)
+        self.assertEqual(trans, False)
         self.assertEqual(block.state, "liquid")
         self.assertEqual(self.callback_counter, 5)
-        block.heat_by(100)
+
+        trans = block.heat_by(100)
+        self.assertEqual(trans, True)
         self.assertEqual(block.state, "gas")
         self.assertEqual(self.callback_counter, 10)
 

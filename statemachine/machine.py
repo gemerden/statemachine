@@ -54,6 +54,7 @@ class Transition(object):
         Method calling all the callbacks of a state transition ans changing the actual object state (if condition
         returns True).
         :param obj: object of which the state is managed
+        :return: bool, whether the transition took place
         """
         old_state = self.old_state.name
         new_state = self.new_state.name
@@ -64,6 +65,8 @@ class Transition(object):
             obj._change_state(new_state)
             self.new_state.on_entry(obj, old_state, new_state)
             self.machine.after_any_entry(obj, old_state, new_state)
+            return True
+        return False
 
     def __str__(self):
         """string representing the transition"""
@@ -176,19 +179,19 @@ class StateMachine(object):
             callback(obj, old_state, new_state)
 
     def after_any_entry(self, obj, old_state, new_state):
-        """called after any transitions"""
+        """called after all transitions"""
         for callback in self._after_any_entry:
             callback(obj, old_state, new_state)
 
     def do_trigger(self, trigger, obj):
         """executes the transition when called through a trigger"""
         try:
-            self.triggers[(obj.state, trigger)].execute(obj)
+            return self.triggers[(obj.state, trigger)].execute(obj)
         except KeyError:
             raise TransitionError("trigger '%s' does not exist for state '%s'" % (trigger, obj.state))
 
     def set_state(self, state, obj):
-        """executes the transition when called by setting the state: objects.state = "some_state"""
+        """executes the transition when called by setting the state: obj.state = 'some_state' """
         try:
             self.transitions[(obj.state, state)].execute(obj)
         except KeyError:
@@ -215,7 +218,8 @@ class BaseStateObject(object):
 
     def __getattr__(self, trigger):
         """
-        Allows calling the triggers to cause a transition
+        Allows calling the triggers to cause a transition; the triggers return a bool indicating whether the
+            transition took place.
         :param trigger: name of the trigger
         :return: partial function that allows the trigger to be called like object.some_trigger()
         """
@@ -279,7 +283,7 @@ if __name__ == "__main__":
 
     light_switch = Switch("lights")
 
-    light_switch.turn_on()
+    print "returning True: ", light_switch.turn_on()
     light_switch.turn_off()
     try:
         light_switch.turn_off()

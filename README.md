@@ -96,6 +96,8 @@ Lets start with an example:
   * All callbacks have the signature func(obj, old_state, new_state), with old_state and new_state as strings (str)
   * 'condition' and all callbacks are configured in the constructor of the state machine (on_entry=.., on_transfer=..),
   * All callbacks are optional, if no callback is given a no-action callback is used.
+  * Conditions return a bool to indicate whether the transition took place (only relevant when a condition is set on the transition)
   * Callbacks can be initiated with a single function or a list of functions, apart from 'condition'
   * Wildcards "*" or lists of state names can be used for old_state or new_state in transition configuration so that all transitions to or from that state are created.
+
 
