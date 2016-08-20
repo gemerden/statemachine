@@ -33,12 +33,12 @@ class StateMachineTest(unittest.TestCase):
             ],
             transitions=[
                 {"old_state": "solid", "new_state": "liquid", "triggers": ["melt", "heat"], "on_transfer": [callback], "condition": temp_checker(0, 100)},
-                {"old_state": "liquid", "new_state": "gas", "triggers": ["evaporate", "heat"], "on_transfer": [callback], "condition": temp_checker(100, float("inf"))},
-                {"old_state": "gas", "new_state": "liquid", "triggers": ["condense", "cool"], "on_transfer": [callback], "condition": temp_checker(0, 100)},
-                {"old_state": "liquid", "new_state": "solid", "triggers": ["freeze", "cool"], "on_transfer": [callback], "condition": temp_checker(-274, 0)}
+                {"old_state": "liquid", "new_state": "gas", "triggers": ["evaporate", "heat"], "on_transfer": callback, "condition": temp_checker(100, float("inf"))},
+                {"old_state": "gas", "new_state": "liquid", "triggers": ["condense", "cool"], "on_transfer": ["do_callback"], "condition": temp_checker(0, 100)},
+                {"old_state": "liquid", "new_state": "solid", "triggers": ["freeze", "cool"], "on_transfer": "do_callback", "condition": temp_checker(-274, 0)}
             ],
             before_any_exit=callback,
-            after_any_entry=callback
+            after_any_entry="do_callback"
         )
 
         class Matter(BaseStateObject):
@@ -49,6 +49,10 @@ class StateMachineTest(unittest.TestCase):
                 super(Matter, self).__init__(initial=initial)
                 self.name = name
                 self.temperature = temperature  # used in tests of condition callback in transition class
+
+            def do_callback(self, *args, **kwargs):
+                """used to test callback lookup bu name"""
+                callback(self, *args, **kwargs)
 
             def heat_by(self, delta):
                 """used to check condition on transition"""
