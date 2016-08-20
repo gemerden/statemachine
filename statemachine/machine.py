@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from functools import partial
 
 from statemachine.tools import listify, callbackify
@@ -105,7 +106,7 @@ class StateMachine(object):
 
     def _create_states(self, states):
         """creates a dictionary of state_name: State key value pairs"""
-        state_dict = {}
+        state_dict = OrderedDict()
         for state in states:
             if state["name"] in state_dict:
                 raise MachineError("two states with the same name in state machine")
@@ -186,15 +187,17 @@ class BaseStateObject(object):
     transitions or by setting the 'state' property.
     """
 
-    def __init__(self, initial, *args, **kwargs):
+    def __init__(self, initial=None, *args, **kwargs):
         """
         Constructor for the base class
-        :param initial: string indicating the initial state of the object
+        :param initial: string indicating the initial state of the object; if None, take first state of machine
         :param args: any arguments to be passed to super constructor in case of inheritance
         :param kwargs: any keyword arguments to be passed to super constructor in case of inheritance
         """
         super(BaseStateObject, self).__init__(*args, **kwargs)
-        if initial not in self.machine.states:
+        if not initial:
+            self._new_state = self.machine.states.keys()[0]
+        elif initial not in self.machine.states:
             raise ValueError("initial state does not exist")
         self._new_state = initial
         self._old_state = None
