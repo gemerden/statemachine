@@ -1,12 +1,8 @@
 from functools import partial
 
+from statemachine.tools import listify, callbackify
 
-def listify(list_or_item):
-    """utitity function to ensure an argument becomes a list if it is not one yet"""
-    if isinstance(list_or_item, (list, tuple)):
-        return list(list_or_item)
-    else:
-        return [list_or_item]
+__author__  = "lars van gemerden"
 
 
 class MachineError(ValueError):
@@ -19,21 +15,21 @@ class TransitionError(ValueError):
     pass
 
 
+class BaseMachinePart(object):
+
+    def __init__(self, machine, *args, **kwargs):
+        super(BaseMachinePart, self).__init__(*args, **kwargs)
+        self.machine = machine
+
+
+
 class State(object):
     """class for the internal representation of state in the state machine"""
     def __init__(self, machine, name, on_entry=(), on_exit=()):
         self.machine = machine
         self.name = name
-        self._on_entry = listify(on_entry)
-        self._on_exit = listify(on_exit)
-
-    def on_entry(self, obj, old_state, new_state):
-        for callback in self._on_entry:
-            callback(obj, old_state, new_state)
-
-    def on_exit(self, obj, old_state, new_state):
-        for callback in self._on_exit:
-            callback(obj, old_state, new_state)
+        self.on_entry = callbackify(on_entry)
+        self.on_exit = callbackify(on_exit)
 
 
 class Transition(object):
@@ -42,29 +38,25 @@ class Transition(object):
         self.machine = machine
         self.old_state = old_state
         self.new_state = new_state
-        self._on_transfer = listify(on_transfer)
-        self.condition = condition
+        self.on_transfer = callbackify(on_transfer)
+        self.condition = callbackify(condition)
 
-    def on_transfer(self, obj, old_state, new_state):
-        for callback in self._on_transfer:
-            callback(obj, old_state, new_state)
-
-    def execute(self, obj):
+    def execute(self, obj, *args, **kwargs):
         """
         Method calling all the callbacks of a state transition ans changing the actual object state (if condition
         returns True).
         :param obj: object of which the state is managed
+        :param args: arguments of the callback
+        :param kwargs: keyword arguments of the callback
         :return: bool, whether the transition took place
         """
-        old_state = self.old_state.name
-        new_state = self.new_state.name
-        if self.condition(obj, old_state, new_state):
-            self.machine.before_any_exit(obj, old_state, new_state)
-            self.old_state.on_exit(obj, old_state, new_state)
-            self.on_transfer(obj, old_state, new_state)
-            obj._change_state(new_state)
-            self.new_state.on_entry(obj, old_state, new_state)
-            self.machine.after_any_entry(obj, old_state, new_state)
+        if self.condition(obj):
+            self.machine.before_any_exit(obj, *args, **kwargs)
+            self.old_state.on_exit(obj, *args, **kwargs)
+            self.on_transfer(obj, *args, **kwargs)
+            obj._change_state(self.new_state.name)
+            self.new_state.on_entry(obj, *args, **kwargs)
+            self.machine.after_any_entry(obj, *args, **kwargs)
             return True
         return False
 
@@ -108,8 +100,8 @@ class StateMachine(object):
         self.states = self._create_states(states)
         self.transitions = self._create_transitions(transitions)
         self.triggers = self._create_trigger_dict(transitions)
-        self._before_any_exit = listify(before_any_exit)
-        self._after_any_entry = listify(after_any_entry)
+        self.before_any_exit = callbackify(before_any_exit)
+        self.after_any_entry = callbackify(after_any_entry)
 
     def _create_states(self, states):
         """creates a dictionary of state_name: State key value pairs"""
@@ -123,7 +115,7 @@ class StateMachine(object):
     def _create_transitions(self, transitions):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
         transition_dict = {}
-        transitions = self._mutiply_transitions(transitions)
+        transitions = self._expand_transitions(transitions)
         for trans in transitions:
             if (trans["old_state"], trans["new_state"]) in transition_dict:
                 raise MachineError("two transitions between same states in state machine")
@@ -138,7 +130,7 @@ class StateMachine(object):
                 raise MachineError("non-existing state when constructing transitions")
         return transition_dict
 
-    def _mutiply_transitions(self, transitions):
+    def _expand_transitions(self, transitions):
         """replaces transitions with '*' wildcards and list of states with multiple one-to-one transitions"""
         current = [(t["old_state"], t["new_state"]) for t in transitions]
         for trans in transitions[:]:
@@ -173,16 +165,6 @@ class StateMachine(object):
                 trigger_dict[key] = self.transitions[(trans["old_state"], trans["new_state"])]
         return trigger_dict
 
-    def before_any_exit(self, obj, old_state, new_state):
-        """called before any transition"""
-        for callback in self._before_any_exit:
-            callback(obj, old_state, new_state)
-
-    def after_any_entry(self, obj, old_state, new_state):
-        """called after all transitions"""
-        for callback in self._after_any_entry:
-            callback(obj, old_state, new_state)
-
     def do_trigger(self, trigger, obj):
         """executes the transition when called through a trigger"""
         try:
@@ -212,7 +194,8 @@ class BaseStateObject(object):
         :param kwargs: any keyword arguments to be passed to super constructor in case of inheritance
         """
         super(BaseStateObject, self).__init__(*args, **kwargs)
-        assert initial in self.machine.states
+        if initial not in self.machine.states:
+            raise ValueError("initial state does not exist")
         self._new_state = initial
         self._old_state = None
 

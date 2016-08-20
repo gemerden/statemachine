@@ -45,8 +45,8 @@ class StateMachineTest(unittest.TestCase):
             """object class fo which the state is managed"""
             machine = self.machine
 
-            def __init__(self, name, temperature=0):
-                super(Matter, self).__init__(initial="solid")
+            def __init__(self, name, temperature=0, initial="solid"):
+                super(Matter, self).__init__(initial=initial)
                 self.name = name
                 self.temperature = temperature  # used in tests of condition callback in transition class
 
@@ -146,7 +146,7 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(block.state, "gas")
         self.assertEqual(self.callback_counter, 10)
 
-    def test_transition_exceptions(self):
+    def test_transition_errors(self):
         """tests whether non-existent transitions are detected"""
         block = self.object_class("block")
         with self.assertRaises(TransitionError):
@@ -155,6 +155,11 @@ class StateMachineTest(unittest.TestCase):
             block.cool()
         with self.assertRaises(TransitionError):
             block.state = "gas"
+
+    def test_init_error(self):
+        """tests whether a non-existing initial state is detected"""
+        with self.assertRaises(ValueError):
+            self.object_class("block", initial="plasma")
 
     def test_machine_errors(self):
         """tests whether double state names, transitions and triggers and non-existing state names are detected"""
@@ -206,7 +211,7 @@ class StateMachineTest(unittest.TestCase):
             )
 
 
-class MultiTransitionStateMachineTest(unittest.TestCase):
+class WildcardStateMachineTest(unittest.TestCase):
     """test the case where transition configuration contains wildcards '*' """
     def setUp(self):
         """called before any individual test method"""
@@ -368,6 +373,42 @@ class MultiTransitionStateMachineTest(unittest.TestCase):
         block.state = "solid"
         self.assertEqual(block.state, "solid")
 
+
+class ListedTransitionStateMachineTest(unittest.TestCase):
+
+    def setUp(self):
+        self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
+
+        def callback(obj, old_state, new_state):
+            """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
+            self.assertEqual(type(obj), Matter)
+            self.callback_counter += 1
+
+        # create a machine based on phase changes of matter (solid, liquid, gas)
+        class Matter(BaseStateObject):
+            """object class fo which the state is managed"""
+            machine = StateMachine(
+                name="matter machine",
+                states=[
+                    {"name": "solid"},
+                    {"name": "liquid"},
+                    {"name": "gas"},
+                ],
+                transitions=[
+                    {"old_state": ["solid", "liquid"], "new_state": "gas", "triggers": ["zap"]},
+                    {"old_state": "gas", "new_state": ["solid", "liquid"]},
+                ],
+            )
+
+            def __init__(self, name, initial="solid"):
+                super(Matter, self).__init__(initial=initial)
+                self.name = name
+
+            def __str__(self):
+                return self.name + "(%s)" % self.state
+
+        self.object_class = Matter
+
     def test_listed_states(self):
         self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
 
@@ -399,19 +440,24 @@ class MultiTransitionStateMachineTest(unittest.TestCase):
             def __str__(self):
                 return self.name + "(%s)" % self.state
 
-        # test whether all states, transitions and triggers are in place
-        self.assertEqual(len(Matter.machine.states), 3)
-        self.assertEqual(len(Matter.machine.transitions), 4)
-        self.assertEqual(len(Matter.machine.triggers), 2)
+        def test_setup(self):
+            """test whether all states, transitions and triggers are in place"""
+            self.assertEqual(len(self.object_class.machine.states), 3)
+            self.assertEqual(len(self.object_class.machine.transitions), 4)
+            self.assertEqual(len(self.object_class.machine.triggers), 2)
 
-        # transitions can only be made with state property (wildcards would creae double triggers in this case)
-        block = Matter("block")
-        block.zap()
-        self.assertEqual(block.state, "gas")
-        block.state = "solid"
-        self.assertEqual(block.state, "solid")
+        def test_transitions(self):
+            """test whether transitions work in this case"""
+            block = self.object_class("block")
+            block.zap()
+            self.assertEqual(block.state, "gas")
+            block.state = "solid"
+            self.assertEqual(block.state, "solid")
 
-        with self.assertRaises(TransitionError):
-            block.state = "liquid"
+        def test_error(self):
+            """test transition error"""
+            block = self.object_class("block", inital="gas")
+            with self.assertRaises(TransitionError):
+                block.zap()
 
 
