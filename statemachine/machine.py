@@ -35,12 +35,12 @@ class State(object):
 
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
-    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=lambda obj, o, n: True):
+    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=None):
         self.machine = machine
         self.old_state = old_state
         self.new_state = new_state
         self.on_transfer = callbackify(on_transfer)
-        self.condition = callbackify(condition)
+        self.condition = callbackify(condition) if condition else None
 
     def execute(self, obj, *args, **kwargs):
         """
@@ -51,7 +51,7 @@ class Transition(object):
         :param kwargs: keyword arguments of the callback
         :return: bool, whether the transition took place
         """
-        if self.condition(obj):
+        if not self.condition or self.condition(obj):
             self.machine.before_any_exit(obj, *args, **kwargs)
             self.old_state.on_exit(obj, *args, **kwargs)
             self.on_transfer(obj, *args, **kwargs)
@@ -125,7 +125,7 @@ class StateMachine(object):
                                                    old_state=self.states[trans["old_state"]],
                                                    new_state=self.states[trans["new_state"]],
                                                    on_transfer=trans.get("on_transfer", ()),
-                                                   condition=trans.get("condition", lambda obj, o, n: True))
+                                                   condition=trans.get("condition"))
                 transition_dict[(trans["old_state"], trans["new_state"])] = transition
             except KeyError:
                 raise MachineError("non-existing state when constructing transitions")

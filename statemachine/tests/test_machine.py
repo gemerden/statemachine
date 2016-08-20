@@ -12,14 +12,14 @@ class StateMachineTest(unittest.TestCase):
         self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
         self.temperature_ignore = True  # used to switch condition function on or off
 
-        def callback(obj, old_state, new_state):
+        def callback(obj, *args, **kwrags):
             """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
             self.assertEqual(type(obj), Matter)
             self.callback_counter += 1
 
         def temp_checker(min, max):
             """some configurable condition function; only in effect when temperature_ignore==False (some tests)"""
-            def inner(obj, old_state, new_state):
+            def inner(obj, *args, **kwrags):
                 return min < obj.temperature <= max or self.temperature_ignore
             return inner
 
@@ -217,7 +217,7 @@ class WildcardStateMachineTest(unittest.TestCase):
         """called before any individual test method"""
         self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
 
-        def callback(obj, old_state, new_state):
+        def callback(obj, *args, **kwargs):
             """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
             self.assertEqual(type(obj), Matter)
             self.callback_counter += 1
@@ -328,7 +328,7 @@ class WildcardStateMachineTest(unittest.TestCase):
     def test_double_wildcard(self):
         self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
 
-        def callback(obj, old_state, new_state):
+        def callback(obj, *args, **kwargs):
             """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
             self.assertEqual(type(obj), Matter)
             self.callback_counter += 1
@@ -379,7 +379,7 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
     def setUp(self):
         self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
 
-        def callback(obj, old_state, new_state):
+        def callback(obj, *args, **kwargs):
             """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
             self.assertEqual(type(obj), Matter)
             self.callback_counter += 1
@@ -412,7 +412,7 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
     def test_listed_states(self):
         self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
 
-        def callback(obj, old_state, new_state):
+        def callback(obj, *args, **kwargs):
             """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
             self.assertEqual(type(obj), Matter)
             self.callback_counter += 1

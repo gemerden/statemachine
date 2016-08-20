@@ -22,9 +22,9 @@ def callbackify(callbacks):
     def result_callback(obj, *args, **kwargs):
         for callback in callbacks:
             if isinstance(callback, str):
-                getattr(obj, callback)(*args, **kwargs)
+                return getattr(obj, callback)(*args, **kwargs)
             else:
-                callback(obj, *args, **kwargs)
+                return callback(obj, *args, **kwargs)
 
     return result_callback
 
