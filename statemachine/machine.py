@@ -33,16 +33,17 @@ class State(object):
         self.on_exit = callbackify(on_exit)
 
 
-class Transition(object):
+class BaseTransition(object):
+
     """class for the internal representation of transitions in the state machine"""
-    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=None):
+    def __init__(self, machine, old_state, on_transfer=(), triggers=(), condition=None):
         self.machine = machine
-        self.old_state = old_state
-        self.new_state = new_state
+        self.old_state = self.machine.states[old_state]
+        self.triggers = triggers
         self.on_transfer = callbackify(on_transfer)
         self.condition = callbackify(condition) if condition else None
 
-    def execute(self, obj, *args, **kwargs):
+    def _execute(self, obj, new_state, post_transfer=None, *args, **kwargs):
         """
         Method calling all the callbacks of a state transition ans changing the actual object state (if condition
         returns True).
@@ -55,15 +56,76 @@ class Transition(object):
             self.machine.before_any_exit(obj, *args, **kwargs)
             self.old_state.on_exit(obj, *args, **kwargs)
             self.on_transfer(obj, *args, **kwargs)
-            obj._change_state(self.new_state.name)
-            self.new_state.on_entry(obj, *args, **kwargs)
+            obj._change_state(new_state.name)
+            if post_transfer:
+                post_transfer(obj, *args, **kwargs)
+            new_state.on_entry(obj, *args, **kwargs)
             self.machine.after_any_entry(obj, *args, **kwargs)
             return True
         return False
 
+
+class Transition(BaseTransition):
+    """class for the internal representation of transitions in the state machine"""
+    def __init__(self, new_state, *args, **kwargs):
+        super(Transition, self).__init__(*args, **kwargs)
+        self.new_state = self.machine.states[new_state]
+
+    def execute(self, obj, *args, **kwargs):
+        """
+        Method calling all the callbacks of a state transition ans changing the actual object state (if condition
+        returns True).
+        :param obj: object of which the state is managed
+        :param args: arguments of the callback
+        :param kwargs: keyword arguments of the callback
+        :return: bool, whether the transition took place
+        """
+        return self._execute(obj, self.new_state, *args, **kwargs)
+
     def __str__(self):
         """string representing the transition"""
         return "<%s, %s>" %(self.old_state.name, self.new_state.name)
+
+
+class Switch(BaseTransition):
+
+    def __init__(self, new_states, *args, **kwargs):
+        super(Switch, self).__init__(*args, **kwargs)
+        self.routing = self._create_routing(new_states)
+
+    def _create_routing(self, new_states):
+        routing_dict = OrderedDict()
+        for ns in new_states:
+            if ns["name"] in routing_dict:
+                raise MachineError("double new states in switch")
+            routing_dict[ns["name"]] = (ns["condition"],
+                                        self.machine.states[ns["name"]],
+                                        callbackify(ns["on_transfer"]))
+        return routing_dict
+
+    def _new_state(self, obj):
+        for condition, state, on_transfer in self.routing.itervalues():
+            if condition(obj):
+                return state, on_transfer
+        return None, None
+
+    def execute(self, obj, *args, **kwargs):
+        """
+        Method calling all the callbacks of a state transition ans changing the actual object state (if condition
+        returns True).
+        :param obj: object of which the state is managed
+        :param args: arguments of the callback
+        :param kwargs: keyword arguments of the callback
+        :return: bool, whether the transition took place
+        """
+        new_state, post_transfer = self._new_state(obj)
+        if new_state:
+            return self._execute(obj, new_state, post_transfer, *args, **kwargs)
+        return False
+
+    def __str__(self):
+        """string representing the switch"""
+        return "<%s, (%s)>" %(self.old_state.name, ", ".join(self.routing.iterkeys()))
 
 
 class StateMachine(object):
@@ -100,7 +162,7 @@ class StateMachine(object):
         self.name = name
         self.states = self._create_states(states)
         self.transitions = self._create_transitions(transitions)
-        self.triggers = self._create_trigger_dict(transitions)
+        self.triggers = self._create_triggers(transitions)
         self.before_any_exit = callbackify(before_any_exit)
         self.after_any_entry = callbackify(after_any_entry)
 
@@ -118,15 +180,11 @@ class StateMachine(object):
         transition_dict = {}
         transitions = self._expand_transitions(transitions)
         for trans in transitions:
-            if (trans["old_state"], trans["new_state"]) in transition_dict:
+            key = (trans["old_state"], trans["new_state"])
+            if key in transition_dict:
                 raise MachineError("two transitions between same states in state machine")
             try:
-                transition = self.transition_class(machine=self,
-                                                   old_state=self.states[trans["old_state"]],
-                                                   new_state=self.states[trans["new_state"]],
-                                                   on_transfer=trans.get("on_transfer", ()),
-                                                   condition=trans.get("condition"))
-                transition_dict[(trans["old_state"], trans["new_state"])] = transition
+                transition_dict[key] = self.transition_class(machine=self, **trans)
             except KeyError:
                 raise MachineError("non-existing state when constructing transitions")
         return transition_dict
@@ -155,7 +213,7 @@ class StateMachine(object):
                 transitions.remove(trans)
         return transitions
 
-    def _create_trigger_dict(self, transitions):
+    def _create_triggers(self, transitions):
         """creates a dictionary of (old state name, trigger name): Transition key value pairs"""
         trigger_dict = {}
         for trans in transitions:
