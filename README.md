@@ -115,6 +115,7 @@ Lets start with an example:
 
  Notes:
 
+  * More documentation and usage samples can be found in the code comments and the tests
   * Argument 'condition' (not shown) of a transition can be used to block a transition
   * All callbacks have the signature func(obj, old_state, new_state), with old_state and new_state as strings (str)
   * 'condition' and all callbacks are configured in the constructor of the state machine (on_entry=.., on_transfer=..),
