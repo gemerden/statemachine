@@ -48,6 +48,10 @@ The module has the following basic and some more advanced features:
     * This is the case when the calback is configured as a string (e.g. "on_entry": "do_callback"),
 * wildcards and listed states can be used to define multiple transitions at once:
     * e.g. transition {"old_state": "*", "new_state": ["A", "B"]} would create transitions from all states to both state A and B
+* custom exceptions:
+    * MachineError: raised in case of a misconfiguration of the state machine,
+    * TransitionError: raised in case of e.g. an attempt to trigger a non-existing transition,
+    * SetStateError: raised when obj.state = "some_state" fails
 
 
 ## basic usage example
