@@ -17,15 +17,39 @@ The following concepts are used
 * Transition: transition of the object from one state to another resulting in a number of callbacks
 * Trigger: method called on an object that results in a state change (can have condition)
 * State machine: class that manages the states of objects according to predefined states and transitions
-* Callback: function (func(obj, old_state, new_state)) called on transitions by the state machine, in order:
-    * StateMachine.before_any_exit,
-    * State.on_exit,
-    * Transition.on_transfer, # after this the state is changed on the object
-    * State.on_entry,
-    * StateMachine.after_any_entry
+* Callback: function called on transitions by the state machine,
 * Condition: condition for a specific state transition to take place, this is checked before any (other) callbacks
 
 The exact execution of callbacks and conditions can be seen in the Transition.execute method.
+
+## features
+The module has the following basic and some more advanced features:
+
+* trigger state transitions by setting trigger name in machine configuration:
+    * same trigger can be set for different transitions,
+    * trigger method can pass arguments to callbacks,
+* conditions (callbacks) can be set on transitions to take place:
+    * if a transition is triggered, but the condition is not met, the transition does not take place
+* switched transitions can be used to go from one state to another depending on conditions
+    * trigger can be used for conditional (switched) transition,
+    * to do this, create multiple trasnitions from the same state to different states and give them different conditions
+* state transitions can be started by explicitly setting the state (obj.state = "some_state"):
+    * if a condition is set and not met on the transition an exception is raised, because the callbacks would not be called,
+    * if the callbacks function require extra arguments (apart from the state managed object), this method will fail bacause it cannot pass arguments
+* a number of callbacks can be installed for each state and transition, in order:
+    * StateMachine.before_any_exit(self, obj. **args, ***kwargs),
+    * State.on_exit(self, obj. **args, ***kwargs),
+    * Transition.on_transfer(self, obj. **args, ***kwargs), # after this the state is changed on the object
+    * State.on_entry(self, obj. **args, ***kwargs),
+    * StateMachine.after_any_entry(self, obj. **args, ***kwargs)
+        * with: obj the state managed object
+        * with: **args, ***kwargs the arguments passed to the trigger (signature of callbacks must match how the trigger is called)
+    * note that if a condition is present and not met, none of these functions are called
+* callbacks can be methods on the class of which the state is managed by the machine:
+    * This is the case when the calback is configured as a string (e.g. "on_entry": "do_callback"),
+* wildcards and listed states can be used to define multiple transitions at once:
+    * e.g. transition {"old_state": "*", "new_state": ["A", "B"]} would create transitions from all states to both state A and B
+
 
 ## basic usage example
 Lets start with an example:
