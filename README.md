@@ -10,7 +10,7 @@ This state machine implementation is developed with the following goals:
 * One state machine instance can manage the state of many objects
 * Reasonably fast
 
-## general
+## concepts
 The following concepts are used
 
 * State: some condition of an object; objects can be in one state at the time
@@ -19,8 +19,7 @@ The following concepts are used
 * State machine: class that manages the states of objects according to predefined states and transitions
 * Callback: function called on transitions by the state machine,
 * Condition: condition for a specific state transition to take place, this is checked before any (other) callbacks
-
-The exact execution of callbacks and conditions can be seen in the Transition.execute method.
+* Switching: by using multiple conditional transitions from the same state with the same trigger, the next state can be determined by e.g. the attributes of the object
 
 ## features
 The module has the following basic and some more advanced features:
