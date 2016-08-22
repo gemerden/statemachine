@@ -37,11 +37,11 @@ The module has the following basic and some more advanced features:
     * if a condition is set and not met on the transition an exception is raised, because the callbacks would not be called,
     * if the callbacks function require extra arguments (apart from the state managed object), this method will fail bacause it cannot pass arguments
 * a number of callbacks can be installed for each state and transition, in order:
-    * StateMachine.before_any_exit(self, obj. *args, **kwargs),
-    * State.on_exit(self, obj. *args, **kwargs),
-    * Transition.on_transfer(self, obj. *args, **kwargs), # after this the state is changed on the object
-    * State.on_entry(self, obj. *args, **kwargs),
-    * StateMachine.after_any_entry(self, obj. *args, **kwargs)
+    * StateMachine.before_any_exit(self, obj. **args, ***kwargs),
+    * State.on_exit(self, obj. **args, ***kwargs),
+    * Transition.on_transfer(self, obj. **args, ***kwargs), # after this the state is changed on the object
+    * State.on_entry(self, obj. **args, ***kwargs),
+    * StateMachine.after_any_entry(self, obj. **args, ***kwargs)
         * with: obj the state managed object
         * with: **args, ***kwargs the arguments passed to the trigger (signature of callbacks must match how the trigger is called)
     * note that if a condition is present and not met, none of these functions are called
