@@ -64,8 +64,8 @@ Lets start with an example:
     def printer(obj, old_state, new_state):
         print "transition <%s, %s> on %s" % ( old_state, new_state, str(obj))
     
-    # inherit from BaseStateObject to let it store state and be able to call triggers
-    class Matter(BaseStateObject):  
+    # inherit from StateObject to let it store state and be able to call triggers
+    class Matter(StateObject):
         
         # instantiate the state machine that will handle all instances of Matter
         machine = StateMachine(  

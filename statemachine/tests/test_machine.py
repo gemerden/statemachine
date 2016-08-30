@@ -1,6 +1,6 @@
 import unittest
 
-from statemachine.machine import BaseStateObject, StateMachine, TransitionError, MachineError
+from statemachine.machine import StateObject, StateMachine, TransitionError, MachineError
 
 __author__ = "lars van gemerden"
 
@@ -37,11 +37,12 @@ class StateMachineTest(unittest.TestCase):
                 {"old_state": "gas", "new_state": "liquid", "triggers": ["condense", "cool"], "on_transfer": ["do_callback"], "condition": temp_checker(0, 100)},
                 {"old_state": "liquid", "new_state": "solid", "triggers": ["freeze", "cool"], "on_transfer": "do_callback", "condition": temp_checker(-274, 0)}
             ],
+            initial="gas",
             before_any_exit=callback,
             after_any_entry="do_callback"
         )
 
-        class Matter(BaseStateObject):
+        class Matter(StateObject):
             """object class fo which the state is managed"""
             machine = self.machine
 
@@ -77,10 +78,11 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(len(self.machine.transitions), 4)
         self.assertEqual(len(self.machine.triggering), 8)
 
-    def test_default_initial(self):
-        class Dummy(BaseStateObject):
+    def test_initial(self):
+        class Dummy(StateObject):
             machine = self.machine
         dummy = Dummy()
+        self.assertEqual(dummy.state, "gas")
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -107,7 +109,7 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(block.state, "solid")
 
     def test_set_state(self):
-        """tests changing states with the state property of BaseStateObject"""
+        """tests changing states with the state property of StateObject"""
         block = self.object_class("block")
         block.state = "liquid"
         self.assertEqual(block.state, "liquid")
@@ -219,9 +221,10 @@ class StateMachineTest(unittest.TestCase):
                 ]
             )
         with self.assertRaises(AttributeError):
-            class A(BaseStateObject):
+            class A(StateObject):
                 machine = StateMachine(
                     name="matter machine",
+                    initial="solid",
                     states=[
                         {"name": "solid"},
                         {"name": "liquid"},
@@ -265,7 +268,7 @@ class WildcardStateMachineTest(unittest.TestCase):
             ],
         )
 
-        class Matter(BaseStateObject):
+        class Matter(StateObject):
             """object class fo which the state is managed"""
             machine = self.machine
 
@@ -303,7 +306,7 @@ class WildcardStateMachineTest(unittest.TestCase):
         self.assertEqual(block.state, "gas")
 
     def test_set_state(self):
-        """tests changing states with the state property of BaseStateObject"""
+        """tests changing states with the state property of StateObject"""
         block = self.object_class("block")
         block.state = "void"
         self.assertEqual(block.state, "void")
@@ -358,7 +361,7 @@ class WildcardStateMachineTest(unittest.TestCase):
             self.callback_counter += 1
 
         # create a machine based on phase changes of matter (solid, liquid, gas)
-        class Matter(BaseStateObject):
+        class Matter(StateObject):
             """object class fo which the state is managed"""
             machine = StateMachine(
                 name="matter machine",
@@ -409,7 +412,7 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
             self.callback_counter += 1
 
         # create a machine based on phase changes of matter (solid, liquid, gas)
-        class Matter(BaseStateObject):
+        class Matter(StateObject):
             """object class fo which the state is managed"""
             machine = StateMachine(
                 name="matter machine",
@@ -458,7 +461,7 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
 
     def setUp(self):
 
-        class LightSwitch(BaseStateObject):
+        class LightSwitch(StateObject):
 
             machine = StateMachine(
                 name="matter machine",

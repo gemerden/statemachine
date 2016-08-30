@@ -68,7 +68,7 @@ class StateMachine(object):
     state_class = State  # class used for the internal representation of state
     transition_class = Transition  # class used for the internal representation of transitions
 
-    def __init__(self, name, states, transitions, before_any_exit=(), after_any_entry=()):
+    def __init__(self, name, states, transitions, initial=None, before_any_exit=(), after_any_entry=()):
         """
         Constructor of the state machine, used to define all properties of the machine.
         :param name: the name of the machine
@@ -89,6 +89,7 @@ class StateMachine(object):
             "condition": function(obj); called to determine whether a transtion will actually take place (return
                 True to cause state change)
         }
+        :param initial: optional name of the initial state
         :param before_any_exit: callback function called before an objects exits any state (single or list)
         :param after_any_entry: callback function called after an objects enters any state (single or list)
 
@@ -100,8 +101,16 @@ class StateMachine(object):
         self.transitions = self._create_transitions(transitions)
         self.triggering = self._create_triggering(transitions)
         self.triggers = set(t[1] for t in self.triggering)
+        self.initial = self._get_initial(initial)
         self.before_any_exit = callbackify(before_any_exit)
         self.after_any_entry = callbackify(after_any_entry)
+
+    def _get_initial(self, initial):
+        if initial:
+            try:
+                return self.states[initial]
+            except KeyError:
+                raise MachineError("initial state '%s' does not exist" % initial)
 
     def _create_states(self, states):
         """creates a dictionary of state_name: State key value pairs"""
@@ -191,7 +200,7 @@ class StateMachine(object):
             raise TransitionError("transition <%s, %s> does not exist" % (obj.state, state))
 
 
-class BaseStateObject(object):
+class StateObject(object):
     """
     Base class for objects with a state machine managed state. State can change by calling triggers as defined in
     transitions or by setting the 'state' property.
@@ -204,14 +213,20 @@ class BaseStateObject(object):
         :param args: any arguments to be passed to super constructor in case of inheritance
         :param kwargs: any keyword arguments to be passed to super constructor in case of inheritance
         """
-        super(BaseStateObject, self).__init__(*args, **kwargs)
-        if not initial:
-            self._new_state = self.machine.states.keys()[0]
-        elif initial not in self.machine.states:
+        super(StateObject, self).__init__(*args, **kwargs)
+        self._new_state = self._get_initial(initial)
+        self._old_state = None
+
+    def _get_initial(self, initial):
+        """checks initial and takes initial if given, else takes inital state name from state machine"""
+        if initial:
+            if initial in self.machine.states:
+                return initial
             raise ValueError("initial state does not exist")
         else:
-            self._new_state = initial
-        self._old_state = None
+            if self.machine.initial:
+                return self.machine.initial.name
+            raise ValueError("no initial state is configured in state machine")
 
     def __getattr__(self, trigger):
         """
@@ -259,7 +274,7 @@ if __name__ == "__main__":
             print "'%s' for '%s' results in transition <%s, %s>" % (action, str(obj), old_state, new_state)
         return func
 
-    class LightSwitch(BaseStateObject):
+    class LightSwitch(StateObject):
 
         machine = StateMachine(
             name="matter machine",
