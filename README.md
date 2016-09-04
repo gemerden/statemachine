@@ -13,10 +13,10 @@ This state machine implementation is developed with the following goals:
 ## concepts
 The following concepts are used
 
-* State: some condition of an object; objects can be in one state at the time
+* BaseState: some condition of an object; objects can be in one state at the time
 * Transition: transition of the object from one state to another resulting in a number of callbacks
 * Trigger: method called on an object that results in a state change (can have condition)
-* State machine: class that manages the states of objects according to predefined states and transitions
+* BaseState machine: class that manages the states of objects according to predefined states and transitions
 * Callback: function called on transitions by the state machine,
 * Condition: condition for a specific state transition to take place, this is checked before any (other) callbacks
 * Switching: by using multiple conditional transitions from the same state with the same trigger, the next state can be determined by e.g. the attributes of the object
@@ -37,9 +37,9 @@ The module has the following basic and some more advanced features:
     * if the callbacks function require extra arguments (apart from the state managed object), this method will fail bacause it cannot pass arguments
 * a number of callbacks can be installed for each state and transition, in order:
     * StateMachine.before_any_exit(self, obj. **args, ***kwargs),
-    * State.on_exit(self, obj. **args, ***kwargs),
+    * BaseState.on_exit(self, obj. **args, ***kwargs),
     * Transition.on_transfer(self, obj. **args, ***kwargs), # after this the state is changed on the object
-    * State.on_entry(self, obj. **args, ***kwargs),
+    * BaseState.on_entry(self, obj. **args, ***kwargs),
     * StateMachine.after_any_entry(self, obj. **args, ***kwargs)
         * with: obj the state managed object
         * with: **args, ***kwargs the arguments passed to the trigger (signature of callbacks must match how the trigger is called)
