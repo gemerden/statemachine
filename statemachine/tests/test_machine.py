@@ -479,6 +479,13 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
                 ],
             )
 
+            def __init__(self, initial=None):
+                super(LightSwitch, self).__init__(initial=initial)
+                self._old_state = None
+
+            def store_state(self):
+                self._old_state = self._state
+
             def was_on(self):
                 return str(self._old_state) == "on"
 

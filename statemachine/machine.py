@@ -119,11 +119,11 @@ class ChildState(BaseState):
     def exit(self, obj, *args, **kwargs):
         """strips the name of this state from the state in the object and calls the on_exit callbacks"""
         self.on_exit(obj, *args, **kwargs)
-        obj._new_state = obj._new_state[:-1]
+        obj._state = obj._state[:-1]
 
     def enter(self, obj, *args, **kwargs):
         """adds the name of this state to the state in the object and calls the on_entry callbacks"""
-        obj._new_state = obj._new_state + self.name
+        obj._state = obj._state + self.name
         self.on_entry(obj, *args, **kwargs)
 
     def iter_up(self):
@@ -173,21 +173,18 @@ class ParentState(BaseState):
         self.sub_states = self._create_states(states)
         self.transitions = self._create_transitions(transitions)
         self.triggering = self._create_triggering(transitions)
-        self.initial = self._get_initial(initial)
+        self.initial = self.sub_states[initial] if initial else None
         self.before_any_exit = callbackify(before_any_exit)
         self.after_any_entry = callbackify(after_any_entry)
         self.triggers = self._get_triggers()
 
-    def _get_initial(self, initial):
-        """ returns the nested inital state"""
-        if initial:
-            try:
-                initial_state = self.sub_states[initial]
-                while len(initial_state):
-                    initial_state = initial_state.initial
-                return initial_state
-            except KeyError:
-                raise MachineError("initial state '%s' does not exist" % initial)
+    def get_initial_path(self, initial):
+        """ returns the path to the actual initial state the object will be in """
+        initial = Path(initial or ())
+        try:
+            return [s for s in initial.get_in(self).iter_initial(include_self=True)][-1].path
+        except KeyError:
+            raise ValueError("no initial state is configured in state managed object or state machine")
 
     def _get_triggers(self):
         """ gets a set of all trigger names in the state amchine and all sub states recursively """
@@ -219,7 +216,7 @@ class ParentState(BaseState):
         return transition_dict
 
     def _expand_transitions(self, transitions):
-        """replaces transitions with '*' or list of sub_states with multiple one-to-one transitions"""
+        """replaces transitions with '*' or a list of sub_states with multiple one-to-one transitions"""
         current = [(t["old_state"], t["new_state"]) for t in transitions]
         for trans in transitions[:]:
             if trans["old_state"] == "*" or isinstance(trans["old_state"], (list, tuple)):
@@ -255,6 +252,7 @@ class ParentState(BaseState):
         return self._check_triggering(trigger_dict)
 
     def _check_triggering(self, trigger_dict):
+        """checks whether there are transitions that will never be reached and raises an error if so """
         for (_, trigger), transitions in trigger_dict.iteritems():
             for i, transition in enumerate(transitions[:-1]):
                 if not transition.condition:
@@ -285,7 +283,9 @@ class ParentState(BaseState):
     def __iter__(self):
         return self.sub_states.itervalues()
 
-    def iter_initial(self):
+    def iter_initial(self, include_self=False):
+        if include_self:
+            yield self
         state = self.initial
         while state is not None:
             yield state
@@ -328,6 +328,12 @@ class ParentState(BaseState):
 
 
 class StateMachine(ChildState, ParentState):
+    """
+    This state represents each state in the state machine, as well as the state machine itself (basically saying that
+    each state is a state machine, and vice versa). Of course the root machine will never be entered or exited and
+    states without substates will not have transitions, etc., but only one StateMachine class representing all states
+    and (nested) machines, simplifies navigation in case of transitions considerably.
+    """
     pass
 
 
@@ -345,20 +351,7 @@ class StateObject(object):
         :param kwargs: any keyword arguments to be passed to super constructor in case of inheritance
         """
         super(StateObject, self).__init__(*args, **kwargs)
-        self._new_state = self._get_initial(initial)
-        self._old_state = None
-
-    def _get_initial(self, initial):
-        """checks initial and takes initial if given, else takes inital state name from state machine"""
-        if initial:
-            initial = Path(initial)
-            if initial.has_in(self.machine):
-                return initial
-            raise ValueError("initial state does not exist")
-        else:
-            if self.machine.initial is not None:
-                return self.machine.initial.path
-            raise ValueError("no initial state is configured in state machine")
+        self._state = self.machine.get_initial_path(initial)
 
     def __getattr__(self, trigger):
         """
@@ -373,14 +366,15 @@ class StateObject(object):
 
     @property
     def state_path(self):
-        return self._new_state
+        return self._state
 
     def store_state(self):
-        self._old_state = self._new_state
+        """ this method can be overridden to e.g. create a state history """
+        pass
 
     def get_state(self):
-        """ returns the current state """
-        return str(self._new_state)
+        """ returns the current state, as a '.' separated string """
+        return str(self._state)
 
     def set_state(self, state):
         """ Causes the state machine to call all relevant callbacks and change the state of the object """
@@ -395,7 +389,7 @@ if __name__ == "__main__":
     """
     def printer(action):
         def func(obj):
-            print "'%s' for '%s' results in transition <%s, %s>" % (action, str(obj), obj._old_state, obj._new_state)
+            print "'%s' for '%s' results in transition to %s" % (action, str(obj), obj.state)
         return func
 
     class LightSwitch(StateObject):
@@ -422,7 +416,7 @@ if __name__ == "__main__":
     light_switch = LightSwitch("lights")
 
     print light_switch.turn_on()
-    print light_switch, light_switch._new_state
+    print light_switch, light_switch._state
     light_switch.turn_off()
     try:
         light_switch.turn_off()
