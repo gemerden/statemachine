@@ -14,6 +14,7 @@ class PathTest(unittest.TestCase):
                     e=3
                 ),
             ),
+            f=[4, 5]
         )
 
     def test_slicing(self):
@@ -41,6 +42,7 @@ class PathTest(unittest.TestCase):
         Path("a").del_in(self.mapping)
         Path("b.c").del_in(self.mapping)
         Path("b.d.e").del_in(self.mapping)
+        Path("f").del_in(self.mapping)
         self.assertEqual(self.mapping, dict(b=dict(d=dict())))
 
     def test_with_list(self):
@@ -58,4 +60,16 @@ class PathTest(unittest.TestCase):
         path = Path("a.b.c.d")
         self.assertEqual(path.tail(Path("a.b")), Path("c.d"))
         self.assertEqual(path.head(Path("c.d")), Path("a.b"))
+
+    def test_ints(self):
+        self.assertEqual(str(Path("1")), "1")
+        self.assertEqual(Path("1")[0], 1)
+        self.assertEqual(str(Path((1,))), "1")
+        self.assertEqual(str(Path("a")+1), "a.1")
+        self.assertEqual((Path("a")+1)[1], 1)
+
+    def test_iter_all(self):
+        self.assertDictEqual(dict(Path.iter_all(self.mapping, key_cast=str)),
+                             {"a": 1, "b.c": 2, "b.d.e": 3, "f.0": 4, "f.1": 5})
+
 
