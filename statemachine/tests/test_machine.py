@@ -1,7 +1,8 @@
+import json
 import unittest
 
 from statemachine.machine import StateObject, StateMachine, TransitionError, MachineError
-
+from statemachine.tools import Path
 
 __author__ = "lars van gemerden"
 
@@ -289,6 +290,11 @@ class WildcardStateMachineTest(unittest.TestCase):
         self.assertEqual(len(self.machine.transitions), 4+3+3)
         self.assertEqual(len(self.machine.triggering), 8+3)
 
+    def test_config(self):
+        config = repr(self.object_class.machine)
+        config = json.loads(config)
+        self.assertEqual(Path("transitions.4.old_state").get_in(config), "*")
+
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
         block = self.object_class("block")
@@ -442,6 +448,11 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
         self.assertEqual(len(self.object_class.machine.transitions), 4)
         self.assertEqual(len(self.object_class.machine.triggering), 2)
 
+    def test_config(self):
+        config = repr(self.object_class.machine)
+        config = json.loads(config)
+        self.assertEqual(Path("transitions.0.old_state").get_in(config), ["solid", "liquid"])
+
     def test_transitions(self):
         """test whether transitions work in this case"""
         block = self.object_class("block")
@@ -525,57 +536,86 @@ class NestedStateMachineTest(unittest.TestCase):
     """test the case where transition configuration contains wildcards '*' """
     def setUp(self):
         """called before any individual test method"""
-        self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
+        self.exit_counter = 0  # rest for every tests; used to count number of callbacks from machine
+        self.entry_counter = 0  # rest for every tests; used to count number of callbacks from machine
 
-        def callback(obj, *args, **kwargs):
-            """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
+        def on_exit(obj, *args, **kwargs):
+            """basic check + counts the number of times the object exits a state"""
             self.assertEqual(type(obj), WashingMachine)
-            self.callback_counter += 1
+            self.exit_counter += 1
 
-        # create a machine based on phase changes of matter (solid, liquid, gas)
+        def on_entry(obj, *args, **kwargs):
+            """basic check + counts the number of times the object enters a state"""
+            self.assertEqual(type(obj), WashingMachine)
+            self.entry_counter += 1
+
+        # create a machine config based on phase changes of matter (solid, liquid, gas)
+        self.machine_config = dict(
+            name="washing machine",
+            initial="off",
+            states=[
+                dict(
+                    name="off",
+                    initial="working",
+                    on_entry=on_entry,
+                    on_exit=on_exit,
+                    states=[
+                        {"name": "working", "on_entry": on_entry, "on_exit": on_exit},
+                        {"name": "broken", "on_entry": on_entry, "on_exit": on_exit},
+                    ],
+                    transitions=[
+                        {"old_state": "working", "new_state": "broken", "triggers": ["smash"]},
+                        {"old_state": "broken", "new_state": "working", "triggers": ["fix"]},
+                    ]
+                ),
+                dict(
+                    name="on",
+                    initial="none",
+                    on_entry=on_entry,
+                    on_exit=on_exit,
+                    states=[
+                        {"name": "none", "on_entry": on_entry, "on_exit": on_exit},
+                        {"name": "washing", "on_entry": on_entry, "on_exit": on_exit},
+                        {"name": "drying", "on_entry": on_entry, "on_exit": on_exit},
+                    ],
+                    transitions=[
+                        {"old_state": "none", "new_state": "washing", "triggers": ["wash"]},
+                        {"old_state": "washing", "new_state": "drying", "triggers": ["dry"]},
+                        {"old_state": "drying", "new_state": "none", "triggers": ["stop"]},
+                    ]
+                )
+            ],
+            transitions=[
+                {"old_state": "off.working", "new_state": "on", "triggers": ["turn_on", "switch"]},
+                {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "switch"]},
+                {"old_state": "on", "new_state": "off.broken", "triggers": ["smash"]},
+                {"old_state": "off.working", "new_state": "on.drying", "triggers": ["just_dry_already"]},
+            ],
+        )
+
         class WashingMachine(StateObject):
-
-            machine = StateMachine(
-                name="washing machine",
-                initial="off",
-                states=[
-                    dict(
-                        name="off",
-                        initial="working",
-                        states=[
-                            {"name": "working", "on_entry": callback, "on_exit": callback},
-                            {"name": "broken", "on_entry": callback, "on_exit": callback},
-                        ],
-                        transitions=[
-                            {"old_state": "working", "new_state": "broken", "triggers": ["smash"], "on_transfer": callback},
-                            {"old_state": "broken", "new_state": "working", "triggers": ["fix"], "on_transfer": callback},
-                        ]
-                    ),
-                    dict(
-                        name="on",
-                        initial="none",
-                        states=[
-                            {"name": "none", "on_entry": callback, "on_exit": callback},
-                            {"name": "washing", "on_entry": callback, "on_exit": callback},
-                            {"name": "drying", "on_entry": callback, "on_exit": callback},                            
-                        ],
-                        transitions=[
-                            {"old_state": "none", "new_state": "washing", "triggers": ["wash"], "on_transfer": callback},
-                            {"old_state": "washing", "new_state": "drying", "triggers": ["dry"], "on_transfer": callback},    
-                            {"old_state": "drying", "new_state": "none", "triggers": ["stop"], "on_transfer": callback},    
-                        ]
-                    )
-                ],
-                transitions=[
-                    {"old_state": "off.working", "new_state": "on", "triggers": ["turn_on", "switch"]},
-                    {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "switch"]},
-                    {"old_state": "on", "new_state": "off.broken", "triggers": ["smash"]},
-                    {"old_state": "off.working", "new_state": "on.drying", "triggers": ["just_dry_already"]},
-                ],
-            )
+            machine = StateMachine(**self.machine_config)
 
         self.object_class = WashingMachine
-        
+
+    def assert_counters(self, counter):
+        self.assertEqual(self.exit_counter, self.entry_counter)
+        self.assertEqual(self.exit_counter, counter)
+
+    def test_config(self):
+        config = repr(self.object_class.machine)
+        config = json.loads(config)
+        for path, expected in [("on_exit", "NONE"),
+                               ("states.0.name", "off"),
+                               ("states.0.states.0.name", "working"),
+                               ("transitions.0.old_state", "off.working"),
+                               ("transitions.3.triggers", ["just_dry_already"]),
+                               ("transitions.3.new_state", "on.drying"),
+                               ("transitions.3.condition", "NONE"),
+                               ("states.0.states.0.on_exit", "test_machine.on_exit"),
+                               ("states.0.transitions.0.new_state", "broken")]:
+            self.assertEqual(Path(path).get_in(config, "NONE"), expected)
+
     def test_construction(self):
         """test whether all states, transitions and triggers are in place"""
         self.assertEqual(len(self.object_class.machine), 2)
@@ -619,35 +659,94 @@ class NestedStateMachineTest(unittest.TestCase):
 
     def test_triggering(self):
         washer = self.object_class()
+        self.assertEqual(washer.state, "off.working")
+        self.assert_counters(0)
+
         washer.switch()
         self.assertEqual(washer.state, "on.none")
+        self.assert_counters(2)
+
         washer.wash()
         self.assertEqual(washer.state, "on.washing")
+        self.assert_counters(3)
+
         washer.dry()
         self.assertEqual(washer.state, "on.drying")
+        self.assert_counters(4)
+
         washer.switch()
         self.assertEqual(washer.state, "off.working")
+        self.assert_counters(6)
+
         washer.just_dry_already()
         self.assertEqual(washer.state, "on.drying")
+        self.assert_counters(8)
 
     def test_set_state(self):
         washer = self.object_class()
+        self.assert_counters(0)
+
         washer.state = "on"
         self.assertEqual(washer.state, "on.none")
+        self.assert_counters(2)
+
         washer.state = "on.washing"
         self.assertEqual(washer.state, "on.washing")
+        self.assert_counters(3)
+
         washer.state = "on.drying"
         self.assertEqual(washer.state, "on.drying")
+        self.assert_counters(4)
+
         washer.state = "off"
         self.assertEqual(washer.state, "off.working")
+        self.assert_counters(6)
+
         washer.state = "on.drying"
         self.assertEqual(washer.state, "on.drying")
+        self.assert_counters(8)
+
         washer.state = "off.working"
         self.assertEqual(washer.state, "off.working")
+        self.assert_counters(10)
 
     def test_state_string(self):
         self.assertEqual(str(self.object_class.machine["on"]), "on")
         self.assertEqual(str(self.object_class.machine["on"]["washing"]), "on.washing")
+
+    def test_transition_errors(self):
+        washer = self.object_class()
+        self.assert_counters(0)
+
+        with self.assertRaises(TransitionError):
+            washer.dry()
+        self.assertEqual(washer.state, "off.working")
+        self.assert_counters(0)
+
+        with self.assertRaises(TransitionError):
+            washer.fix()
+        self.assertEqual(washer.state, "off.working")
+        self.assert_counters(0)
+
+        washer.smash()
+        self.assertEqual(washer.state, "off.broken")
+        self.assert_counters(1)
+
+        with self.assertRaises(TransitionError):
+            washer.state = "on"
+        self.assertEqual(washer.state, "off.broken")
+        self.assert_counters(1)
+
+        with self.assertRaises(TransitionError):
+            washer.state = "off.broken"
+        self.assertEqual(washer.state, "off.broken")
+        self.assert_counters(1)
+
+    def test_machine_errors(self):
+        pass
+
+
+
 
 
 
