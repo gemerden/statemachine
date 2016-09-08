@@ -1,9 +1,11 @@
+from collections import Sequence, Mapping, OrderedDict
+
 __author__ = "lars van gemerden"
 
 
 def listify(list_or_item):
     """utitity function to ensure an argument becomes a list if it is not one yet"""
-    if isinstance(list_or_item, (list, tuple)):
+    if isinstance(list_or_item, (list, tuple, set)):
         return list(list_or_item)
     else:
         return [list_or_item]
@@ -11,8 +13,8 @@ def listify(list_or_item):
 
 def callbackify(callbacks):
     """
-    turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
-    first argument of the actual call to the callback.
+    Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
+    first argument (obj) of the actual call to the callback.
 
     :param callbacks: single or list of functions or method names, all with the same signature
     :return: new function that performs all the callbacks when called
@@ -27,6 +29,22 @@ def callbackify(callbacks):
                 return callback(obj, *args, **kwargs)
 
     return result_callback
+
+
+def nameify(f, cast=lambda v: v):
+    """ tries to give a name to an item"""
+    return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
+
+
+def clean_dict(dct):
+    """ removes items evaluating to False from dictionary """
+    for k, v in dct.copy().iteritems():
+        if not v:
+            del dct[k]
+    return dct
+
+
+_marker = object()
 
 
 class Path(tuple):
@@ -46,17 +64,55 @@ class Path(tuple):
     separator = "."
 
     @classmethod
-    def try_int(cls, v):
+    def iter_all(cls, map, key_cast=lambda v: v, path=None):  # can be optimized
+        """
+        Iterates recursively over all values in the map and yields the path in the map and the nested value.
+
+        :param map: input sequence (e.g. list) or mapping (e.g. dict)
+        :param key_cast: determines how the path will be yielded; default is Path, str is a useful alternative
+        :param path: path to the current element, for internally passing the path until now
+        :yield: path, value pairs
+        """
+        path = path or Path()
+        if isinstance(map, Mapping):
+            for k, m in map.iteritems():
+                for path_value in cls.iter_all(m, key_cast, path+k):
+                    yield path_value
+        elif isinstance(map, Sequence) and not isinstance(map, basestring):
+            for i, m in enumerate(map):
+                for path_value in cls.iter_all(m, key_cast, path+i):
+                    yield path_value
+        else:
+            yield key_cast(path), map
+
+    @classmethod
+    def apply_all(cls, map, func):  # can be optimized
+        """
+        Applies func to all elements without sub elements and replaces the original with the return value of func
+        """
+        if isinstance(map, Mapping):
+            for k, m in map.iteritems():
+                map[k] = cls.apply_all(m, func)
+            return map
+        elif isinstance(map, Sequence) and not isinstance(map, basestring):
+            for i, m in enumerate(map):
+                map[i] = cls.apply_all(m, func)
+            return map
+        else:
+            return func(map)
+
+    @classmethod
+    def validate(cls, v):
         try:
             return int(v)
         except ValueError:
             return v
 
-    def __new__(cls, string_s):
-        """constructor for path; __new__ is used because baseclass tuple is immutable"""
+    def __new__(cls, string_s=()):
+        """constructor for path; __new__ is used because objects of base class tuple are immutable"""
         if isinstance(string_s, str):
-            dec = cls.try_int
-            string_s = (dec(s) for s in string_s.split(cls.separator))
+            val = cls.validate
+            string_s = (val(s) for s in string_s.split(cls.separator))
         return super(Path, cls).__new__(cls, string_s)
 
     def __getslice__(self, i, j):
@@ -74,14 +130,19 @@ class Path(tuple):
         except KeyError:
             return False
 
-    def get_in(self, map):
+    def get_in(self, map, default=_marker):
         """ gets an item from the map argument, which can be mapping or list (or mapping of lists, etc)"""
-        for k in self:
-            try:
-                map = map[k]
-            except KeyError:
-                map = map[str(k)]
-        return map
+        try:
+            for k in self:
+                try:
+                    map = map[k]
+                except KeyError:
+                    map = map[str(k)]
+            return map
+        except (KeyError, IndexError, TypeError):
+            if default is not _marker:
+                return default
+            raise
 
     def set_in(self, map, item):
         """ adds the item to the map argument, which can be mapping or list (or mapping of lists, etc)"""
@@ -99,11 +160,13 @@ class Path(tuple):
         except KeyError:
             del map[str(self[-1])]
 
-    def __add__(self, v):
-        """ adds 2 paths together or adds a string to the path, returning a new Path object"""
-        if isinstance(v, str):
-            v = Path(v)
-        return Path(super(Path, self).__add__(v))
+    def __add__(self, p):
+        """ adds 2 paths together or adds string element(s) to the path, returning a new Path object"""
+        if isinstance(p, str):
+            p = Path(p)
+        elif isinstance(p, int):
+            p = (p,)
+        return Path(super(Path, self).__add__(p))
 
     def iter_in(self, map):
         """ iterates into the map, e.g. Path("a.b").iter_in({"a":{"b":1}}) yields {"b":1} and 1"""
@@ -140,6 +203,6 @@ class Path(tuple):
 
     def __repr__(self):
         """ returns the string representation:  Path("a.b.c") -> "a.b.c" """
-        return self.separator.join(self)
+        return self.separator.join([str(s) for s in self])
 
 
