@@ -1,7 +1,9 @@
+import json
 from collections import OrderedDict
+from copy import deepcopy
 from functools import partial
 
-from statemachine.tools import listify, callbackify, Path
+from statemachine.tools import listify, callbackify, Path, nameify
 
 __author__  = "lars van gemerden"
 
@@ -23,7 +25,7 @@ class SetStateError(ValueError):
 
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
-    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=None, **kwargs):
+    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=None, triggers={}):
         self.machine = machine
         self._validate_states(old_state, new_state)
         self.old_path = Path(old_state)
@@ -32,6 +34,7 @@ class Transition(object):
         self.new_states = list(self.new_path.iter_in(self.machine))
         self.on_transfer = callbackify(on_transfer)
         self.condition = callbackify(condition) if condition else None
+        self.triggers = triggers
 
     def _validate_states(self, old_state, new_state):
         """ assures that no internal transitions are defined on an outer state level"""
@@ -81,20 +84,20 @@ class Transition(object):
 
 class BaseState(object):
     """base class for the both ChildState and ParentState"""
-    def __init__(self, name, *args, **kwargs):
+    def __init__(self, name, **kwargs):
         """
         Constructor of BaseState:
 
         :param name: name of the state, must be unique within the parent state machine
         """
-        super(BaseState, self).__init__(*args, **kwargs)
+        super(BaseState, self).__init__(**kwargs)
         self.name = name
 
 
 class ChildState(BaseState):
     """class for the internal representation of a state without substates in the state machine"""
 
-    def __init__(self, super_state=None, on_entry=(), on_exit=(), *args, **kwargs):
+    def __init__(self, super_state=None, on_entry=(), on_exit=(), **kwargs):
         """
         Constructor of ChildState:
 
@@ -102,7 +105,7 @@ class ChildState(BaseState):
         :param on_entry: callback(s) that will be called, when an object enters this state
         :param on_exit: callback(s) that will be called, when an object exits this state
         """
-        super(ChildState, self).__init__(*args, **kwargs)
+        super(ChildState, self).__init__(**kwargs)
         self.super_state = super_state
         self.on_entry = callbackify(on_entry)
         self.on_exit = callbackify(on_exit)
@@ -142,10 +145,9 @@ class ParentState(BaseState):
 
     transition_class = Transition  # class used for the internal representation of transitions
 
-    def __init__(self, states=(), transitions=(), initial=None, before_any_exit=(), after_any_entry=(), *args, **kwargs):
+    def __init__(self, states=(), transitions=(), initial=None, before_any_exit=(), after_any_entry=(), **kwargs):
         """
         Constructor of the state machine, used to define all properties of the machine.
-        :param name: the name of the machine
         :param states: a list of state properties:
         {
             "name": "solid",  # the state name
@@ -169,7 +171,7 @@ class ParentState(BaseState):
         Note that all callback functions (including 'condition') have the signature:
             func(obj, *args, **kwargs); triggers can pass the args and kwargs
         """
-        super(ParentState, self).__init__(*args, **kwargs)
+        super(ParentState, self).__init__(**kwargs)
         self.sub_states = self._create_states(states)
         self.transitions = self._create_transitions(transitions)
         self.triggering = self._create_triggering(transitions)
@@ -281,9 +283,11 @@ class ParentState(BaseState):
         raise KeyError("key is not a string or 2-tuple")
 
     def __iter__(self):
+        """ runs through states, not keys/state-names """
         return self.sub_states.itervalues()
 
     def iter_initial(self, include_self=False):
+        """ iterates through into nested states, yielding the initial state of every substate"""
         if include_self:
             yield self
         state = self.initial
@@ -327,20 +331,45 @@ class ParentState(BaseState):
             raise SetStateError("conditional transition <%s, %s> failed"  % (obj.state, state_path))
 
 
-class StateMachine(ChildState, ParentState):
+class State(ChildState, ParentState):
     """
     This state represents each state in the state machine, as well as the state machine itself (basically saying that
     each state is a state machine, and vice versa). Of course the root machine will never be entered or exited and
     states without substates will not have transitions, etc., but only one StateMachine class representing all states
     and (nested) machines, simplifies navigation in case of transitions considerably.
+
+    The arguments passed to the constructor (__init__) determine whether the state is a 'root'/'top' state machine,
+    a nested state & machine or just a state; e.g. the root state machine does not have an on_exit/on_entry (because
+    the object can never leave that state), states without sub-states do not get 'states' and 'transitions' arguments
+    and nested state machines get both. See constructors for ChildState and ParentState for possible arguments.
     """
-    pass
+    def __init__(self, **kwargs):
+        self.config = self._config(**kwargs)
+        super(State, self).__init__(**kwargs)
+
+    def _config(self, **kwargs):
+        kwargs = deepcopy(kwargs)
+        def convert(item):
+            if isinstance(item, str):
+                return item
+            return nameify(item)
+        return Path.apply_all(kwargs, convert)
+
+    def __repr__(self):
+        """
+        :return: A JSON representation of the state machine, similar to the arguments of the state machine
+                 constructor, but the callback methods have been replaced by 'module.name' of the callback.
+        """
+        return json.dumps(self.config, indent=4)
+
+# for clarity sake
+StateMachine = State
 
 
 class StateObject(object):
     """
     Base class for objects with a state machine managed state. BaseState can change by calling triggers as defined in
-    transitions or by setting the 'state' property.
+    transitions for the state machine or by setting the 'state' property.
     """
 
     def __init__(self, initial=None, *args, **kwargs):
@@ -387,6 +416,7 @@ if __name__ == "__main__":
     """
     Small usage example: a minimal state machine (see also the tests)
     """
+    
     def printer(action):
         def func(obj):
             print "'%s' for '%s' results in transition to %s" % (action, str(obj), obj.state)
