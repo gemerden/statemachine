@@ -1,11 +1,9 @@
-import inspect
 import json
 from collections import OrderedDict
-from contextlib import contextmanager
 from copy import deepcopy
 from functools import partial
 
-from statemachine.tools import listify, callbackify, Path, nameify, replace_in_list
+from statemachine.tools import listify, callbackify, Path, nameify, replace_in_list, has_doubles
 
 __author__  = "lars van gemerden"
 
@@ -60,6 +58,21 @@ class Transition(object):
         for state in self.new_states[-1].iter_initial():
             state.enter(obj, **kwargs)
 
+    def _execute(self, obj, **kwargs):
+        if not self.condition or self.condition(obj, **kwargs):
+            obj.store_state()
+            self.machine.before_any_exit(obj, **kwargs)
+            self.exit_states(obj, **kwargs)
+            self.on_transfer(obj, **kwargs)
+            self.enter_states(obj, **kwargs)
+            self.machine.after_any_entry(obj, **kwargs)
+            return True
+        return False
+
+    def _execute_in_context(self, obj, **kwargs):
+        with self.machine.context_manager(obj, **kwargs) as context:
+            return self._execute(obj, context=context, **kwargs)
+
     def execute(self, obj, **kwargs):
         """
         Method calling all the callbacks of a state transition ans changing the actual object state (if condition
@@ -69,16 +82,10 @@ class Transition(object):
         :param kwargs: keyword arguments of the callback
         :return: bool, whether the transition took place
         """
-        with self.machine.context_manager(obj, **kwargs):
-            if not self.condition or self.condition(obj, **kwargs):
-                obj.store_state()
-                self.machine.before_any_exit(obj, **kwargs)
-                self.exit_states(obj, **kwargs)
-                self.on_transfer(obj, **kwargs)
-                self.enter_states(obj, **kwargs)
-                self.machine.after_any_entry(obj, **kwargs)
-                return True
-            return False
+        if self.machine.context_manager:
+            return self._execute_in_context(obj, **kwargs)
+        else:
+            return self._execute(obj, **kwargs)
 
     def __str__(self):
         """string representing the transition"""
@@ -211,45 +218,29 @@ class ParentState(BaseState):
 
     def _create_transitions(self, transitions):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
+
+        if has_doubles([(t["old_state"], t.get("new_state")) for t in transitions]):
+            raise MachineError("two transitions between same states in state machine configuration")
+
         transition_dict = {}
         transitions = self._expand_transitions(transitions)
-        for trans in transitions:
-            old_path, new_path = Path(trans["old_state"]), Path(trans["new_state"])
+        for transition in transitions:
+            old_path, new_path = Path(transition["old_state"]), Path(transition["new_state"])
+
             if (old_path, new_path) in transition_dict:
                 raise MachineError("two transitions between same sub_states in state machine")
+
             if not (old_path.has_in(self) and new_path.has_in(self)):
                 raise MachineError("non-existing state when constructing transitions")
-            transition_dict[old_path, new_path] = self.transition_class(machine=self, **trans)
+
+            transition_dict[old_path, new_path] = self.transition_class(machine=self, **transition)
         return transition_dict
 
     def _expand_transitions(self, transitions):
-        """replaces transitions with '*' or a list of sub_states with multiple one-to-one transitions"""
-        def exists(old, new):
-            return any(old == t["old_state"] and new == t["new_state"] for t in transitions)
-
-        transitions = self._expand_switches(transitions)
-        for trans in transitions[:]:
-            if trans["old_state"] == "*" or isinstance(trans["old_state"], (list, tuple)):
-                new_transes = []
-                old_state_names = self.sub_states.keys() if trans["old_state"] == "*" else trans["old_state"]
-                for state_name in old_state_names:
-                    if state_name != trans["new_state"] and not exists(state_name, trans["new_state"]):
-                        new_trans = trans.copy()
-                        new_trans["old_state"] = state_name
-                        new_transes.append(new_trans)
-                replace_in_list(transitions, trans, new_transes)
-
-        for trans in transitions[:]:
-            if trans["new_state"] == "*" or isinstance(trans["new_state"], (list, tuple)):
-                new_transes = []
-                new_state_names = self.sub_states.keys() if trans["new_state"] == "*" else trans["new_state"]
-                for state_name in new_state_names:
-                    if state_name != trans["old_state"] and not exists(trans["old_state"], state_name):
-                        new_trans = trans.copy()
-                        new_trans["new_state"] = state_name
-                        new_transes.append(new_trans)
-                replace_in_list(transitions, trans, new_transes)
-        return self._expand_switches(transitions)
+        self._expand_switches(transitions)
+        self._expand_listed(transitions)
+        self._expand_wildcards(transitions)
+        return transitions
 
     def _expand_switches(self, transitions):
         """
@@ -289,7 +280,33 @@ class ParentState(BaseState):
                     replace_in_list(transitions, trans, new_transes)
                 except KeyError as e:
                     raise MachineError("missing parameter '%s' in switched transition" % e)
-        return transitions
+
+    def _expand_listed(self, transitions):
+        for transition in transitions[:]:
+            self._update_transitions(transition, transitions)
+
+    def _expand_wildcards(self, transitions):
+        for transition in transitions[:]:
+            if transition["old_state"] == "*" or transition["new_state"] == "*":
+                if transition["old_state"] == "*":
+                    transition["old_state"] = [s.name for s in self]
+                if transition["new_state"] == "*":
+                    transition["new_state"] = [s.name for s in self]
+                self._update_transitions(transition, transitions, self_transition=False)
+
+    def _update_transitions(self, transition, transitions, self_transition=True):
+
+        def exists(old, new):
+            return any(old == t["old_state"] and new == t["new_state"] for t in transitions)
+
+        index = transitions.index(transition)
+        transitions.remove(transition)
+        for i, old_state in enumerate(listify(transition["old_state"])):
+            for j, new_state in enumerate(listify(transition["new_state"])):
+                if not exists(old_state, new_state) and (self_transition or old_state != new_state):
+                    new_transition = transition.copy()
+                    new_transition.update(old_state=old_state, new_state=new_state)
+                    transitions.insert(index+i+j, new_transition)
 
     def _create_triggering(self, transitions):
         """creates a dictionary of (old state name, trigger name): Transition key value pairs"""
@@ -313,11 +330,12 @@ class ParentState(BaseState):
 
     def _get_context_manager(self, context_manager):
         if context_manager:
-            return context_manager
-        else:
-            def manager(obj, **kwargs):
-                yield
-            return contextmanager(manager)
+            if isinstance(context_manager, str):
+                def new_context_manager(obj, **kwargs):
+                    return getattr(obj, context_manager)(**kwargs)
+                return new_context_manager
+            else:
+                return context_manager
 
     def __len__(self):
         """ number of states """
