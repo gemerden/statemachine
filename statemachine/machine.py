@@ -2,7 +2,6 @@ import json
 from collections import OrderedDict
 from contextlib import contextmanager
 from copy import deepcopy
-from functools import partial
 
 from statemachine.tools import listify, callbackify, Path, nameify, replace_in_list, has_doubles
 
