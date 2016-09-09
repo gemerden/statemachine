@@ -591,8 +591,9 @@ class NestedStateMachineTest(unittest.TestCase):
     """test the case where transition configuration contains wildcards '*' """
     def setUp(self):
         """called before any individual test method"""
-        self.exit_counter = 0  # rest for every tests; used to count number of callbacks from machine
-        self.entry_counter = 0  # rest for every tests; used to count number of callbacks from machine
+        self.exit_counter = 0  # reset for every tests; used to count number of callbacks from machine
+        self.entry_counter = 0  # reset for every tests; used to count number of callbacks from machine
+        self.before_counter = 0  # reset for every tests; used to count number of callbacks from machine
 
         def on_exit(obj, **kwargs):
             """basic check + counts the number of times the object exits a state"""
@@ -603,6 +604,11 @@ class NestedStateMachineTest(unittest.TestCase):
             """basic check + counts the number of times the object enters a state"""
             self.assertEqual(type(obj), WashingMachine)
             self.entry_counter += 1
+
+        def before_any_exit(obj, **kwargs):
+            """ will be used to check whether this method will be looked up in super states """
+            self.assertEqual(type(obj), WashingMachine)
+            self.before_counter += 1
 
         # create a machine config based on phase changes of matter (solid, liquid, gas)
         self.machine_config = dict(
@@ -646,6 +652,7 @@ class NestedStateMachineTest(unittest.TestCase):
                 {"old_state": "on", "new_state": "off.broken", "triggers": ["smash"]},
                 {"old_state": "off.working", "new_state": "on.drying", "triggers": ["just_dry_already"]},
             ],
+            before_any_exit=before_any_exit
         )
 
         class WashingMachine(StateObject):
@@ -653,9 +660,10 @@ class NestedStateMachineTest(unittest.TestCase):
 
         self.object_class = WashingMachine
 
-    def assert_counters(self, exit_counter, entry_counter):
+    def assert_counters(self, exit_counter, entry_counter, before_counter):
         self.assertEqual(self.exit_counter, exit_counter)
         self.assertEqual(self.entry_counter, entry_counter)
+        self.assertEqual(self.before_counter, before_counter)
 
     def test_config(self):
         config = repr(self.object_class.machine)
@@ -715,55 +723,55 @@ class NestedStateMachineTest(unittest.TestCase):
     def test_triggering(self):
         washer = self.object_class()
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(0, 0)
+        self.assert_counters(0, 0, 0)
 
         washer.switch()
         self.assertEqual(washer.state, "on.none")
-        self.assert_counters(2, 2)
+        self.assert_counters(2, 2, 1)
 
         washer.wash()
         self.assertEqual(washer.state, "on.washing")
-        self.assert_counters(3, 3)
+        self.assert_counters(3, 3, 2)
 
         washer.dry()
         self.assertEqual(washer.state, "on.drying")
-        self.assert_counters(4, 4)
+        self.assert_counters(4, 4, 3)
 
         washer.switch()
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(6, 6)
+        self.assert_counters(6, 6, 4)
 
         washer.just_dry_already()
         self.assertEqual(washer.state, "on.drying")
-        self.assert_counters(8, 8)
+        self.assert_counters(8, 8, 5)
 
     def test_set_state(self):
         washer = self.object_class()
-        self.assert_counters(0, 0)
+        self.assert_counters(0, 0, 0)
 
         washer.state = "on"
         self.assertEqual(washer.state, "on.none")
-        self.assert_counters(2, 2)
+        self.assert_counters(2, 2, 1)
 
         washer.state = "on.washing"
         self.assertEqual(washer.state, "on.washing")
-        self.assert_counters(3, 3)
+        self.assert_counters(3, 3, 2)
 
         washer.state = "on.drying"
         self.assertEqual(washer.state, "on.drying")
-        self.assert_counters(4, 4)
+        self.assert_counters(4, 4, 3)
 
         washer.state = "off"
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(6, 6)
+        self.assert_counters(6, 6, 4)
 
         washer.state = "on.drying"
         self.assertEqual(washer.state, "on.drying")
-        self.assert_counters(8, 8)
+        self.assert_counters(8, 8, 5)
 
         washer.state = "off.working"
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(10, 10)
+        self.assert_counters(10, 10, 6)
 
     def test_state_string(self):
         self.assertEqual(str(self.object_class.machine["on"]), "on")
@@ -771,33 +779,33 @@ class NestedStateMachineTest(unittest.TestCase):
 
     def test_transition_errors(self):
         washer = self.object_class()
-        self.assert_counters(0, 0)
+        self.assert_counters(0, 0, 0)
 
         with self.assertRaises(TransitionError):
             washer.dry()
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(0, 0)
+        self.assert_counters(0, 0, 0)
 
         with self.assertRaises(TransitionError):
             washer.fix()
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(0, 0)
+        self.assert_counters(0, 0, 0)
 
         washer.smash()
         self.assertEqual(washer.state, "off.broken")
-        self.assert_counters(1, 1)
+        self.assert_counters(1, 1, 1)
 
         with self.assertRaises(TransitionError):
             washer.state = "on"
         self.assertEqual(washer.state, "off.broken")
-        self.assert_counters(1, 1)
+        self.assert_counters(1, 1, 1)
 
         with self.assertRaises(TransitionError):
             washer.state = "off.broken"
         self.assertEqual(washer.state, "off.broken")
-        self.assert_counters(1, 1)
+        self.assert_counters(1, 1, 1)
 
-    def test_machine_errors(self):
+    def test_machine_errors(self):  # TODO
         pass
 
 class SwitchedTransitionTest(unittest.TestCase):

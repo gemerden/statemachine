@@ -58,20 +58,26 @@ class Transition(object):
         for state in self.new_states[-1].iter_initial():
             state.enter(obj, **kwargs)
 
+    def before_any_exit(self, obj, **kwargs):
+        for machine in self.machine.iter_up(include_root=True):
+            if machine.before_any_exit:
+                return machine.before_any_exit(obj, **kwargs)
+
+    def after_any_entry(self, obj, **kwargs):
+        for machine in self.machine.iter_up(include_root=True):
+            if machine.after_any_entry:
+                return machine.after_any_entry(obj, **kwargs)
+
     def _execute(self, obj, **kwargs):
         if not self.condition or self.condition(obj, **kwargs):
             obj.store_state()
-            self.machine.before_any_exit(obj, **kwargs)
+            self.before_any_exit(obj, **kwargs)
             self.exit_states(obj, **kwargs)
             self.on_transfer(obj, **kwargs)
             self.enter_states(obj, **kwargs)
-            self.machine.after_any_entry(obj, **kwargs)
+            self.after_any_entry(obj, **kwargs)
             return True
         return False
-
-    def _execute_in_context(self, obj, **kwargs):
-        with self.machine.context_manager(obj, **kwargs) as context:
-            return self._execute(obj, context=context, **kwargs)
 
     def execute(self, obj, **kwargs):
         """
@@ -83,7 +89,8 @@ class Transition(object):
         :return: bool, whether the transition took place
         """
         if self.machine.context_manager:
-            return self._execute_in_context(obj, **kwargs)
+            with self.machine.context_manager(obj, **kwargs) as context:
+                return self._execute(obj, context=context, **kwargs)
         else:
             return self._execute(obj, **kwargs)
 
@@ -139,12 +146,14 @@ class ChildState(BaseState):
         obj._state = obj._state + self.name
         self.on_entry(obj, **kwargs)
 
-    def iter_up(self):
+    def iter_up(self, include_root=False):
         """iterates over all states from this state to the top containing state"""
         state = self
         while state.super_state is not None:
             yield state
             state = state.super_state
+        if include_root:
+            yield state
 
     def __str__(self):
         return str(self.path)
@@ -156,7 +165,7 @@ class ParentState(BaseState):
     transition_class = Transition  # class used for the internal representation of transitions
 
     def __init__(self, states=(), transitions=(), initial=None,
-                 before_any_exit=(), after_any_entry=(), context_manager=None, **kwargs):
+                 before_any_exit=None, after_any_entry=None, context_manager=None, **kwargs):
         """
         Constructor of the state machine, used to define all properties of the machine.
         :param states: a list of state properties:
@@ -187,8 +196,8 @@ class ParentState(BaseState):
         self.transitions = self._create_transitions(transitions)
         self.triggering = self._create_triggering(transitions)
         self.initial = self.sub_states[initial] if initial else None
-        self.before_any_exit = callbackify(before_any_exit)
-        self.after_any_entry = callbackify(after_any_entry)
+        self.before_any_exit = callbackify(before_any_exit) if before_any_exit else None
+        self.after_any_entry = callbackify(after_any_entry) if after_any_entry else None
         self.context_manager = self._get_context_manager(context_manager)
         self.triggers = self._get_triggers()
 
