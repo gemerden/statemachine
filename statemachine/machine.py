@@ -1,5 +1,6 @@
 import json
 from collections import OrderedDict
+from contextlib import contextmanager
 from copy import deepcopy
 from functools import partial
 
@@ -68,9 +69,18 @@ class Transition(object):
             if machine.after_any_entry:
                 return machine.after_any_entry(obj, **kwargs)
 
+    @contextmanager
+    def transitioning(self, obj):
+        """ contextmanager to restore the previous state when any exception is raised in the callbacks """
+        old_state = obj._state
+        try:
+            yield
+        except:
+            obj._state = old_state
+            raise
+
     def _execute(self, obj, **kwargs):
         if not self.condition or self.condition(obj, **kwargs):
-            obj.store_state()
             self.before_any_exit(obj, **kwargs)
             self.exit_states(obj, **kwargs)
             self.on_transfer(obj, **kwargs)
@@ -90,9 +100,11 @@ class Transition(object):
         """
         if self.machine.context_manager:
             with self.machine.context_manager(obj, **kwargs) as context:
-                return self._execute(obj, context=context, **kwargs)
+                with self.transitioning(obj):
+                    return self._execute(obj, context=context, **kwargs)
         else:
-            return self._execute(obj, **kwargs)
+            with self.transitioning(obj):
+                return self._execute(obj, **kwargs)
 
     def __str__(self):
         """string representing the transition"""
@@ -452,111 +464,4 @@ class State(ChildState, ParentState):
 
 # for clarity sake
 StateMachine = State
-
-
-class StateObject(object):
-    """
-    Base class for objects with a state machine managed state. BaseState can change by calling triggers as defined in
-    transitions for the state machine or by setting the 'state' property.
-    """
-
-    def __init__(self, initial=None, *args, **kwargs):
-        """
-        Constructor for the base class
-        :param initial: string indicating the initial state of the object; if None, take first state of machine
-        :param args: any arguments to be passed to super constructor in case of inheritance
-        :param kwargs: any keyword arguments to be passed to super constructor in case of inheritance
-        """
-        super(StateObject, self).__init__(*args, **kwargs)
-        self._state = self.machine.get_initial_path(initial)
-
-    def __getattr__(self, trigger):
-        """
-        Allows calling the triggers to cause a transition; the triggers return a bool indicating whether the
-            transition took place.
-        :param trigger: name of the trigger
-        :return: partial function that allows the trigger to be called like object.some_trigger()
-        """
-        if trigger in self.machine.triggers:
-            return partial(self.machine.do_trigger, obj=self, trigger=trigger)
-        raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, trigger))
-
-    @property
-    def state_path(self):
-        return self._state
-
-    def store_state(self):
-        """ this method can be overridden to e.g. create a state history """
-        pass
-
-    def get_state(self):
-        """ returns the current state, as a '.' separated string """
-        return str(self._state)
-
-    def set_state(self, state):
-        """ Causes the state machine to call all relevant callbacks and change the state of the object """
-        self.machine.set_state(self, Path(state))
-
-    state = property(get_state, set_state)  # turn state into a property
-
-
-class HistoryStateObject(StateObject):
-
-    def __init__(self, *args, **kwargs):
-        super(HistoryStateObject, self).__init__(*args, **kwargs)
-        self.history = []
-
-    def store_state(self):
-        self.history.append(self.state)
-
-if __name__ == "__main__":
-    """
-    Small usage example: a minimal state machine (see also the tests)
-    """
-    
-    def printer(action):
-        def func(obj):
-            print "'%s' for '%s' results in transition to %s" % (action, str(obj), obj.state)
-        return func
-
-    class LightSwitch(StateObject):
-
-        machine = StateMachine(
-            name="matter machine",
-            states=[
-                {"name": "on", "on_exit": printer("turn off"), "on_entry": printer("turn on")},
-                {"name": "off",  "on_exit": printer("turn on"), "on_entry": printer("turn off")},
-            ],
-            transitions=[
-                {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "switch"]},
-                {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "switch"]},
-            ],
-        )
-
-        def __init__(self, name, initial="off"):
-            super(LightSwitch, self).__init__(initial=initial)
-            self.name = name
-
-        def __str__(self):
-            return self.name + " (%s)" % self.state
-
-    light_switch = LightSwitch("lights")
-
-    print light_switch.turn_on()
-    print light_switch, light_switch._state
-    light_switch.turn_off()
-    try:
-        light_switch.turn_off()
-    except TransitionError as e:
-        print "error: " + e.message
-    print
-    light_switch.switch()
-    light_switch.switch()
-    print
-    light_switch.state = "on"
-    light_switch.state = "off"
-    try:
-        light_switch.state = "off"  # does not result in any callbacks because the switch is already off
-    except TransitionError as e:
-        print e.message
 

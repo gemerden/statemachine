@@ -4,7 +4,8 @@ import unittest
 from contextlib import contextmanager
 from copy import deepcopy
 
-from statemachine.machine import StateObject, StateMachine, TransitionError, MachineError, HistoryStateObject
+from statemachine.bases import StateObject
+from statemachine.machine import StateMachine, TransitionError, MachineError
 from statemachine.tools import Path
 
 __author__ = "lars van gemerden"
@@ -94,7 +95,7 @@ class StateMachineTest(unittest.TestCase):
             after_any_entry="do_callback"
         )
 
-        class Matter(HistoryStateObject):
+        class Matter(StateObject):
             """object class fo which the state is managed"""
             machine = self.machine
 
@@ -149,7 +150,6 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(self.block.state, "solid")
         self.block.dont()
         self.assertEqual(self.block.state, "solid")
-        self.assertEqual(self.block.history, ["solid", "liquid", "gas", "liquid", "solid"])
 
     def test_shared_triggers(self):
         """test the shared trigger functions (same name for multiple transitions) and the resulting states"""
@@ -174,7 +174,6 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(self.block.state, "solid")
         self.block.state = "solid"
         self.assertEqual(self.block.state, "solid")
-        self.assertEqual(self.block.history, ["solid", "liquid", "gas", "liquid", "solid"])
 
     def test_callback(self):
         """tests whether all callbacks are called during transitions"""
@@ -540,9 +539,10 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
                     {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "switch"]},
                     {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "switch"]},
                     {"old_state": ["on", "off"], "new_state": "broken", "triggers": "smash"},
-                    {"old_state": "broken", "new_state": "on", "triggers": "fix", "condition": "was_on"},
-                    {"old_state": "broken", "new_state": "off", "triggers": "fix"},
+                    {"old_state": "broken", "triggers": "fix", "new_states": [{"name": "on", "condition": "was_on"},
+                                                                              {"name": "off"}]},
                 ],
+                before_any_exit="store_state"
             )
 
             def __init__(self, initial=None):
@@ -552,7 +552,7 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
             def store_state(self):
                 self._old_state = self._state
 
-            def was_on(self, **kwargs):
+            def was_on(self):
                 return str(self._old_state) == "on"
 
         self.object_class = LightSwitch
@@ -978,7 +978,7 @@ class CallbackTest(unittest.TestCase):
             ],
             before_any_exit="before_any_exit",
             after_any_entry="after_any_entry",
-            context_manager=""
+            context_manager="context_manager"
         )
 
         class Radio(StateObject):
@@ -1017,4 +1017,47 @@ class CallbackTest(unittest.TestCase):
 
     def test_callbacks(self):
         self.radio.switch(a=1, b=2, c=3, d=4, e=5, f=6, g=7, h=None)
+
+class TransitioningTest(unittest.TestCase):
+
+    def setUp(self):
+        """called before any individual test method"""
+        self.machine = StateMachine(
+            name="washer",
+            initial="off",
+            states=[
+                {"name": "off"},
+                {"name": "on"},
+            ],
+            transitions=[
+                {"old_state": "off", "new_state": "on", "triggers": "switch", "on_transfer": "raise_error"},
+            ],
+            context_manager="context_manager"
+        )
+
+        class Radio(StateObject):
+            """object class fo which the state is managed"""
+            machine = self.machine
+
+            def __init__(self, testcase):
+                super(Radio, self).__init__()
+                self.testcase = testcase
+
+            def raise_error(self, context, **kwargs):
+                self.testcase.assertEqual(context, "context")
+                raise AssertionError
+
+            @contextmanager
+            def context_manager(self, item, **kwargs):
+                self.testcase.assertEqual(item, "item")
+                yield "context"
+
+        self.radio = Radio(self)
+
+    def test_transitioning(self):
+        """ mainly tests whether the state is restored when transitioning raises an exception """
+        self.assertEqual(self.radio.state, "off")
+        with self.assertRaises(AssertionError):
+            self.radio.switch(item="item")
+        self.assertEqual(self.radio.state, "off")
 
