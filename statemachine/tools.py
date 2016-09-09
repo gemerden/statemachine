@@ -1,4 +1,4 @@
-from collections import Sequence, Mapping, OrderedDict
+from collections import Sequence, Mapping
 
 __author__ = "lars van gemerden"
 
