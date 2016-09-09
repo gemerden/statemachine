@@ -53,8 +53,10 @@ def replace_in_list(lst, old_item, new_items):
     return lst
 
 
-_marker = object()
+def has_doubles(lst):  # slow, O(n^2)
+    return any(lst.count(l) > 1 for l in lst)
 
+_marker = object()
 
 class Path(tuple):
     '''

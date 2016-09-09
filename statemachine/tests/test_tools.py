@@ -1,6 +1,6 @@
 import unittest
 
-from statemachine.tools import Path, replace_in_list
+from statemachine.tools import Path, replace_in_list, has_doubles
 
 
 class PathTest(unittest.TestCase):
@@ -74,5 +74,10 @@ class PathTest(unittest.TestCase):
 
     def test_replace_in_list(self):
         self.assertEqual(replace_in_list([1, 2, 3], 2, [4, 5]), [1, 4, 5, 3])
+
+    def test_has_doubles(self):
+        self.assertTrue(has_doubles([1, 2, 3, 2]))
+        self.assertFalse(has_doubles([1, 2, 3, 4]))
+
 
 
