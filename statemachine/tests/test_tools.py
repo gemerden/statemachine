@@ -2,6 +2,8 @@ import unittest
 
 from statemachine.tools import Path, replace_in_list, has_doubles
 
+__author__  = "lars van gemerden"
+
 
 class PathTest(unittest.TestCase):
 
