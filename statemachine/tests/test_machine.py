@@ -9,6 +9,52 @@ from statemachine.tools import Path
 
 __author__ = "lars van gemerden"
 
+class SimplestStateMachineTest(unittest.TestCase):
+
+    def setUp(self):
+
+        self.config = dict(
+                name="matter machine",
+                initial="off",
+                states=[
+                    {"name": "on"},
+                    {"name": "off"},
+                ],
+                transitions=[
+                    {"old_state": "off", "new_state": "on", "triggers": "switch"},
+                    {"old_state": "on", "new_state": "off", "triggers": "switch"},
+                ],
+            )
+
+        self.machine = StateMachine(**self.config)
+
+        class LightSwitch(StateObject):
+            machine = self.machine
+
+        self.light = LightSwitch()
+
+    def test_construction(self):
+        """test whether all states, transitions and triggers are in place"""
+        self.assertEqual(len(self.machine), 2)
+        self.assertEqual(len(self.machine.transitions), 2)
+        self.assertEqual(len(self.machine.triggering), 2)
+
+    def test_triggers(self):
+        """test the basio trigger functions and the resultig states"""
+        self.assertEqual(self.light.state, "off")
+        self.light.switch()
+        self.assertEqual(self.light.state, "on")
+        self.light.switch()
+        self.assertEqual(self.light.state, "off")
+
+    def test_set_state(self):
+        """tests changing states with the state property of StateObject"""
+        self.assertEqual(self.light.state, "off")
+        self.light.state = "on"
+        self.assertEqual(self.light.state, "on")
+        self.light.state = "off"
+        self.assertEqual(self.light.state, "off")
+
 
 class StateMachineTest(unittest.TestCase):
 
@@ -506,7 +552,7 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
             def store_state(self):
                 self._old_state = self._state
 
-            def was_on(self):
+            def was_on(self, **kwargs):
                 return str(self._old_state) == "on"
 
         self.object_class = LightSwitch
@@ -839,7 +885,7 @@ class ContextManagerTest(unittest.TestCase):
             yield
             obj.managed = False
 
-        self.machine = StateMachine(
+        self.config = dict(
             name="matter machine",
             initial="solid",
             states=[
@@ -858,6 +904,8 @@ class ContextManagerTest(unittest.TestCase):
             context_manager=manager,
         )
 
+        self.machine = StateMachine(**self.config)
+
         class Matter(StateObject):
             """object class fo which the state is managed"""
             machine = self.machine
@@ -870,9 +918,30 @@ class ContextManagerTest(unittest.TestCase):
             def on_action(self, **kwargs):
                 self.testcase.assertEqual(self.managed, True)
 
+            @contextmanager
+            def object_manager(self, **kwargs):
+                self.managed = True
+                yield
+                self.managed = False
+
         self.object_class = Matter
 
     def test_manager(self):
+        matter = self.object_class(testcase=self)
+        self.assertEqual(matter.managed, False)
+        matter.heat()
+        self.assertEqual(matter.managed, False)
+        matter.heat()
+        self.assertEqual(matter.managed, False)
+        matter.cool()
+        self.assertEqual(matter.managed, False)
+        matter.cool()
+        self.assertEqual(matter.managed, False)
+
+
+    def test_manager_in_object(self):
+        self.config["context_manager"] = "object_manager"
+        self.object_class.machine = StateMachine(**self.config)
         matter = self.object_class(testcase=self)
         self.assertEqual(matter.managed, False)
         matter.heat()
