@@ -18,11 +18,6 @@ class TransitionError(ValueError):
     pass
 
 
-class SetStateError(ValueError):
-    """Exception indicating that explicitly setting the state of an object failed"""
-    pass
-
-
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
     def __init__(self, machine, old_state, new_state, on_transfer=(), condition=None, triggers={}):
@@ -426,7 +421,7 @@ class ParentState(BaseState):
     def set_state(self, obj, state_path):
         """ Executes the transition when called by setting the state: obj.state = 'some_state' """
         if not self._get_transition(obj.state_path, state_path).execute(obj):
-            raise SetStateError("conditional transition <%s, %s> failed"  % (obj.state, state_path))
+            raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state_path))
 
 
 class State(ChildState, ParentState):

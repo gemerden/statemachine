@@ -1,4 +1,4 @@
-from statemachine.bases import StatefulObject
+from statemachine.baseclass import StatefulObject
 from statemachine.machine import StateMachine, TransitionError
 
 __author__  = "lars van gemerden"
