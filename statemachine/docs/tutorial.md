@@ -1,4 +1,4 @@
-### Statemachine Tutorial
+## Statemachine Tutorial
 
 A statemachine is a relatively simple and intuitive model to add functionality to a class. It can be used in many cases where an object can be in a finite number of states, like:
 * a character in a game, where animations are shown depending on actions or transitions between actions (sitting, standing, standing-up),
@@ -7,11 +7,12 @@ A statemachine is a relatively simple and intuitive model to add functionality t
 
 On entering, exiting or transitioning between states, actions can be executed through callabacks, that are specific for that state or transition, like showing an animation, committing to a database, sending a message or updating a user interface.
 
-##### Some Notes
+#### Some Notes
 
+* State machines can be visualized in a flow chart. This makes it relatively easy to develop in groups, discuss with non-developers and reach consensus about domain and implementation. 
 * The sections in this tutorial are ordered by complexity of the functionality. Most state machines do not need nested states (but they are definitely handy when needed). The first 2 sections already allow you to implement a functional state machine.
 
-#### Classes
+### Classes
 
 The following classes are part of the public API of the statemachine.
 
@@ -21,12 +22,53 @@ The following classes are part of the public API of the statemachine.
     * `MachineError(Exception)`: raised in case of a misconfiguration of the state machine,
     * `TransitionError(Exception)`: raised when a non-existing transition is attempted,
 
-## The Simplest StateMachine
+### The Simplest StateMachine
 
-To start off we will show the simplest example of  state machine. It defines states, transitions and triggers and will raise exception when illegal transitions are attempted. 
+To start off we will show the simplest example of  state machine. It defines states and transitions. 
 ```python
 from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine
+from statemachine.machine import StateMachine, TransitionError
+ 
+class LightSwitch(StatefulObject):           # inherit from "StatefulObject" to get stateful behaviour        
+
+    machine = StateMachine(
+        states=[
+            {"name": "on"},
+            {"name": "off"},
+        ],
+        transitions=[
+            {"old_state": "off", "new_state": "on"},
+            {"old_state": "on", "new_state": "off"},
+        ],
+    )
+
+if __name__ == "__main__":
+    lightswitch = LightSwitch(initial="off")  # argument "initial" defines the initial state
+    assert lightswitch.state == "off"         # the lightswitch is now in the "off" state
+        
+    lightswitch.state = "on"                  # you can explicitly set the state through the "state" property
+    assert lightswitch.state == "on"
+    
+    lightswitch.state = "off"                 
+    assert lightswitch.state == "off"
+    
+    lightswitch.state = "off"                 # this will not raise an exception, although there is no transition from "off" to "off"
+    assert lightswitch.state == "off"
+    
+    try:
+        lightswitch.state = "nix"             # this will not raise an exception; there is no state "nix"
+    except TransitionError:
+        pass
+    assert lightswitch.state == "off"
+```
+Although this example adds states and transitions to the LightSwitch object, it does not do much more then protect the object against non-existing states and transitions.
+
+### Adding triggers
+
+The next step is to add triggers to the state machine. Triggers are methods on the stateful object that cause a transition to take place.  
+```python
+from statemachine.baseclass import StatefulObject
+from statemachine.machine import StateMachine, TransitionError
  
 class LightSwitch(StatefulObject):
 
@@ -36,7 +78,7 @@ class LightSwitch(StatefulObject):
             {"name": "off"},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},
+            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},  # adds tow triggers for thsi transition
             {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "flick"]},
         ],
     )
@@ -44,20 +86,39 @@ class LightSwitch(StatefulObject):
 if __name__ == "__main__":
     lightswitch = LightSwitch(initial="off")  # argument "initial" defines the initial state
     assert lightswitch.state == "off"         # the lightswitch is now in the "off" state
-    lightswitch.turn_on()                     # turning the switch on
+    
+    lightswitch.turn_on()                     # triggering "turn_on" turns the switch on
     assert lightswitch.state == "on"          # the switch is now "on"
-    lightswitch.flick()                       # another trigger to change state
-    assert lightswitch.state == "off"         
-    lightswitch.flick()                       # flick() works both ways
-    assert lightswitch.state == "on"          
-    lightswitch.state = "off"
+    
+    lightswitch.turn_off()                     # turning the switch back off
+    assert lightswitch.state == "off"          # the switch is now "on"
+    
+    try:
+        lightswitch.turn_off()                 # cannot turn the switch off, it is already off (and there is no transition "off" to "off")
+    except TransitionError:
+        pass
     assert lightswitch.state == "off"
+    
+    lightswitch.flick()                       # another trigger to change state
+    assert lightswitch.state == "on"  
+           
+    lightswitch.flick()                       # flick() works both ways
+    assert lightswitch.state == "off"          
+    
 ```
+As you can see, this example already adds a lot of functionality to a class, through a very simple interface. However, this does not enable you to make something happen on a transition (apart from changing state).
+
+Notes:
+* Triggers, although they are called as methods, are not actually defined as methods on the class. See `__getattr__` in  `StatefulObject` for more info,
+* Instead of using a list of triggers `"triggers": ["turn_on", "flick"]`, you can use a single trigger `"triggers": "turn_on"` if you only need one trigger.
 
 
-## Adding Callbacks
+### Adding Callbacks
 
 ```python
+from statemachine.baseclass import StatefulObject
+from statemachine.machine import StateMachine, TransitionError
+
 def printer(obj):
     print "'%s' with state '%s'" % (str(obj), obj.state)
 
@@ -76,13 +137,15 @@ class LightSwitch(StatefulObject):
 
 ```
 
-## Callbacks with Arguments
+### Callbacks with Arguments
 
-## Conditional Transitions
+### Conditional Transitions
 
-## Wildcard & Listed Transitions
+### Wildcard & List Transitions
 
-## Switched Transitions
+### Switched Transitions
 
-## Nested States
+### Nested States
+
+### Adding a State History
 
