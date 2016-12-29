@@ -1,4 +1,4 @@
-from statemachine.bases import StateObject
+from statemachine.bases import StatefulObject
 from statemachine.machine import StateMachine, TransitionError
 
 __author__  = "lars van gemerden"
@@ -17,10 +17,9 @@ if __name__ == "__main__":
         return func
 
 
-    class LightSwitch(StateObject):
+    class LightSwitch(StatefulObject):
 
         machine = StateMachine(
-            name="matter machine",
             states=[
                 {"name": "on", "on_exit": printer("turn off"), "on_entry": printer("turn on")},
                 {"name": "off", "on_exit": printer("turn on"), "on_entry": printer("turn off")},
