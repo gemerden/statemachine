@@ -175,7 +175,7 @@ class ParentState(BaseState):
 
     transition_class = Transition  # class used for the internal representation of transitions
 
-    def __init__(self, states=(), transitions=(), initial=None,
+    def __init__(self, name="root state", states=(), transitions=(), initial=None,
                  before_any_exit=None, after_any_entry=None, context_manager=None, **kwargs):
         """
         Constructor of the state machine, used to define all properties of the machine.
@@ -202,7 +202,7 @@ class ParentState(BaseState):
         Note that all callback functions (including 'condition') have the signature:
             func(obj, **kwargs); triggers can pass the args and kwargs
         """
-        super(ParentState, self).__init__(**kwargs)
+        super(ParentState, self).__init__(name=name, **kwargs)
         self.sub_states = self._create_states(states)
         self.transitions = self._create_transitions(transitions)
         self.triggering = self._create_triggering(transitions)

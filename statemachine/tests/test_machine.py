@@ -4,7 +4,7 @@ import unittest
 from contextlib import contextmanager
 from copy import deepcopy
 
-from statemachine.bases import StateObject
+from statemachine.bases import StatefulObject
 from statemachine.machine import StateMachine, TransitionError, MachineError
 from statemachine.tools import Path
 
@@ -29,7 +29,7 @@ class SimplestStateMachineTest(unittest.TestCase):
 
         self.machine = StateMachine(**self.config)
 
-        class LightSwitch(StateObject):
+        class LightSwitch(StatefulObject):
             machine = self.machine
 
         self.light = LightSwitch()
@@ -95,7 +95,7 @@ class StateMachineTest(unittest.TestCase):
             after_any_entry="do_callback"
         )
 
-        class Matter(StateObject):
+        class Matter(StatefulObject):
             """object class fo which the state is managed"""
             machine = self.machine
 
@@ -133,7 +133,7 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(len(self.machine.triggering), 9)
 
     def test_initial(self):
-        class Dummy(StateObject):
+        class Dummy(StatefulObject):
             machine = self.machine
         dummy = Dummy()
         self.assertEqual(dummy.state, "gas")
@@ -278,7 +278,7 @@ class StateMachineTest(unittest.TestCase):
                 ]
             )
         with self.assertRaises(AttributeError):
-            class A(StateObject):
+            class A(StatefulObject):
                 machine = StateMachine(
                     name="matter machine",
                     initial="solid",
@@ -325,7 +325,7 @@ class WildcardStateMachineTest(unittest.TestCase):
             ],
         )
 
-        class Matter(StateObject):
+        class Matter(StatefulObject):
             """object class fo which the state is managed"""
             machine = self.machine
 
@@ -423,7 +423,7 @@ class WildcardStateMachineTest(unittest.TestCase):
             self.callback_counter += 1
 
         # create a machine based on phase changes of matter (solid, liquid, gas)
-        class Matter(StateObject):
+        class Matter(StatefulObject):
             """object class fo which the state is managed"""
             machine = StateMachine(
                 name="matter machine",
@@ -472,7 +472,7 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
             self.callback_counter += 1
 
         # create a machine based on phase changes of matter (solid, liquid, gas)
-        class Matter(StateObject):
+        class Matter(StatefulObject):
             """object class fo which the state is managed"""
             machine = StateMachine(
                 name="matter machine",
@@ -526,7 +526,7 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
 
     def setUp(self):
 
-        class LightSwitch(StateObject):
+        class LightSwitch(StatefulObject):
 
             machine = StateMachine(
                 name="matter machine",
@@ -655,7 +655,7 @@ class NestedStateMachineTest(unittest.TestCase):
             before_any_exit=before_any_exit
         )
 
-        class WashingMachine(StateObject):
+        class WashingMachine(StatefulObject):
             machine = StateMachine(**self.machine_config)
 
         self.object_class = WashingMachine
@@ -850,7 +850,7 @@ class SwitchedTransitionTest(unittest.TestCase):
             ],
         )
 
-        class WashingMachine(StateObject):
+        class WashingMachine(StatefulObject):
             machine = StateMachine(**deepcopy(self.machine_config))
 
         self.object_class = WashingMachine
@@ -914,7 +914,7 @@ class ContextManagerTest(unittest.TestCase):
 
         self.machine = StateMachine(**self.config)
 
-        class Matter(StateObject):
+        class Matter(StatefulObject):
             """object class fo which the state is managed"""
             machine = self.machine
 
@@ -981,7 +981,7 @@ class CallbackTest(unittest.TestCase):
             context_manager="context_manager"
         )
 
-        class Radio(StateObject):
+        class Radio(StatefulObject):
             """object class fo which the state is managed"""
             machine = self.machine
 
@@ -1035,7 +1035,7 @@ class TransitioningTest(unittest.TestCase):
             context_manager="context_manager"
         )
 
-        class Radio(StateObject):
+        class Radio(StatefulObject):
             """object class fo which the state is managed"""
             machine = self.machine
 

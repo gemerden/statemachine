@@ -5,7 +5,7 @@ from statemachine.tools import Path
 __author__  = "lars van gemerden"
 
 
-class StateObject(object):
+class StatefulObject(object):
     """
     Base class for objects with a state machine managed state. State can change by calling triggers as defined in
     transitions of the state machine or by setting the 'state' property.
@@ -25,7 +25,7 @@ class StateObject(object):
         :param initial: a ('.'separated) string indicating the initial (sub-)state of the object; if None, take
                 the initial state as configured in the machine (if configured, else an exception is raised).
         """
-        super(StateObject, self).__init__(*args, **kwargs)
+        super(StatefulObject, self).__init__(*args, **kwargs)
         self._state = self.machine.get_initial_path(initial)
 
     def __getattr__(self, trigger):
@@ -33,15 +33,11 @@ class StateObject(object):
         Allows calling the triggers to cause a transition; the triggers return a bool indicating whether the
             transition took place.
         :param trigger: name of the trigger
-        :return: partial function that allows the trigger to be called like object.some_trigger()
+        :return: partial function that allows the trigger to be called like object.some_trigger(*args, **kwargs)
         """
         if trigger in self.machine.triggers:
             return partial(self.machine.do_trigger, obj=self, trigger=trigger)
         raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, trigger))
-
-    @property
-    def state_path(self):
-        return self._state
 
     def get_state(self):
         """ returns the current state, as a '.' separated string """
@@ -52,5 +48,9 @@ class StateObject(object):
         self.machine.set_state(self, Path(state))
 
     state = property(get_state, set_state)  # turn state into a property
+
+    @property
+    def state_path(self):
+        return self._state
 
 
