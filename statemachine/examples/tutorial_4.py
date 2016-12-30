@@ -1,5 +1,5 @@
-from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine
+from statemachine.machine import StateMachine, StatefulObject
+
 
 class LightSwitch(StatefulObject):
 

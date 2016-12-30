@@ -27,8 +27,7 @@ The following classes are part of the public API of the statemachine.
 
 To start off we will show the simplest example of state machine. It defines states and transitions. 
 ```python
-from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine, TransitionError
+from statemachine.machine import StateMachine, StatefulObject, TransitionError
  
 class LightSwitch(StatefulObject):           # inherit from "StatefulObject" to get stateful behaviour        
 
@@ -74,8 +73,7 @@ Notes:
 
 The next step is to add triggers to the state machine. Triggers are methods on the stateful object that cause a transition to take place.  
 ```python
-from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine, TransitionError
+from statemachine.machine import StateMachine, StatefulObject, TransitionError
  
 class LightSwitch(StatefulObject):
 
@@ -134,8 +132,7 @@ If the value of the callback parameter is a string, the callback method will be 
 In this simple case the signature of the callback must be `func(obj)` with `obj` the stateful object (or `func(self)` in case of a method on the stateful object). Later we will look at passing parameters to the callback.
 
 ```python
-from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine
+from statemachine.machine import StateMachine, StatefulObject, TransitionError
 
 def entry_printer(obj):
     print "%s entering state '%s'" % (str(obj), obj.state)
@@ -195,8 +192,7 @@ The use fo calbacks can be enhanced by allowing triggers to pass arguments to th
 The arguments to the trigger method are passed to all the callback functions. The callbacks can ignore arguments by defining **kwargs in their signature.
 
 ```python
-from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine
+from statemachine.machine import StateMachine, StatefulObject, TransitionError
 
 class LightSwitch(StatefulObject):
 
@@ -239,8 +235,7 @@ As you can see it is possible to pass any arguments you require to any callback 
 Sometimes many transitions need to be defined with the same end-state and callbacks (e.g. introducing a dead state for unfinished customer orders after a timeout). This can be achieved in 2 simple ways, by either using a wildcard `"*"`, meaning all states or a list of states `["on", "off"].
 
 ```python
-from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine
+from statemachine.machine import StateMachine, StatefulObject
 
 class LightSwitch(StatefulObject):
 

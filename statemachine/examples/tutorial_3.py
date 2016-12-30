@@ -1,5 +1,5 @@
-from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine
+from statemachine.machine import StateMachine, StatefulObject
+
 
 def entry_printer(obj):
     print "%s entering state '%s'" % (str(obj), obj.state)

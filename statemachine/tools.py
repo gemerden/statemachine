@@ -43,6 +43,7 @@ def clean_dict(dct):
             del dct[k]
     return dct
 
+
 def replace_in_list(lst, old_item, new_items):
     """ replaces single old_item with a list new_item(s), retaining order of new_items """
     new_items = listify(new_items)
