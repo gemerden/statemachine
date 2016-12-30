@@ -4,7 +4,7 @@ import unittest
 from contextlib import contextmanager
 from copy import deepcopy
 
-from statemachine.bases import StatefulObject
+from statemachine.baseclass import StatefulObject
 from statemachine.machine import StateMachine, TransitionError, MachineError
 from statemachine.tools import Path
 

@@ -15,6 +15,7 @@ class LightSwitch(StatefulObject):
             {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "going"},
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
         ],
+        after_any_entry="success"
     )
 
     def exit_printer(self):
@@ -22,6 +23,9 @@ class LightSwitch(StatefulObject):
 
     def going(self):
         print str(self), "flicking"
+
+    def success(self):
+        print "it worked"
 
     def __str__(self):
         return "lightswitch"
@@ -36,3 +40,13 @@ if __name__ == "__main__":
 
     lightswitch.flick()                       # flick() works both ways
     assert lightswitch.state == "off"
+
+    #prints:
+
+    # lightswitch exiting state 'off'
+    # lightswitch flicking
+    # lightswitch entering state 'on'
+    # it worked
+    # lightswitch exiting state 'on'
+    # lightswitch entering state 'off'
+    # it worked
