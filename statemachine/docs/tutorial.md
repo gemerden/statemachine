@@ -2,15 +2,16 @@
 
 A statemachine is a relatively simple and intuitive model to add functionality to a class. It can be used in many cases where an object can be in a finite number of states, like:
 * a character in a game, where animations are shown depending on actions or transitions between actions (sitting, standing, standing-up),
-* a process an administrative record goes through, e.g. a customer order (ordering, ordered, payed, shipped, delivered),
+* a process for administrative records, e.g. customer orders (ordering, ordered, payed, shipped, delivered),
 * a button in a user interface that can have multiple states, like a simple checkbox (checked, unchecked, disabled)
 
 On entering, exiting or transitioning between states, actions can be executed through callabacks, that are specific for that state or transition, like showing an animation, committing to a database, sending a message or updating a user interface.
 
-#### Some Notes
+#### Some Early Tips
 
 * State machines can be visualized in a flow chart. This makes it relatively easy to develop in groups, discuss with non-developers and reach consensus about domain and implementation. 
-* The sections in this tutorial are ordered by complexity of the functionality. Most state machines do not need nested states (but they are definitely handy when needed). The first 2 sections already allow you to implement a functional state machine.
+* The sections in this tutorial are ordered by complexity of the functionality. Most state machines do not need nested states (but they are definitely handy when needed). The first 2 sections already allow you to implement a functional state machine,
+* All code examples in this tutorial should be runnable (please let me know if they are not).
 
 ### Classes
 
@@ -24,7 +25,7 @@ The following classes are part of the public API of the statemachine.
 
 ### The Simplest StateMachine
 
-To start off we will show the simplest example of  state machine. It defines states and transitions. 
+To start off we will show the simplest example of state machine. It defines states and transitions. 
 ```python
 from statemachine.baseclass import StatefulObject
 from statemachine.machine import StateMachine, TransitionError
@@ -78,7 +79,7 @@ class LightSwitch(StatefulObject):
             {"name": "off"},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},  # adds tow triggers for thsi transition
+            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},  # adds tow triggers for this transition
             {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "flick"]},
         ],
     )
@@ -90,14 +91,14 @@ if __name__ == "__main__":
     lightswitch.turn_on()                     # triggering "turn_on" turns the switch on
     assert lightswitch.state == "on"          # the switch is now "on"
     
-    lightswitch.turn_off()                     # turning the switch back off
-    assert lightswitch.state == "off"          # the switch is now "on"
+    lightswitch.turn_off()                    # turning the switch back off
+    assert lightswitch.state == "off"         # the switch is now "off" again
     
     try:
-        lightswitch.turn_off()                 # cannot turn the switch off, it is already off (and there is no transition "off" to "off")
+        lightswitch.turn_off()                # cannot turn the switch off, it is already off (and there is no transition "off" to "off")
     except TransitionError:
         pass
-    assert lightswitch.state == "off"
+    assert lightswitch.state == "off"         # the object is still in a legal state!   
     
     lightswitch.flick()                       # another trigger to change state
     assert lightswitch.state == "on"  
@@ -115,29 +116,49 @@ Notes:
 
 ### Adding Callbacks
 
+
+
 ```python
 from statemachine.baseclass import StatefulObject
-from statemachine.machine import StateMachine, TransitionError
+from statemachine.machine import StateMachine
 
-def printer(obj):
-    print "'%s' with state '%s'" % (str(obj), obj.state)
+def entry_printer(obj):
+    print "%s entering state '%s'" % (str(obj), obj.state)
 
 class LightSwitch(StatefulObject):
 
     machine = StateMachine(
         states=[
-            {"name": "on", "on_exit": printer, "on_entry": printer},
-            {"name": "off", "on_exit": printer, "on_entry": printer},
+            {"name": "on", "on_exit": "exit_printer", "on_entry": entry_printer},
+            {"name": "off", "on_exit": "exit_printer", "on_entry": entry_printer},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "switch"]},
-            {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "switch"]},
+            {"old_state": "off", "new_state": "on", "triggers": "flick"},
+            {"old_state": "on", "new_state": "off", "triggers": "flick"},
         ],
     )
+    
+    def exit_printer(self):
+        print "%s exiting state '%s'" % (str(self), self.state)
+        
+    def __str__(self):
+        return "lightswitch"
 
+if __name__ == "__main__":
+
+    lightswitch = LightSwitch(initial="off")  # setting the initial state does not call any callback functions
+    assert lightswitch.state == "off"         # the lightswitch is now in the "off" state
+    
+    lightswitch.flick()                       # another trigger to change state
+    assert lightswitch.state == "on"  
+           
+    lightswitch.flick()                       # flick() works both ways
+    assert lightswitch.state == "off"          
 ```
 
 ### Callbacks with Arguments
+
+### More on Callbacks
 
 ### Conditional Transitions
 
@@ -146,6 +167,8 @@ class LightSwitch(StatefulObject):
 ### Switched Transitions
 
 ### Nested States
+
+### Adding a Context Manager
 
 ### Adding a State History
 
