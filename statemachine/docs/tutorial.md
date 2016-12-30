@@ -66,7 +66,7 @@ Although this example adds states and transitions to the LightSwitch object, it 
 Notes:
 * The state machine itself is stateless; it does not keep any information about the stateful objects,
 * You can also define the statemachine outside the class and add it in the class definition as class attribute or in the constructor as normal attribute (it is called internally through `self.machine`),
-* Another option is to define the arguments to the state machine constructor as a separate dictionary and use it to contruct the state machine `StateMachine(**state_machine_config)`. The configuration can be persisted or sent over a network (This requires callbacks to be defined as strings).
+* Another option is to define the arguments to the state machine constructor as a separate dictionary and use it to contruct the state machine `StateMachine(**state_machine_config)`. This configuration can be serialized and persisted or sent over a network (This requires callbacks to be configured as strings).
 * By adding a statemachine to a stateful object in its constructor (instead of using a class attribute), you could use different state machines for objects of the same class.
 
 ### Basics: Adding triggers
@@ -272,8 +272,16 @@ if __name__ == "__main__":
     # entering state 'off'
 
 ```
+Note that only listed states and wildcards can be used for the "from" state (`old_state`) of the transition, since having multiple "to" states would require a condition to determine the state to go to.
 
 ---
+
+_At this point you have all the tools to create a functional state machine that is usable in many cases, including:
+* defining states and state transitions,
+* defining triggers that cause state transitions,
+* defining callbacks on states and state transitions and when these callbacks will be called,
+* passing parameters to the callbacks
+* wildcard and listed states to define multiple transitions at one._
 
 ---
 ### Advanced: Conditional Transitions
