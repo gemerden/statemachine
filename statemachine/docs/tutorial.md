@@ -79,7 +79,7 @@ class LightSwitch(StatefulObject):
             {"name": "off"},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},  # adds tow triggers for this transition
+            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},  # adds 2 triggers for this transition
             {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "flick"]},
         ],
     )
@@ -116,7 +116,14 @@ Notes:
 
 ### Adding Callbacks
 
+To really start using the possibilities of a state machine, callback functions and methods can be added to states and transitions. The main parameters for this are:
+* `on_exit`: these functions or methods will be called when the stateful object exits a specific state,
+* `on_entry`: functions or methods to be called when the object enters a specific specific state,
+* `on_transition`: functions or methods to be called on a specific transition,
 
+If the value of the callback parameter is a string, the callback method will be searched in the methods of the stateful class, otherwise the parameter must be a function or method defined elsewhere.
+
+In this simple case the signature of the callback must be `func(obj)` with `obj` the stateful object (or `func(self)` in case of a method on the stateful object). Later we will look at passing parameters to the callback.
 
 ```python
 from statemachine.baseclass import StatefulObject
@@ -133,28 +140,36 @@ class LightSwitch(StatefulObject):
             {"name": "off", "on_exit": "exit_printer", "on_entry": entry_printer},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": "flick"},
+            {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "going"},
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
         ],
     )
-    
+
     def exit_printer(self):
         print "%s exiting state '%s'" % (str(self), self.state)
-        
+
+    def going(self):
+        print str(self), "flicking"
+
     def __str__(self):
         return "lightswitch"
 
 if __name__ == "__main__":
 
-    lightswitch = LightSwitch(initial="off")  # setting the initial state does not call any callback functions
-    assert lightswitch.state == "off"         # the lightswitch is now in the "off" state
-    
-    lightswitch.flick()                       # another trigger to change state
-    assert lightswitch.state == "on"  
-           
+    lightswitch = LightSwitch(initial="off")  # setting the initial state does not call any callback functions    
+    lightswitch.flick()                       # will call obj.exit_printer(), obj.going() and entry_printer(obj) respectively
     lightswitch.flick()                       # flick() works both ways
-    assert lightswitch.state == "off"          
+             
+    # this will print:
+    
+    # lightswitch exiting state 'off'
+    # lightswitch flicking
+    # lightswitch entering state 'on'
+    # lightswitch exiting state 'on'
+    # lightswitch entering state 'off'
+
 ```
+Note that again the parameters (`on_exit`, etc.) can be given as a list or a single argument and in case of a list, will be called in order.
 
 ### Callbacks with Arguments
 

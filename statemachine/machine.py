@@ -420,8 +420,9 @@ class ParentState(BaseState):
 
     def set_state(self, obj, state_path):
         """ Executes the transition when called by setting the state: obj.state = 'some_state' """
-        if not self._get_transition(obj.state_path, state_path).execute(obj):
-            raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state_path))
+        if obj.state_path != state_path:
+            if not self._get_transition(obj.state_path, state_path).execute(obj):
+                raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state_path))
 
 
 class State(ChildState, ParentState):
