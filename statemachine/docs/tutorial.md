@@ -276,12 +276,12 @@ Note that only listed states and wildcards can be used for the "from" state (`ol
 
 ---
 
-_At this point you have all the tools to create a functional state machine that is usable in many cases, including:
+At this point you have all the tools to create a functional state machine that is usable in many cases, including:
 * defining states and state transitions,
 * defining triggers that cause state transitions,
 * defining callbacks on states and state transitions and when these callbacks will be called,
 * passing parameters to the callbacks
-* wildcard and listed states to define multiple transitions at one._
+* wildcard and listed states to define multiple transitions at one.
 
 ---
 ### Advanced: Conditional Transitions
