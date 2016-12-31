@@ -56,7 +56,7 @@ if __name__ == "__main__":
     assert lightswitch.state == "off"
     
     try:
-        lightswitch.state = "nix"             # this will not raise an exception; there is no state "nix"
+        lightswitch.state = "nix"             # this will raise an exception; there is no state "nix"
     except TransitionError:
         pass
     assert lightswitch.state == "off"
@@ -276,12 +276,14 @@ Note that only listed states and wildcards can be used for the "from" state (`ol
 
 ---
 
-_At this point you have all the tools to create a functional state machine that is usable in many cases, including:_
+_At this point you should have all the tools to create a functional state machine, including:_
 * _defining states and state transitions,_
 * _defining triggers that cause state transitions,_
-* _defining callbacks on states and state transitions and when these callbacks will be called,_
-* _passing parameters to the callbacks_
-* _wildcard and listed states to define multiple transitions at one._
+* _defining callbacks on states and state transitions,_
+* _passing parameters to the callback functions_
+* _using wildcard and listed states to define multiple transitions at once._
+
+_With these elements a fully functional state machine can be implemented. As a state machine grows in complexity or needs to meet additional requirements, the features in the sections below can become more useful._
 
 ---
 ### Advanced: Conditional Transitions
