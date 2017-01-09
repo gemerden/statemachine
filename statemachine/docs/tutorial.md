@@ -61,18 +61,21 @@ if __name__ == "__main__":
         pass
     assert lightswitch.state == "off"
 ```
-Although this example adds states and transitions to the LightSwitch object, it does not do much more then protect the object against non-existing states and transitions.
-
 Notes:
 * The state machine itself is stateless; it does not keep any information about the stateful objects,
+* If no `initial` argument to the constructor is given, the first state in the state machine is taken as initial state,
 * You can also define the statemachine outside the class and add it in the class definition as class attribute or in the constructor as normal attribute (it is called internally through `self.machine`),
 * Another option is to define the arguments to the state machine constructor as a separate dictionary and use it to contruct the state machine `StateMachine(**state_machine_config)`. This configuration can be serialized and persisted or sent over a network (This requires callbacks to be configured as strings).
 * By adding a statemachine to a stateful object in its constructor (instead of using a class attribute), you could use different state machines for objects of the same class.
+
+Although this example adds states and transitions to the LightSwitch object, it does not do much more then protect the object against non-existing states and transitions.
 
 ### Basics: Adding triggers
 
 The next step is to add triggers to the state machine. Triggers are methods on the stateful object that cause a transition to take place.  
 ```python
+
+
 from statemachine.machine import StateMachine, StatefulObject, TransitionError
  
 class LightSwitch(StatefulObject):
@@ -132,7 +135,8 @@ If the value of the callback parameter is a string, the callback method will be 
 In this simple case the signature of the callback must be `func(obj)` with `obj` the stateful object (or `func(self)` in case of a method on the stateful object). Later we will look at passing parameters to the callback.
 
 ```python
-from statemachine.machine import StateMachine, StatefulObject, TransitionError
+from statemachine.machine import StateMachine, StatefulObject
+
 
 def entry_printer(obj):
     print "%s entering state '%s'" % (str(obj), obj.state)
@@ -145,7 +149,7 @@ class LightSwitch(StatefulObject):
             {"name": "off", "on_exit": "exit_printer", "on_entry": entry_printer},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "going"},
+            {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "transfer"},
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
         ],
         after_any_entry="success"
@@ -154,7 +158,7 @@ class LightSwitch(StatefulObject):
     def exit_printer(self):
         print "%s exiting state '%s'" % (str(self), self.state)
 
-    def going(self):
+    def transfer(self):
         print str(self), "flicking"
 
     def success(self):
@@ -166,16 +170,11 @@ class LightSwitch(StatefulObject):
 if __name__ == "__main__":
 
     lightswitch = LightSwitch(initial="off")  # setting the initial state does not call any callback functions
-    assert lightswitch.state == "off"         # the lightswitch is now in the "off" state
-
     lightswitch.flick()                       # another trigger to change state
-    assert lightswitch.state == "on"
-
     lightswitch.flick()                       # flick() works both ways
-    assert lightswitch.state == "off"
-    
+
     #prints:
-    
+
     # lightswitch exiting state 'off'
     # lightswitch flicking
     # lightswitch entering state 'on'
@@ -230,7 +229,48 @@ if __name__ == "__main__":
 ```
 As you can see it is possible to pass any arguments you require to any callback functions. Note that default arguments (`name="who"`) can be used in the callback functions. 
  
-### Basics: Defining Multiple Transitions
+### Basic: Conditional Transitions
+
+Sometimes you want a transition to take place only under specific circumstances. In that case the state machine allows you to set a condition on a transition by setting a parameter `condition`. This condition function must return a value evaluating to `True` if the condition is to take place, and to `False` otherwise.
+
+The implementation has the same features as those for callbacks (it is a callback), including using strings for methods on the stateful object and for passing parameters. It allows only for a single function or method.
+```python
+from statemachine.machine import StateMachine, StatefulObject
+
+
+class LightSwitch(StatefulObject):
+    machine = StateMachine(
+        states=[
+            {"name": "on"},
+            {"name": "off"},
+        ],
+        transitions=[
+            {"old_state": "off", "new_state": "on", "triggers": "flick", "condition": "is_nighttime"},  # switch only turns on at night
+            {"old_state": "on", "new_state": "off", "triggers": "flick"},
+        ],
+    )
+
+    def __init__(self, *args, **kwargs):
+        super(LightSwitch, self).__init__(*args, **kwargs)
+        self.daytime = False
+
+    def is_nighttime(self):
+        return not self.daytime
+
+
+if __name__ == "__main__":
+    switch = LightSwitch(initial="off") 
+    assert switch.is_nighttime()
+    switch.flick()
+    assert switch.state == "on"
+    switch.flick()
+    assert switch.state == "off"
+    switch.daytime = True
+    switch.flick()
+    assert switch.state == "off"
+```
+
+### Extra: Defining Multiple Transitions
 
 Sometimes many transitions need to be defined with the same end-state and callbacks (e.g. introducing a dead state for unfinished customer orders after a timeout). This can be achieved in 2 simple ways, by either using a wildcard `"*"`, meaning all states or a list of states `["on", "off"].
 
@@ -249,7 +289,7 @@ class LightSwitch(StatefulObject):
             {"old_state": "off", "new_state": "on", "triggers": "flick"},
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
             {"old_state": "*", "new_state": "broken", "triggers": "smash"},
-            # or: {"old_state": ["on", "off"], "new_state": "broken", "triggers": "smash"},
+            # or: {"old_state": ["on", "off", "broken"], "new_state": "broken", "triggers": "smash"},
             {"old_state": "broken", "new_state": "off", "triggers": "fix"},
         ],
     )
@@ -276,21 +316,122 @@ Note that only listed states and wildcards can be used for the "from" state (`ol
 
 ---
 
-_At this point you should have all the tools to create a functional state machine, including:_
+_At this point you have all the tools to create a functional state machine, including:_
 * _defining states and state transitions,_
 * _defining triggers that cause state transitions,_
 * _defining callbacks on states and state transitions,_
-* _passing parameters to the callback functions_
+* _passing parameters to the callback functions,_
+* _setting a condition on a transition,_
 * _using wildcard and listed states to define multiple transitions at once._
 
 _With these elements a fully functional state machine can be implemented. As a state machine grows in complexity or needs to meet additional requirements, the features in the sections below can become more useful._
 
 ---
-### Advanced: Conditional Transitions
-
 ### Advanced: Switched Transitions
 
+In some cases you might want to transition to different states depending on some condition. This requires a transition with multiple end-states `new_states` and a condition for each end-state.
+
+The example below shows the same lightswitch as we used before, but now, after it breaks and is fixed it returns to the same state is was before breaking.
+
+```python
+from statemachine.machine import StateMachine, StatefulObject
+
+class LightSwitch(StatefulObject):
+
+    machine = StateMachine(
+        name="matter machine",
+        states=[
+            {"name": "on"},
+            {"name": "off"},
+            {"name": "broken"}
+        ],
+        transitions=[
+            {"old_state": "off", "new_state": "on", "triggers": "flick"},
+            {"old_state": "on", "new_state": "off", "triggers": "flick"},
+            {"old_state": ["on", "off"], "new_state": "broken", "triggers": "smash"},
+            {"old_state": "broken", "triggers": "fix", "new_states": [{"name": "on", "condition": "was_on"},
+                                                                      {"name": "off"}]},
+        ],
+        before_any_exit="store_state"  # this callback method is used to store the old state before transitioning
+    )
+
+    def __init__(self, initial=None):
+        super(LightSwitch, self).__init__(initial=initial)
+        self.old_state = None
+
+    def store_state(self):
+        self.old_state = self.state
+
+    def was_on(self):
+        return self.old_state == "on"
+
+if __name__ == "__main__":
+    switch = LightSwitch(initial="off")
+    switch.smash()
+    switch.fix()
+    assert switch.state == "off"
+
+    switch = LightSwitch(initial="on")
+    switch.smash()
+    switch.fix()
+    assert switch.state == "on"
+```
+
+Notes:
+* The `new_states` must be given in the order you want the conditions to be checked. The first condition that returns a `True` value will let the corresponding transition to take place.
+* The last of the `new_states` in the list does not need a `condition` and wil be the default if none of the earlier conditions pass.
+* The transition as well as each of the `new_states` parameters can have the `on_transfer` callback; the latter will override the first if the corresponding condition passes.
+* If none of the conditions pass, the state of the object does not change,
+
+Explanation: for each state in `new_states` the state machine will create a normal conditional transition. A switched transition is shorthand for a number of conditional transitions.
+ 
 ### Advanced: Nested States
+
+When the number of states an object can be in becomes larger, often it is helpful to use nested states. Each state here can be nested, meaning each state can have substates. For substates we use dot-notation; in the example below e.g. "normal.off". The parameters for nested states are the same as for normal states, so each state can have a parameter "states", etc. States can be nested to any level, although more then 3 levels might be excessive.
+ 
+A stateful object always has a complete state, e.g. it cannot be in state "A.B" if "A.B" has substates.
+ 
+Transitions can be defined at any level. So for example a transition from state "A.B.C" to state "E.F" can be defined. A stateful object always has a complete state, e.g. it cannot be in state "A.B" if "A.B" has substates.
+
+Before we go into more detail we will describe a very simple example where the lightswitch has 2 main states "normal" and "broken", The "normal" state has 2 substates "on" and "off". 
+
+```python
+from statemachine.machine import StateMachine, StatefulObject
+
+
+class LightSwitch(StatefulObject):
+
+    machine = StateMachine(
+        states=[
+            {
+                "name": "normal",
+                "states": [
+                    {"name": "off"},
+                    {"name": "on"},
+                ],
+                "transitions": [
+                    {"old_state": "off", "new_state": "on", "triggers": "flick"},
+                    {"old_state": "on", "new_state": "off", "triggers": "flick"},
+                ]
+             },
+            {"name": "broken"}
+        ],
+        transitions=[
+            {"old_state": "normal", "new_state": "broken", "triggers": "smash"},
+            {"old_state": "broken", "new_state": "normal", "triggers": "fix"},
+        ],
+    )
+
+if __name__ == "__main__":
+
+    lightswitch = LightSwitch()
+    lightswitch.flick()
+    lightswitch.smash()
+    lightswitch.fix()
+    lightswitch.flick()
+
+    assert lightswitch.state == "normal.on"
+```
 
 ### Advanced: Adding a Context Manager
 

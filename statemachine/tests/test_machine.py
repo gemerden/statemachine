@@ -674,7 +674,7 @@ class NestedStateMachineTest(unittest.TestCase):
                                ("transitions.3.triggers", ["just_dry_already"]),
                                ("transitions.3.new_state", "on.drying"),
                                ("transitions.3.condition", "NONE"),
-                               ("states.0.states.0.on_exit", "test_machine.on_exit"),
+                               ("states.0.states.0.on_exit", "statemachine.tests.test_machine.on_exit"),
                                ("states.0.transitions.0.new_state", "broken")]:
             self.assertEqual(Path(path).get_in(config, "NONE"), expected)
 
@@ -796,11 +796,6 @@ class NestedStateMachineTest(unittest.TestCase):
 
         with self.assertRaises(TransitionError):
             washer.state = "on"
-        self.assertEqual(washer.state, "off.broken")
-        self.assert_counters(1, 1, 1)
-
-        with self.assertRaises(TransitionError):
-            washer.state = "off.broken"
         self.assertEqual(washer.state, "off.broken")
         self.assert_counters(1, 1, 1)
 

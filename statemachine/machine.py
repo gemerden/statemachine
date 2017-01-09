@@ -202,17 +202,23 @@ class ParentState(BaseState):
         self.sub_states = self._create_states(states)
         self.transitions = self._create_transitions(transitions)
         self.triggering = self._create_triggering(transitions)
-        self.initial = self.sub_states[initial] if initial else None
         self.before_any_exit = callbackify(before_any_exit) if before_any_exit else None
         self.after_any_entry = callbackify(after_any_entry) if after_any_entry else None
         self.context_manager = self._get_context_manager(context_manager)
+        self.initial = self._get_initial(initial)
         self.triggers = self._get_triggers()
+
+    def _get_initial(self, initial):
+        if initial:
+            return self.sub_states[initial]
+        if len(self.sub_states):
+            return self.sub_states[self.sub_states.keys()[0]]
 
     def get_initial_path(self, initial):
         """ returns the path to the actual initial state the object will be in """
-        initial = Path(initial or ())
+        path = Path(initial or ())
         try:
-            return [s for s in initial.get_in(self).iter_initial(include_self=True)][-1].path
+            return [s for s in path.get_in(self).iter_initial(include_self=True)][-1].path
         except KeyError:
             raise ValueError("no initial state is configured in state managed object or state machine")
 
@@ -228,7 +234,7 @@ class ParentState(BaseState):
         state_dict = OrderedDict()
         for state in states:
             if state["name"] in state_dict:
-                raise MachineError("two sub_states with the same name in state machine")
+                raise MachineError("two states with the same name in state machine")
             state_dict[state["name"]] = self.__class__(super_state=self, **state)
         return state_dict
 
@@ -291,7 +297,9 @@ class ParentState(BaseState):
                                                (trans["old_state"], new_state["name"]))
                         new_trans = trans.copy()
                         del new_trans["new_states"]
-                        new_trans.update(new_state=new_state["name"], condition=new_state.get("condition", ()))
+                        new_trans.update(new_state=new_state["name"],
+                                         on_transfer=new_state.get("on_transfer", ()),
+                                         condition=new_state.get("condition", ()))
                         new_transes.append(new_trans)
                     replace_in_list(transitions, trans, new_transes)
                 except KeyError as e:
