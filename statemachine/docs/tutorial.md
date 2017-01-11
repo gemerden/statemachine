@@ -1,5 +1,7 @@
 ## Statemachine Tutorial
 
+_This tutorial covers basic and advanced use of the `statemachine` module._
+
 A statemachine is a relatively simple and intuitive model to add functionality to a class. It can be used in many cases where an object can be in a finite number of states, like:
 * a character in a game, where animations are shown depending on actions or transitions between actions (sitting, standing, standing-up),
 * a process for administrative records, e.g. customer orders (ordering, ordered, payed, shipped, delivered),
@@ -66,7 +68,8 @@ Notes:
 * If no `initial` argument to the constructor is given, the first state in the state machine is taken as initial state,
 * You can also define the statemachine outside the class and add it in the class definition as class attribute or in the constructor as normal attribute (it is called internally through `self.machine`),
 * Another option is to define the arguments to the state machine constructor as a separate dictionary and use it to contruct the state machine `StateMachine(**state_machine_config)`. This configuration can be serialized and persisted or sent over a network (This requires callbacks to be configured as strings).
-* By adding a statemachine to a stateful object in its constructor (instead of using a class attribute), you could use different state machines for objects of the same class.
+* By adding a statemachine to a stateful object in its constructor (instead of using a class attribute), you could use different state machines for objects of the same class,
+* If any `TransitionError` is raised, the state of the object is returned to the `old_state`.
 
 Although this example adds states and transitions to the LightSwitch object, it does not do much more then protect the object against non-existing states and transitions.
 
@@ -191,7 +194,7 @@ The use fo calbacks can be enhanced by allowing triggers to pass arguments to th
 The arguments to the trigger method are passed to all the callback functions. The callbacks can ignore arguments by defining **kwargs in their signature.
 
 ```python
-from statemachine.machine import StateMachine, StatefulObject, TransitionError
+from statemachine.machine import StateMachine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
@@ -270,7 +273,45 @@ if __name__ == "__main__":
     assert switch.state == "off"
 ```
 
-### Extra: Defining Multiple Transitions
+### Example: Adding a State History
+
+Often it is practical to let a stateful object store a history of all states visited in the past. This can easily be done with the `after_any_entry` callback. As an example we show you how:
+
+```python
+from statemachine.machine import StateMachine, StatefulObject
+
+class LightSwitch(StatefulObject):
+
+    machine = StateMachine(
+        states=[
+            {"name": "on"},
+            {"name": "off"},
+        ],
+        transitions=[
+            {"old_state": "off", "new_state": "on", "triggers": "flick"},
+            {"old_state": "on", "new_state": "off", "triggers": "flick"},
+        ],
+        after_any_entry="store_in_history"
+    )
+
+    def __init__(self):
+        super(LightSwitch, self).__init__()
+        self.history = [self.state]  # store the initial state
+
+    def store_in_history(self, **kwargs):
+        self.history.append(self.state)
+
+if __name__ == "__main__":
+
+    lightswitch = LightSwitch()
+    lightswitch.flick()
+    lightswitch.flick()
+    lightswitch.flick()
+    assert lightswitch.history == ["on", "off", "on", "off"]
+
+```
+
+### Basic: Defining Multiple Transitions
 
 Sometimes many transitions need to be defined with the same end-state and callbacks (e.g. introducing a dead state for unfinished customer orders after a timeout). This can be achieved in 2 simple ways, by either using a wildcard `"*"`, meaning all states or a list of states `["on", "off"].
 
@@ -324,7 +365,7 @@ _At this point you have all the tools to create a functional state machine, incl
 * _setting a condition on a transition,_
 * _using wildcard and listed states to define multiple transitions at once._
 
-_With these elements a fully functional state machine can be implemented. As a state machine grows in complexity or needs to meet additional requirements, the features in the sections below can become more useful._
+_With these elements a fully functional state machine can be implemented. As a state machine grows in complexity or needs to meet additional requirements, the features in the advanced tutorial will become more useful._
 
 ---
 ### Advanced: Switched Transitions
@@ -432,10 +473,58 @@ if __name__ == "__main__":
 
     assert lightswitch.state == "normal.on"
 ```
+Notes:
+* During nested transitions, `on_exit` callbacks are called for all nested states that are exited, starting with the most nested state (e.g. if a lightswitch in state "normal.on" is "broken", first the `on_exit` of the "on" state is called and then the `on_exit` of the "normal" state),
+* Similarly during nested transitions, `on_entry` callbacks are called for all nested states that are exited, starting with the least nested state,
+* The transition from "normal" to "broken" does not use a complete `old_state` like "normal.off". This transition configures the transition from _any_ sub-state of "normal" to the "broken" state,  
+* The transition from "broken" to "normal" does not use complete `new_state` like "normal.on". This transition configures the transition from the "broken" state to the _initial_ (default: first in list) sub-state of the "normal" state, 
+* In both case complete states could be used as well to further detail transition configuration, e.g `{"old_state": "broken", "new_state": "normal.off", "triggers": "fix"}`,
+* Transitions use relative states, so starting with substates of the state they are defined in,
+* Transitions must always be defined at the most nested level, e.g. it raises a MachineError to define a transition `{"old_state": "normal.off", "new_state": "normal.on"}`.
 
 ### Advanced: Adding a Context Manager
 
-### Extra: Adding a State History
+In some cases, a context manager (`with ... as ...:`) is useful to e.g. only commit to database after a transition is completely succesful. For that purpose an extra callback can be configured in the state machine. The variable returned is passed as keyword argument `context` to all the other callbacks `on_exit`, `on_entry`, etc. Each callback function can choose to ignore the argument (pass it in `**kwargs`).
 
-### Extra: Multiple State Machines
+```python
+from contextlib import contextmanager
+from statemachine.machine import StateMachine, StatefulObject
+
+class LightSwitch(StatefulObject):
+
+    machine = StateMachine(
+        states=[
+            {"name": "on"},
+            {"name": "off"},
+        ],
+        transitions=[
+            {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "assert_managed"},
+            {"old_state": "on", "new_state": "off", "triggers": "flick", "on_transfer": "assert_managed"},
+        ],
+        context_manager="do_context"
+    )
+
+    def __init__(self):
+        super(LightSwitch, self).__init__()
+        self.managed = False
+
+    @contextmanager
+    def do_context(self, **kwargs):
+        self.managed = True
+        yield
+        self.managed = False
+
+    def assert_managed(self, **kwargs):  # checks if the `managed` attribute is set to True during transition
+        assert self.managed
+
+
+if __name__ == "__main__":
+
+    lightswitch = LightSwitch()
+    assert not lightswitch.managed
+    lightswitch.flick()
+    assert not lightswitch.managed
+```
+
+### Example: Multiple State Machines
 

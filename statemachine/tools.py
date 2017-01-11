@@ -1,4 +1,4 @@
-from collections import Sequence, Mapping
+from collections import Sequence, Mapping, MutableMapping
 
 __author__ = "lars van gemerden"
 
@@ -34,14 +34,6 @@ def callbackify(callbacks):
 def nameify(f, cast=lambda v: v):
     """ tries to give a name to an item"""
     return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
-
-
-def clean_dict(dct):
-    """ removes items evaluating to False from dictionary """
-    for k, v in dct.copy().iteritems():
-        if not v:
-            del dct[k]
-    return dct
 
 
 def replace_in_list(lst, old_item, new_items):
@@ -102,7 +94,7 @@ class Path(tuple):
         """
         Applies func to all elements without sub elements and replaces the original with the return value of func
         """
-        if isinstance(map, Mapping):
+        if isinstance(map, MutableMapping):
             for k, m in map.iteritems():
                 map[k] = cls.apply_all(m, func)
             return map
