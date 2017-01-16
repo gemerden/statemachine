@@ -1,6 +1,9 @@
 ## Statemachine Tutorial
 
-_This tutorial covers basic and advanced use of the `statemachine` module._
+---
+_This tutorial covers basic and advanced use of the `statemachine` module. All code examples can be found in the "\examples" folder._
+
+---
 
 A statemachine is a relatively simple and intuitive model to add functionality to a class. It can be used in many cases where an object can be in a finite number of states, like:
 * a character in a game, where animations are shown depending on actions or transitions between actions (sitting, standing, standing-up),
@@ -20,14 +23,14 @@ On entering, exiting or transitioning between states, actions can be executed th
 The following classes are part of the public API of the statemachine.
 
 * `StateMachine`: the class where are all functionality of the state machine is defined,
-* `StatefulObject(object)`: the class that can be used to make (almost) any python sub-class stateful,
+* `StatefulObject(object)`: the class that can be subclassed to make (almost) any python object stateful,
 * exception classes:
     * `MachineError(Exception)`: raised in case of a misconfiguration of the state machine,
-    * `TransitionError(Exception)`: raised when a non-existing transition is attempted,
+    * `TransitionError(Exception)`: raised when a state transition fails,
 
 ### Basics: The Simplest StateMachine
 
-To start off we will show the simplest example of state machine. It defines states and transitions. 
+To get right to it we will show the simplest example of state machine. It defines states and transitions. 
 ```python
 from statemachine.machine import StateMachine, StatefulObject, TransitionError
  
@@ -191,7 +194,7 @@ Note that again the parameters (`on_exit`, etc.) can be given as a list or a sin
 ### Basics: Callbacks with Arguments
 The use fo calbacks can be enhanced by allowing triggers to pass arguments to the callback functions. To avoid confusion about the arguments only keyword arguments are allowed. 
  
-The arguments to the trigger method are passed to all the callback functions. The callbacks can ignore arguments by defining **kwargs in their signature.
+The arguments to the trigger method are passed to all the callback functions. The callbacks can ignore arguments by defining `*args` and/or `**kwargs` in their signature.
 
 ```python
 from statemachine.machine import StateMachine, StatefulObject
@@ -230,13 +233,17 @@ if __name__ == "__main__":
     # who is using the switch
     # switch turned off at 2000-01-01 00:00:00
 ```
-As you can see it is possible to pass any arguments you require to any callback functions. Note that default arguments (`name="who"`) can be used in the callback functions. 
+As you can see it is possible to pass any arguments you require to any callback functions. 
+
+Notes:
+* Default arguments (`name="who"`) can be used in the callback functions,
+* It is often practical to always give callback functions a `**kwargs` argument, to simplify adding callbacks with arguments later. 
  
 ### Basic: Conditional Transitions
 
 Sometimes you want a transition to take place only under specific circumstances. In that case the state machine allows you to set a condition on a transition by setting a parameter `condition`. This condition function must return a value evaluating to `True` if the condition is to take place, and to `False` otherwise.
 
-The implementation has the same features as those for callbacks (it is a callback), including using strings for methods on the stateful object and for passing parameters. It allows only for a single function or method.
+The implementation has the same features as those for callbacks (it is a callback), including using strings for methods on the stateful object and for passing parameters. If multiple callbacks are given, all callbacks need to return a `True` value for the transition to pass.
 ```python
 from statemachine.machine import StateMachine, StatefulObject
 
@@ -310,11 +317,70 @@ if __name__ == "__main__":
     assert lightswitch.history == ["on", "off", "on", "off"]
 
 ```
+---
 
-### Basic: Defining Multiple Transitions
+_At this point you have all the tools to create a functional state machine, including:_
+* _defining states and state transitions,_
+* _defining triggers that cause state transitions,_
+* _defining callbacks on states and state transitions,_
+* _passing parameters to the callback functions,_
+* _setting a condition on a transition,_
+
+_With these elements a fully functional state machine can be implemented. As a state machine grows in complexity or needs to meet additional requirements, the features in the advanced tutorial will become more useful._
+
+---
+
+### Advanced: Overriding Triggers
+
+It is possible to directly trigger a transition on the state machine itself, possibly to reduce the complexity of your stateful object API. 
+
+In this case we implement the `flick` trigger method ourselves, to be able to update the stateful object without introducing a new method name (`flick` is already defined in the state machine, it now first updates the object):
+
+```python
+from statemachine.machine import StateMachine, StatefulObject
+
+class LightSwitch(StatefulObject):
+    machine = StateMachine(
+        states=[
+            {"name": "on"},
+            {"name": "off"},
+        ],
+        transitions=[
+            {"old_state": "off", "new_state": "on", "triggers": "flick", "condition": "is_night"},  # switch only turns on at night
+            {"old_state": "on", "new_state": "off", "triggers": "flick"},
+        ],
+    )
+
+    def __init__(self, time=0, *args, **kwargs):
+        super(LightSwitch, self).__init__(*args, **kwargs)
+        self.time = time
+
+    def flick(self, hours, *args, **kwargs):  # *args, **kwargs are only added to show passing arguments to the machine
+        self.time = (self.time + hours)%24    # increment time with hours and start counting from 0 if >24 (midnight)
+        self.machine.trigger(self, "flick", *args, **kwargs)  # use the trigger name to call the trigger method on the state machine
+
+    def is_night(self):
+        return self.time < 6 or self.time > 18
+
+
+if __name__ == "__main__":
+    switch = LightSwitch(time=0, initial="on")
+    assert switch.is_night()
+    switch.flick(hours=7)  # switch.time == 7
+    assert switch.state == "off"
+    switch.flick(hours=7)  # switch.time == 14
+    assert switch.state == "off"
+    switch.flick(hours=7)  # switch.time == 21
+    assert switch.state == "on"
+
+```
+Note that `flick` has a `hours` argument that is not passed to the state machines `trigger' method.
+
+### Advanced: Defining Multiple Transitions
 
 Sometimes many transitions need to be defined with the same end-state and callbacks (e.g. introducing a dead state for unfinished customer orders after a timeout). This can be achieved in 2 simple ways, by either using a wildcard `"*"`, meaning all states or a list of states `["on", "off"].
 
+Note that if multiple states are given for `new_state`, no triggers can be defined for the transition; a `MachineError` will be raised. This means that the transition can only take place bij explicitly giving the state `obj.state = "some_state"` (no parameters can be passed to the callbacks in these cases).
 ```python
 from statemachine.machine import StateMachine, StatefulObject
 
@@ -355,19 +421,6 @@ if __name__ == "__main__":
 ```
 Note that only listed states and wildcards can be used for the "from" state (`old_state`) of the transition, since having multiple "to" states would require a condition to determine the state to go to.
 
----
-
-_At this point you have all the tools to create a functional state machine, including:_
-* _defining states and state transitions,_
-* _defining triggers that cause state transitions,_
-* _defining callbacks on states and state transitions,_
-* _passing parameters to the callback functions,_
-* _setting a condition on a transition,_
-* _using wildcard and listed states to define multiple transitions at once._
-
-_With these elements a fully functional state machine can be implemented. As a state machine grows in complexity or needs to meet additional requirements, the features in the advanced tutorial will become more useful._
-
----
 ### Advanced: Switched Transitions
 
 In some cases you might want to transition to different states depending on some condition. This requires a transition with multiple end-states `new_states` and a condition for each end-state.
@@ -527,4 +580,6 @@ if __name__ == "__main__":
 ```
 
 ### Example: Multiple State Machines
+
+
 

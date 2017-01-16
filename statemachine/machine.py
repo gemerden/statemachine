@@ -4,9 +4,58 @@ from contextlib import contextmanager
 from copy import deepcopy
 from functools import partial
 
-from statemachine.tools import listify, callbackify, Path, nameify, replace_in_list, has_doubles
+from statemachine.tools import Path
 
 __author__  = "lars van gemerden"
+
+
+def listify(list_or_item):
+    """utitity function to ensure an argument becomes a list if it is not one yet"""
+    if isinstance(list_or_item, (list, tuple, set)):
+        return list(list_or_item)
+    else:
+        return [list_or_item]
+
+
+def callbackify(callbacks):
+    """
+    Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
+    first argument (obj) of the actual call to the callback.
+
+    :param callbacks: single or list of functions or method names, all with the same signature
+    :return: new function that performs all the callbacks when called
+    """
+    callbacks = listify(callbacks)
+
+    def result_callback(obj, *args, **kwargs):
+        result = []  #  introduced to be able to use this method for "condition" callback to return a value
+        for callback in callbacks:
+            if isinstance(callback, str):
+                result.append(getattr(obj, callback)(*args, **kwargs))
+            else:
+                result.append(callback(obj, *args, **kwargs))
+        return all(result)
+
+    return result_callback
+
+
+def nameify(f, cast=lambda v: v):
+    """ tries to give a name to an item"""
+    return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
+
+
+def replace_in_list(lst, old_item, new_items):
+    """ replaces single old_item with a list new_item(s), retaining order of new_items """
+    new_items = listify(new_items)
+    index = lst.index(old_item)
+    lst.remove(old_item)
+    for i, item in enumerate(new_items):
+        lst.insert(index+i, item)
+    return lst
+
+
+def has_doubles(lst):  # slow, O(n^2)
+    return any(lst.count(l) > 1 for l in lst)
 
 
 class MachineError(ValueError):
@@ -21,7 +70,7 @@ class TransitionError(ValueError):
 
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
-    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=None, triggers={}):
+    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=(), triggers=()):
         self.machine = machine
         self._validate_states(old_state, new_state)
         self.old_path = Path(old_state)
@@ -37,32 +86,32 @@ class Transition(object):
         old_states = old_state.split(".", 1)
         new_states = new_state.split(".", 1)
         if (len(old_states) > 1 or len(new_states) > 1) and old_states[0] == new_states[0]:
-            raise MachineError("inner transitions in a nested machine cannot be defined at the outer machine level")
+            raise MachineError("inner transitions in a nested state machine cannot be defined at the outer level")
 
-    def exit_states(self, obj, **kwargs):
+    def exit_states(self, obj, *args, **kwargs):  # TODO: add more tests
         """ calls all exit methods for states being exited as a result of a transition"""
         old_state = self.old_states[0]
-        for state in obj.state_path.tail(old_state.path).iter_out(old_state):
-            state.exit(obj, **kwargs)
+        for state in Path(obj.state).tail(old_state.path).iter_out(old_state):
+            state.exit(obj, *args, **kwargs)
         for state in self.old_states:
-            state.exit(obj, **kwargs)
+            state.exit(obj, *args, **kwargs)
 
-    def enter_states(self, obj, **kwargs):
+    def enter_states(self, obj, *args, **kwargs):
         """ calls all enter methods for states being entered as a result of a transition"""
         for state in self.new_states:
-            state.enter(obj, **kwargs)
+            state.enter(obj, *args, **kwargs)
         for state in self.new_states[-1].iter_initial():
-            state.enter(obj, **kwargs)
+            state.enter(obj, *args, **kwargs)
 
-    def before_any_exit(self, obj, **kwargs):
+    def before_any_exit(self, obj, *args, **kwargs):
         for machine in self.machine.iter_up(include_root=True):
             if machine.before_any_exit:
-                return machine.before_any_exit(obj, **kwargs)
+                return machine.before_any_exit(obj, *args, **kwargs)
 
-    def after_any_entry(self, obj, **kwargs):
+    def after_any_entry(self, obj, *args, **kwargs):
         for machine in self.machine.iter_up(include_root=True):
             if machine.after_any_entry:
-                return machine.after_any_entry(obj, **kwargs)
+                return machine.after_any_entry(obj, *args, **kwargs)
 
     @contextmanager
     def transitioning(self, obj):
@@ -74,17 +123,17 @@ class Transition(object):
             obj._state = old_state
             raise
 
-    def _execute(self, obj, **kwargs):
-        if not self.condition or self.condition(obj, **kwargs):
-            self.before_any_exit(obj, **kwargs)
-            self.exit_states(obj, **kwargs)
-            self.on_transfer(obj, **kwargs)
-            self.enter_states(obj, **kwargs)
-            self.after_any_entry(obj, **kwargs)
+    def _execute(self, obj, *args, **kwargs):
+        if not self.condition or self.condition(obj, *args, **kwargs):
+            self.before_any_exit(obj, *args, **kwargs)
+            self.exit_states(obj, *args, **kwargs)
+            self.on_transfer(obj, *args, **kwargs)
+            self.enter_states(obj, *args, **kwargs)
+            self.after_any_entry(obj, *args, **kwargs)
             return True
         return False
 
-    def execute(self, obj, **kwargs):
+    def execute(self, obj, *args, **kwargs):
         """
         Method calling all the callbacks of a state transition ans changing the actual object state (if condition
         returns True).
@@ -96,10 +145,10 @@ class Transition(object):
         if self.machine.context_manager:
             with self.machine.context_manager(obj, **kwargs) as context:
                 with self.transitioning(obj):
-                    return self._execute(obj, context=context, **kwargs)
+                    return self._execute(obj, context=context, *args, **kwargs)
         else:
             with self.transitioning(obj):
-                return self._execute(obj, **kwargs)
+                return self._execute(obj, *args, **kwargs)
 
     def __str__(self):
         """string representing the transition"""
@@ -108,20 +157,25 @@ class Transition(object):
 
 class BaseState(object):
     """base class for the both ChildState and ParentState"""
-    def __init__(self, name, **kwargs):
+    def __init__(self, name, *args, **kwargs):
         """
         Constructor of BaseState:
 
         :param name: name of the state, must be unique within the parent state machine
         """
-        super(BaseState, self).__init__(**kwargs)
-        self.name = name
+        super(BaseState, self).__init__(*args, **kwargs)
+        self.name = self._check_name(name)
+
+    def _check_name(self, name, exclude=(".", "*", "[", "]")):
+        if any(c in name for c in exclude):
+            raise MachineError("state name cannot contain characters %s" % exclude)
+        return name
 
 
 class ChildState(BaseState):
     """class for the internal representation of a state without substates in the state machine"""
 
-    def __init__(self, super_state=None, on_entry=(), on_exit=(), **kwargs):
+    def __init__(self, super_state=None, on_entry=(), on_exit=(), *args, **kwargs):
         """
         Constructor of ChildState:
 
@@ -129,7 +183,7 @@ class ChildState(BaseState):
         :param on_entry: callback(s) that will be called, when an object enters this state
         :param on_exit: callback(s) that will be called, when an object exits this state
         """
-        super(ChildState, self).__init__(**kwargs)
+        super(ChildState, self).__init__(*args, **kwargs)
         self.super_state = super_state
         self.on_entry = callbackify(on_entry)
         self.on_exit = callbackify(on_exit)
@@ -146,11 +200,11 @@ class ChildState(BaseState):
     def exit(self, obj, **kwargs):
         """strips the name of this state from the state in the object and calls the on_exit callbacks"""
         self.on_exit(obj, **kwargs)
-        obj._state = obj._state[:-1]
+        obj._state = str(Path(obj._state)[:-1])
 
     def enter(self, obj, **kwargs):
         """adds the name of this state to the state in the object and calls the on_entry callbacks"""
-        obj._state = obj._state + self.name
+        obj._state = str(Path(obj._state) + self.name)
         self.on_entry(obj, **kwargs)
 
     def iter_up(self, include_root=False):
@@ -172,7 +226,7 @@ class ParentState(BaseState):
     transition_class = Transition  # class used for the internal representation of transitions
 
     def __init__(self, name="root state", states=(), transitions=(), initial=None,
-                 before_any_exit=None, after_any_entry=None, context_manager=None, **kwargs):
+                 before_any_exit=None, after_any_entry=None, context_manager=None, *args, **kwargs):
         """
         Constructor of the state machine, used to define all properties of the machine.
         :param states: a list of state properties:
@@ -198,7 +252,7 @@ class ParentState(BaseState):
         Note that all callback functions (including 'condition') have the signature:
             func(obj, **kwargs); triggers can pass the args and kwargs
         """
-        super(ParentState, self).__init__(name=name, **kwargs)
+        super(ParentState, self).__init__(name=name, *args, **kwargs)
         self.sub_states = self._create_states(states)
         self.transitions = self._create_transitions(transitions)
         self.triggering = self._create_triggering(transitions)
@@ -214,11 +268,11 @@ class ParentState(BaseState):
         if len(self.sub_states):
             return self.sub_states[self.sub_states.keys()[0]]
 
-    def get_initial_path(self, initial):
+    def get_initial_state(self, initial):
         """ returns the path to the actual initial state the object will be in """
         path = Path(initial or ())
         try:
-            return [s for s in path.get_in(self).iter_initial(include_self=True)][-1].path
+            return str([s for s in path.get_in(self).iter_initial(include_self=True)][-1].path)
         except KeyError:
             raise ValueError("no initial state is configured in state managed object or state machine")
 
@@ -290,7 +344,7 @@ class ParentState(BaseState):
                 try:
                     new_transes = []
                     if any(key in trans for key in ["new_state", "condition"]):
-                        raise MachineError("switched transitions cannot have a single 'new_state' or 'condition")
+                        raise MachineError("switched transitions cannot have a single 'new_state' or 'condition'")
                     for new_state in trans["new_states"]:
                         if exists(trans["old_state"], new_state["name"]):
                             raise MachineError("switched transition <%s, %s> overrides existing transition" %
@@ -307,6 +361,9 @@ class ParentState(BaseState):
 
     def _expand_listed(self, transitions):
         for transition in transitions[:]:
+            if isinstance(transition["new_state"], (list, tuple)):
+                if "triggers" in transition:
+                    raise MachineError("transition %s with parameter 'triggers' has multiple end-states" % str(transition))
             self._update_transitions(transition, transitions)
 
     def _expand_wildcards(self, transitions):
@@ -315,8 +372,10 @@ class ParentState(BaseState):
                 if transition["old_state"] == "*":
                     transition["old_state"] = [s.name for s in self]
                 if transition["new_state"] == "*":
+                    if "triggers" in transition:
+                        raise MachineError("transition %s with parameter 'triggers' has multiple end-states" % str(transition))
                     transition["new_state"] = [s.name for s in self]
-                self._update_transitions(transition, transitions, self_transition=False)
+                self._update_transitions(transition, transitions, self_transition=True)
 
     def _update_transitions(self, transition, transitions, self_transition=True):
 
@@ -420,18 +479,20 @@ class ParentState(BaseState):
             return self[old_path[0]]._get_transition(old_path[1:], new_path[1:])
         raise TransitionError("transition <%s, %s> does not exist" % (old_path, new_path))
 
-    def do_trigger(self, obj, trigger, **kwargs):
+    def trigger(self, obj, trigger, *args, **kwargs):
         """ Executes the transition when called through a trigger """
-        for transition in self._get_transitions(obj.state_path, trigger):
-            if transition.execute(obj, **kwargs):
+        for transition in self._get_transitions(Path(obj.state), trigger):
+            if transition.execute(obj, *args, **kwargs):
                 return True
         return False
 
-    def set_state(self, obj, state_path):
+    def set_state(self, obj, state):
         """ Executes the transition when called by setting the state: obj.state = 'some_state' """
-        if obj.state_path != state_path:
-            if not self._get_transition(obj.state_path, state_path).execute(obj):
-                raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state_path))
+        if obj.state != state:
+            transition = self._get_transition(Path(obj.state), Path(state))
+            if not transition:
+                raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state))
+            transition.execute(obj)
 
 
 class State(ChildState, ParentState):
@@ -491,7 +552,7 @@ class StatefulObject(object):
                 the initial state as configured in the machine (if configured, else an exception is raised).
         """
         super(StatefulObject, self).__init__(*args, **kwargs)
-        self._state = self.machine.get_initial_path(initial)
+        self._state = self.machine.get_initial_state(initial)
 
     def __getattr__(self, trigger):
         """
@@ -501,19 +562,16 @@ class StatefulObject(object):
         :return: partial function that allows the trigger to be called like object.some_trigger(*args, **kwargs)
         """
         if trigger in self.machine.triggers:
-            return partial(self.machine.do_trigger, obj=self, trigger=trigger)
+            return partial(self.machine.trigger, obj=self, trigger=trigger)
         raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, trigger))
 
     def get_state(self):
-        """ returns the current state, as a '.' separated string """
-        return str(self._state)
+        """ returns the current (nested) state, as a '.' separated string """
+        return self._state
 
     def set_state(self, state):
         """ Causes the state machine to call all relevant callbacks and change the state of the object """
-        self.machine.set_state(self, Path(state))
+        self.machine.set_state(self, state)
 
     state = property(get_state, set_state)  # turn state into a property
 
-    @property
-    def state_path(self):
-        return self._state

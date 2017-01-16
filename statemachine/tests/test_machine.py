@@ -340,8 +340,8 @@ class WildcardStateMachineTest(unittest.TestCase):
     def test_construction(self):
         """test whether all states, transitions and triggers are in place"""
         self.assertEqual(len(self.machine), 4)
-        self.assertEqual(len(self.machine.transitions), 4+3+3)
-        self.assertEqual(len(self.machine.triggering), 8+3)
+        self.assertEqual(len(self.machine.transitions), 4+4+3)
+        self.assertEqual(len(self.machine.triggering), 8+4)
 
     def test_config(self):
         config = repr(self.object_class.machine)
@@ -399,7 +399,7 @@ class WildcardStateMachineTest(unittest.TestCase):
             block.state = "gas"
 
     def test_machine_errors(self):
-        """tests that to wildcard transitions cannot have triggers"""
+        """tests that new_state wildcard transitions cannot have triggers"""
         with self.assertRaises(MachineError):
             StateMachine(
                 name="matter machine",
@@ -445,7 +445,7 @@ class WildcardStateMachineTest(unittest.TestCase):
 
         # test whether all states, transitions and triggers are in place
         self.assertEqual(len(Matter.machine), 3)
-        self.assertEqual(len(Matter.machine.transitions), 6)
+        self.assertEqual(len(Matter.machine.transitions), 9)
         self.assertEqual(len(Matter.machine.triggering), 0)
 
         # transitions can only be made with state property (wildcards would creae double triggers in this case)
@@ -1011,6 +1011,49 @@ class CallbackTest(unittest.TestCase):
 
     def test_callbacks(self):
         self.radio.switch(a=1, b=2, c=3, d=4, e=5, f=6, g=7, h=None)
+
+class TriggerOverrideTest(unittest.TestCase):
+
+    def setUp(self):
+        """called before any individual test method"""
+
+        class LightSwitch(StatefulObject):
+            machine = StateMachine(
+                states=[
+                    {"name": "on"},
+                    {"name": "off"},
+                ],
+                transitions=[
+                    {"old_state": "off", "new_state": "on", "triggers": "flick", "condition": "is_night"},
+                    # switch only turns on at night
+                    {"old_state": "on", "new_state": "off", "triggers": "flick"},
+                ],
+            )
+
+            def __init__(self, time=0, *args, **kwargs):
+                super(LightSwitch, self).__init__(*args, **kwargs)
+                self.time = time
+
+            def flick(self, hours, *args, **kwargs):
+                self.time = (self.time + hours) % 24  # increment time with hours and start from 0 if >24 (midnight)
+                self.machine.trigger(self, "flick", hours=hours, *args, **kwargs)
+
+            def is_night(self, *args, **kwargs):
+                return self.time < 6 or self.time > 18
+
+        self.lightswitch_class = LightSwitch
+
+    def test_override(self):
+        switch = self.lightswitch_class(time=0, initial="on")
+        self.assertTrue(switch.is_night())
+        switch.flick(hours=7)  # switch.time == 7
+        self.assertTrue(switch.state == "off")
+        switch.flick(hours=7)  # switch.time == 14
+        self.assertTrue(switch.state == "off")
+        switch.flick(hours=7)  # switch.time == 21
+        self.assertTrue(switch.time == 21)
+        self.assertTrue(switch.state == "on")
+
 
 class TransitioningTest(unittest.TestCase):
 

@@ -3,52 +3,6 @@ from collections import Sequence, Mapping, MutableMapping
 __author__ = "lars van gemerden"
 
 
-def listify(list_or_item):
-    """utitity function to ensure an argument becomes a list if it is not one yet"""
-    if isinstance(list_or_item, (list, tuple, set)):
-        return list(list_or_item)
-    else:
-        return [list_or_item]
-
-
-def callbackify(callbacks):
-    """
-    Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
-    first argument (obj) of the actual call to the callback.
-
-    :param callbacks: single or list of functions or method names, all with the same signature
-    :return: new function that performs all the callbacks when called
-    """
-    callbacks = listify(callbacks)
-
-    def result_callback(obj, *args, **kwargs):
-        for callback in callbacks:
-            if isinstance(callback, str):
-                return getattr(obj, callback)(*args, **kwargs)
-            else:
-                return callback(obj, *args, **kwargs)
-
-    return result_callback
-
-
-def nameify(f, cast=lambda v: v):
-    """ tries to give a name to an item"""
-    return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
-
-
-def replace_in_list(lst, old_item, new_items):
-    """ replaces single old_item with a list new_item(s), retaining order of new_items """
-    new_items = listify(new_items)
-    index = lst.index(old_item)
-    lst.remove(old_item)
-    for i, item in enumerate(new_items):
-        lst.insert(index+i, item)
-    return lst
-
-
-def has_doubles(lst):  # slow, O(n^2)
-    return any(lst.count(l) > 1 for l in lst)
-
 _marker = object()
 
 class Path(tuple):
@@ -115,8 +69,8 @@ class Path(tuple):
     def __new__(cls, string_s=()):
         """constructor for path; __new__ is used because objects of base class tuple are immutable"""
         if isinstance(string_s, str):
-            val = cls.validate
-            string_s = (val(s) for s in string_s.split(cls.separator))
+            validate = cls.validate
+            string_s = (validate(s) for s in string_s.split(cls.separator) if len(s))
         return super(Path, cls).__new__(cls, string_s)
 
     def __getslice__(self, i, j):

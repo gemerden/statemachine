@@ -30,3 +30,4 @@ if __name__ == "__main__":
     switch.daytime = True
     switch.flick()
     assert switch.state == "off"
+
