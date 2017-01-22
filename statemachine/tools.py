@@ -1,62 +1,51 @@
-from collections import Sequence, Mapping
+from collections import Sequence, Mapping, MutableMapping
+from random import random
 
 __author__ = "lars van gemerden"
 
 
-def listify(list_or_item):
-    """utitity function to ensure an argument becomes a list if it is not one yet"""
-    if isinstance(list_or_item, (list, tuple, set)):
-        return list(list_or_item)
-    else:
-        return [list_or_item]
+def toss(prob=0.5):
+    return random() < prob
 
-
-def callbackify(callbacks):
-    """
-    Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
-    first argument (obj) of the actual call to the callback.
-
-    :param callbacks: single or list of functions or method names, all with the same signature
-    :return: new function that performs all the callbacks when called
-    """
-    callbacks = listify(callbacks)
-
-    def result_callback(obj, *args, **kwargs):
-        for callback in callbacks:
-            if isinstance(callback, str):
-                return getattr(obj, callback)(*args, **kwargs)
-            else:
-                return callback(obj, *args, **kwargs)
-
-    return result_callback
-
-
-def nameify(f, cast=lambda v: v):
-    """ tries to give a name to an item"""
-    return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
-
-
-def clean_dict(dct):
-    """ removes items evaluating to False from dictionary """
-    for k, v in dct.copy().iteritems():
-        if not v:
-            del dct[k]
-    return dct
-
-def replace_in_list(lst, old_item, new_items):
-    """ replaces single old_item with a list new_item(s), retaining order of new_items """
-    new_items = listify(new_items)
-    index = lst.index(old_item)
-    lst.remove(old_item)
-    for i, item in enumerate(new_items):
-        lst.insert(index+i, item)
-    return lst
-
-
-def has_doubles(lst):  # slow, O(n^2)
-    return any(lst.count(l) > 1 for l in lst)
 
 _marker = object()
+
+
+class Registered(object):
+
+    @classmethod
+    def register(cls, item):
+        if "_reg" not in cls.__dict__:
+            cls._reg = {}
+        if item.name in cls._reg:
+            raise ValueError("name '%s' already in class '%s'" % (item.name, cls.__name__))
+        cls._reg[item.name] = item
+
+    @classmethod
+    def remove(cls, item):
+        del cls._reg[item.name]
+
+    @classmethod
+    def get(cls, name):
+        return cls._reg[name]
+
+    @classmethod
+    def all(cls, flt):
+        return cls._reg.values()
+
+    @classmethod
+    def filter(cls, flt):
+        return [r for r in cls._reg.itervalues() if flt(r)]
+
+    @classmethod
+    def random(cls, flt=lambda v: True):
+        return random.choice(cls.filter(flt))
+
+    def __init__(self, name, *args, **kwargs):
+        super(Registered, self).__init__(*args, **kwargs)
+        self.name = name
+        self.__class__.register(self)
+
 
 class Path(tuple):
     '''
@@ -101,7 +90,7 @@ class Path(tuple):
         """
         Applies func to all elements without sub elements and replaces the original with the return value of func
         """
-        if isinstance(map, Mapping):
+        if isinstance(map, MutableMapping):
             for k, m in map.iteritems():
                 map[k] = cls.apply_all(m, func)
             return map
@@ -122,8 +111,8 @@ class Path(tuple):
     def __new__(cls, string_s=()):
         """constructor for path; __new__ is used because objects of base class tuple are immutable"""
         if isinstance(string_s, str):
-            val = cls.validate
-            string_s = (val(s) for s in string_s.split(cls.separator))
+            validate = cls.validate
+            string_s = (validate(s) for s in string_s.split(cls.separator) if len(s))
         return super(Path, cls).__new__(cls, string_s)
 
     def __getslice__(self, i, j):
