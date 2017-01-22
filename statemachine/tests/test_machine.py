@@ -707,8 +707,8 @@ class NestedStateMachineTest(unittest.TestCase):
 
     def test_getitem_for_transitions(self):
         machine = self.object_class.machine
-        self.assertEqual(machine["on", "off"].old_states[0], machine["on"])
-        self.assertEqual(machine["on", "off"].new_states[0], machine["off"])
+        self.assertEqual(machine["on", "off"].old_state, machine["on"])
+        self.assertEqual(machine["on", "off"].new_state, machine["off"])
         self.assertEqual(str(machine["on"]["washing", "drying"].old_path), "washing")
         self.assertEqual(str(machine["on"]["washing", "drying"].new_path), "drying")
         self.assertEqual(str(machine["off.working", "on.drying"].old_path), "off.working")
@@ -866,7 +866,7 @@ class SwitchedTransitionTest(unittest.TestCase):
 
     def test_machine_errors(self):
         config = deepcopy(self.machine_config)
-        Path("transitions.3.new_states.0.condition").set_in(config, None)
+        Path("transitions.3.new_states.0.condition").set_in(config, ())
         with self.assertRaises(MachineError):
             state_machine(**config)
 

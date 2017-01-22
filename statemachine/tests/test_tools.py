@@ -1,9 +1,9 @@
+import random
 import unittest
 
-from statemachine.tools import Path, replace_in_list, has_doubles
+from statemachine.tools import Path
 
 __author__  = "lars van gemerden"
-
 
 class PathTest(unittest.TestCase):
 

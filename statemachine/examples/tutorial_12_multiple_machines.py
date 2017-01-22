@@ -5,13 +5,12 @@ class Room(StatefulObject):
 
     machine = StateMachine(
         states=[
-            {"name": "empty", "on_entry": "turn_off_lights"},
-            {"name": "occupied", "on_entry": ["set_room", "turn_on_lights"]},
+            {"name": "empty", "on_entry": ["write_left", "turn_off_lights"]},
+            {"name": "occupied", "on_entry": ["write_entered", "turn_on_lights"]},
         ],
         transitions=[
-            {"old_state": "empty", "new_state": "occupied", "triggers": "enter"},
-            {"old_state": "occupied", "new_state": "occupied", "triggers": "enter"},
-            {"old_state": "occupied", "new_state": "empty", "triggers": "exit", "condition": "one_left"},
+            {"old_state": "*", "new_state": "occupied", "triggers": "enter"},
+            {"old_state": "occupied", "new_state": "empty", "triggers": "exit", "condition": "is_empty"},
         ]
     )
 
@@ -31,11 +30,25 @@ class Room(StatefulObject):
             if light.state == "on":
                 light.turn_off(room=self)
 
-    def set_room(self, person, **kwargs):
-        person.set_room(self)
+    def enter(self, person, **kwargs):
+        self.people += 1
+        if person.room:
+            person.room.exit(person=person)
+        person.room = self
+        self.machine.trigger(self, "enter", person=person, **kwargs)
 
-    def one_left(self, **kwargs):
+    def exit(self, **kwargs):
+        self.people -= 1
+        self.machine.trigger(self, "exit", **kwargs)
+
+    def is_empty(self, **kwargs):
         return self.people == 0
+
+    def write_left(self, **kwargs):
+        print("The %s is now empty" % self.name)
+
+    def write_entered(self, person, **kwargs):
+        print("%s just entered the %s" % (person.name, self.name))
 
 
 class Person(object):
@@ -44,20 +57,6 @@ class Person(object):
         super(Person, self).__init__()
         self.name = name
         self.room = None
-
-    def set_room(self, room):
-        if self.room:
-                self.room.people -= 1
-                self.room.exit(person=self)
-                if room != self.room:
-                    print("{person} went from {room1} to {room2}.".format(person=self.name,
-                                                                          room1=self.room.name,
-                                                                          room2=room.name))
-        else:
-            print("{person} entered {room}.".format(person=self.name,
-                                                    room=room.name))
-        room.people += 1
-        self.room = room
 
 
 class Light(StatefulObject):
@@ -78,24 +77,28 @@ class Light(StatefulObject):
         self.name = name
 
     def write(self, room, **kwargs):
-        print("Light {light} in {room} turned {state}.".format(light=self.name,
-                                                               room=room.name,
-                                                               state=self.state))
+        print("{light} in {room} turned {state}".format(light=self.name,
+                                                        room=room.name,
+                                                        state=self.state))
 
 
 if __name__ == "__main__":
 
-    living = Room("living", lights=[Light("shade"), Light("ceiling")])
-    bedroom = Room("bedroom", lights=[Light("bedlamp 1"), Light("bedlamp 2")])
-    kitchen = Room("kitchen", lights=[Light("sink"), Light("ceiling")])
+    living = Room("living room", lights=[Light("ceiling lamp")])
+    bedroom = Room("bed room", lights=[Light("bed lamp")])
+    kitchen = Room("kitchen", lights=[Light("sink light"), Light("ceiling lamp")])
 
     Ann = Person("Ann")
     Bob = Person("Bob")
 
     living.enter(person=Ann)
+    print '-'
     living.enter(person=Bob)
+    print '-'
     kitchen.enter(person=Ann)
+    print '-'
     bedroom.enter(person=Bob)
+    print '-'
     bedroom.enter(person=Ann)
 
 
