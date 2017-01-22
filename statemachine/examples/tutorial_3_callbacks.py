@@ -1,4 +1,4 @@
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 
 def entry_printer(obj):
@@ -6,7 +6,7 @@ def entry_printer(obj):
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on", "on_exit": "exit_printer", "on_entry": entry_printer},
             {"name": "off", "on_exit": "exit_printer", "on_entry": entry_printer},
