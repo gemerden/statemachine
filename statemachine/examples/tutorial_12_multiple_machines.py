@@ -5,12 +5,12 @@ class Room(StatefulObject):
 
     machine = StateMachine(
         states=[
-            {"name": "empty", "on_entry": ["write_left", "turn_off_lights"]},
+            {"name": "empty", "on_entry": ["write_left", "turn_off_lights"], "condition": "is_empty"},
             {"name": "occupied", "on_entry": ["write_entered", "turn_on_lights"]},
         ],
         transitions=[
             {"old_state": "*", "new_state": "occupied", "triggers": "enter"},
-            {"old_state": "occupied", "new_state": "empty", "triggers": "exit", "condition": "is_empty"},
+            {"old_state": "occupied", "new_state": "empty", "triggers": "exit"},
         ]
     )
 

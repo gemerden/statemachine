@@ -3,11 +3,11 @@ from statemachine.machine import StateMachine, StatefulObject
 class LightSwitch(StatefulObject):
     machine = StateMachine(
         states=[
-            {"name": "on"},
+            {"name": "on", "condition": "is_nighttime"},
             {"name": "off"},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": "flick", "condition": "is_nighttime"},  # switch only turns on at night
+            {"old_state": "off", "new_state": "on", "triggers": "flick"},  # switch only turns on at night
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
         ],
     )

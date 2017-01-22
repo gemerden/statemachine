@@ -241,21 +241,20 @@ Notes:
  
 ### Basic: Conditional Transitions
 
-Sometimes you want a transition to take place only under specific circumstances. In that case the state machine allows you to set a condition on a transition by setting a parameter `condition`. This condition function must return a value evaluating to `True` if the condition is to take place, and to `False` otherwise.
+Sometimes you want a transition to take place only under specific circumstances. In that case the state machine allows you to set a condition on a state or transition by setting a parameter `condition`. This condition function must return a value evaluating to `True` if the condition is to take place, and to `False` otherwise.
 
-The implementation has the same features as those for callbacks (it is a callback), including using strings for methods on the stateful object and for passing parameters. If multiple callbacks are given, all callbacks need to return a `True` value for the transition to pass.
+The implementation has the same features as those for callbacks (it is a callback), including using strings to use methods on the stateful object and for passing parameters. If multiple callbacks are given, all callbacks need to return a `True` value for the transition to pass.
 ```python
 from statemachine.machine import StateMachine, StatefulObject
-
 
 class LightSwitch(StatefulObject):
     machine = StateMachine(
         states=[
-            {"name": "on"},
+            {"name": "on", "condition": "is_nighttime"},
             {"name": "off"},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": "flick", "condition": "is_nighttime"},  # switch only turns on at night
+            {"old_state": "off", "new_state": "on", "triggers": "flick"},  # switch only turns on at night
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
         ],
     )
@@ -269,7 +268,7 @@ class LightSwitch(StatefulObject):
 
 
 if __name__ == "__main__":
-    switch = LightSwitch(initial="off") 
+    switch = LightSwitch(initial="off")
     assert switch.is_nighttime()
     switch.flick()
     assert switch.state == "on"
@@ -278,7 +277,13 @@ if __name__ == "__main__":
     switch.daytime = True
     switch.flick()
     assert switch.state == "off"
+    assert switch.state == "off"
 ```
+
+Notes:
+* Here we only show the use of condition for entry of a state. Conditions can also be used for specific transitions by adding them to the transition parameters `"condition": callback`.
+* If there are multiple transitions with the same starting state and the same trigger, but different end-states. Conditions are evaluated in order the states and transitions are configured in the state machine.
+* If both a state and a transition to that state have a condition, both need to be true for the transition to take place.
 
 ### Example: Adding a State History
 
@@ -579,7 +584,11 @@ if __name__ == "__main__":
     assert not lightswitch.managed
 ```
 
-### Example: Multiple State Machines
+### Examples
+
+Currently there are two code examples in the tutorial sections:
+1. One shows the use of multiple state machines interacting. 
+2. The other is an example of a simple graphical mood simulation, using [pygame](https://www.pygame.org/).
 
 
 
