@@ -1,8 +1,8 @@
-from statemachine.machine import StateMachine, TransitionError, StatefulObject
+from statemachine.machine import state_machine, TransitionError, StatefulObject
 
 
 class LightSwitch(StatefulObject):
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},

@@ -2,7 +2,7 @@ import random
 
 from collections import defaultdict
 
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class Registered(object):
     
@@ -42,7 +42,7 @@ class Registered(object):
 
 class Person(StatefulObject, Registered):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "happy", "on_entry": []},
             {"name": "neutral", "on_entry": []},

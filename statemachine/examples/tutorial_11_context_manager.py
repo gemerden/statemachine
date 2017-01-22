@@ -1,9 +1,9 @@
 from contextlib import contextmanager
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},

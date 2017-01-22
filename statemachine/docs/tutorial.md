@@ -20,23 +20,23 @@ On entering, exiting or transitioning between states, actions can be executed th
 
 ### Classes
 
-The following classes are part of the public API of the statemachine.
+The following functions and classes are part of the public API of the statemachine.
 
-* `StateMachine`: the class where are all functionality of the state machine is defined,
+* `state_machine(**config)`: the function returning instances of the correct state machine class,
 * `StatefulObject(object)`: the class that can be subclassed to make (almost) any python object stateful,
 * exception classes:
     * `MachineError(Exception)`: raised in case of a misconfiguration of the state machine,
     * `TransitionError(Exception)`: raised when a state transition fails,
 
-### Basics: The Simplest StateMachine
+### Basics: The Simplest Statemachine
 
 To get right to it we will show the simplest example of state machine. It defines states and transitions. 
 ```python
-from statemachine.machine import StateMachine, StatefulObject, TransitionError
+from statemachine.machine import state_machine, StatefulObject, TransitionError
  
 class LightSwitch(StatefulObject):           # inherit from "StatefulObject" to get stateful behaviour        
 
-    machine = StateMachine(  # the statemachine itself is a class parameter of the stateful object here
+    machine = state_machine(  # the statemachine itself is a class parameter of the stateful object here
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -70,7 +70,7 @@ Notes:
 * The state machine itself is stateless; it does not keep any information about the stateful objects,
 * If no `initial` argument to the constructor is given, the first state in the state machine is taken as initial state,
 * You can also define the statemachine outside the class and add it in the class definition as class attribute or in the constructor as normal attribute (it is called internally through `self.machine`),
-* Another option is to define the arguments to the state machine constructor as a separate dictionary and use it to contruct the state machine `StateMachine(**state_machine_config)`. This configuration can be serialized and persisted or sent over a network (This requires callbacks to be configured as strings).
+* Another option is to define the arguments to the state machine constructor as a separate dictionary and use it to contruct the state machine `state_machine(**state_machine_config)`. This configuration can be serialized and persisted or sent over a network (This requires callbacks to be configured as strings).
 * By adding a statemachine to a stateful object in its constructor (instead of using a class attribute), you could use different state machines for objects of the same class,
 * If any `TransitionError` is raised, the state of the object is returned to the `old_state`.
 
@@ -82,11 +82,11 @@ The next step is to add triggers to the state machine. Triggers are methods on t
 ```python
 
 
-from statemachine.machine import StateMachine, StatefulObject, TransitionError
+from statemachine.machine import state_machine, StatefulObject, TransitionError
  
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -141,7 +141,7 @@ If the value of the callback parameter is a string, the callback method will be 
 In this simple case the signature of the callback must be `func(obj)` with `obj` the stateful object (or `func(self)` in case of a method on the stateful object). Later we will look at passing parameters to the callback.
 
 ```python
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 
 def entry_printer(obj):
@@ -149,7 +149,7 @@ def entry_printer(obj):
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on", "on_exit": "exit_printer", "on_entry": entry_printer},
             {"name": "off", "on_exit": "exit_printer", "on_entry": entry_printer},
@@ -197,11 +197,11 @@ The use fo calbacks can be enhanced by allowing triggers to pass arguments to th
 The arguments to the trigger method are passed to all the callback functions. The callbacks can ignore arguments by defining `*args` and/or `**kwargs` in their signature.
 
 ```python
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on", "on_entry": "time_printer"},
             {"name": "off", "on_entry": "time_printer"},
@@ -245,10 +245,10 @@ Sometimes you want a transition to take place only under specific circumstances.
 
 The implementation has the same features as those for callbacks (it is a callback), including using strings to use methods on the stateful object and for passing parameters. If multiple callbacks are given, all callbacks need to return a `True` value for the transition to pass.
 ```python
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on", "condition": "is_nighttime"},
             {"name": "off"},
@@ -290,11 +290,11 @@ Notes:
 Often it is practical to let a stateful object store a history of all states visited in the past. This can easily be done with the `after_any_entry` callback. As an example we show you how:
 
 ```python
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -342,10 +342,10 @@ It is possible to directly trigger a transition on the state machine itself, pos
 In this case we implement the `flick` trigger method ourselves, to be able to update the stateful object without introducing a new method name (`flick` is already defined in the state machine, it now first updates the object):
 
 ```python
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -387,11 +387,11 @@ Sometimes many transitions need to be defined with the same end-state and callba
 
 Note that if multiple states are given for `new_state`, no triggers can be defined for the transition; a `MachineError` will be raised. This means that the transition can only take place bij explicitly giving the state `obj.state = "some_state"` (no parameters can be passed to the callbacks in these cases).
 ```python
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on", "on_entry": "printer"},
             {"name": "off", "on_entry": "printer"},
@@ -433,11 +433,11 @@ In some cases you might want to transition to different states depending on some
 The example below shows the same lightswitch as we used before, but now, after it breaks and is fixed it returns to the same state is was before breaking.
 
 ```python
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         name="matter machine",
         states=[
             {"name": "on"},
@@ -495,12 +495,12 @@ Transitions can be defined at any level. So for example a transition from state 
 Before we go into more detail we will describe a very simple example where the lightswitch has 2 main states "normal" and "broken", The "normal" state has 2 substates "on" and "off". 
 
 ```python
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {
                 "name": "normal",
@@ -546,11 +546,11 @@ In some cases, a context manager (`with ... as ...:`) is useful to e.g. only com
 
 ```python
 from contextlib import contextmanager
-from statemachine.machine import StateMachine, StatefulObject
+from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = StateMachine(
+    machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -589,6 +589,8 @@ if __name__ == "__main__":
 Currently there are two code examples in the tutorial sections:
 1. One shows the use of multiple state machines interacting. 
 2. The other is an example of a simple graphical mood simulation, using [pygame](https://www.pygame.org/).
+
+Although these examples work, they are pretty undocumented at the moment.
 
 
 

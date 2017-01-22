@@ -479,7 +479,7 @@ class State(ParentState, ChildState):
     """
     This state represents each state in the state machine, as well as the state machine itself (basically saying that
     each state is a state machine, and vice versa). Of course the root machine will never be entered or exited and
-    states without substates will not have transitions, etc., but only one StateMachine class representing all states
+    states without substates will not have transitions, etc., but only one state_machine class representing all states
     and (nested) machines, simplifies navigation in case of transitions considerably.
 
     The arguments passed to the constructor (__init__) determine whether the state is a 'root'/'top' state machine,
@@ -524,13 +524,12 @@ class State(ParentState, ChildState):
         """
         return json.dumps(self.config, indent=4)
 
-# for clarity sake
-StateMachine = State
 
 def state_machine(**config):
     if "states" in config:
-        return StateMachine(**config)
+        return State(**config)
     return ChildState(**config)
+
 
 class StatefulObject(object):
     """
