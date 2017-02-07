@@ -49,22 +49,6 @@ class LightSwitch(StatefulObject):           # inherit from "StatefulObject" to 
 
 if __name__ == "__main__":
     lightswitch = LightSwitch(initial="off")  # argument "initial" defines the initial state
-    assert lightswitch.state == "off"         # the lightswitch is now in the "off" state
-        
-    lightswitch.state = "on"                  # you can explicitly set the state through the "state" property
-    assert lightswitch.state == "on"
-    
-    lightswitch.state = "off"                 
-    assert lightswitch.state == "off"
-    
-    lightswitch.state = "off"                 # this will not raise an exception, although there is no transition from "off" to "off"
-    assert lightswitch.state == "off"
-    
-    try:
-        lightswitch.state = "nix"             # this will raise an exception; there is no state "nix"
-    except TransitionError:
-        pass
-    assert lightswitch.state == "off"
 ```
 Notes:
 * The state machine itself is stateless; it does not keep any information about the stateful objects,
@@ -72,7 +56,7 @@ Notes:
 * You can also define the statemachine outside the class and add it in the class definition as class attribute or in the constructor as normal attribute (it is called internally through `self.machine`),
 * Another option is to define the arguments to the state machine constructor as a separate dictionary and use it to contruct the state machine `state_machine(**state_machine_config)`. This configuration can be serialized and persisted or sent over a network (This requires callbacks to be configured as strings).
 * By adding a statemachine to a stateful object in its constructor (instead of using a class attribute), you could use different state machines for objects of the same class,
-* If any `TransitionError` is raised, the state of the object is returned to the `old_state`.
+* If any `TransitionError` is raised, the state of the object is returned to the `old_state`,
 
 Although this example adds states and transitions to the LightSwitch object, it does not do much more then protect the object against non-existing states and transitions.
 
