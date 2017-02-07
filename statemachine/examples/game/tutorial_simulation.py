@@ -182,11 +182,42 @@ def react(text):
     return inner
 
 
-class Action(StatefulObject):
+class Actions(StatefulObject):
 
     machine = state_machine(
-
+        states=[
+            {"name": "moving", "on_entry": ["tick_move"]},
+            {"name": "talking", "on_entry": ["interact"]},
+        ],
+        transitions=[
+            {"old_state": "moving", "new_state": "talking", "triggers": "tick", "condition": "state_done"},
+            {"old_state": "moving", "new_state": "moving", "triggers": "tick"},
+            {"old_state": "talking", "new_state": "moving", "triggers": "tick", "condition": "state_done"},
+            {"old_state": "talking", "new_state": "talking", "triggers": "tick"},
+        ],
+        prepare="increment_tick"
     )
+
+    def __init__(self, owner, ticks, **kwargs):
+        super(Actions, self).__init__(**kwargs)
+        self.owner = owner
+        self.ticks = ticks
+        self.tick_count = 0
+
+    def increment_tick(self, *args, **kwargs):
+        self.tick_count += 1
+        self.tick_count %= self.ticks
+
+    def state_done(self, *args, **kwargs):
+        return self.tick_count == 0
+
+    def interact(self, *args, **kwargs):
+        self.owner.interact(*args, **kwargs)
+
+    def tick_move(self, *args, **kwargs):
+        self.owner.tick_move(*args, **kwargs)
+
+
 
 
 class Piece(StatefulObject, Sprite):
@@ -204,8 +235,9 @@ class Piece(StatefulObject, Sprite):
         ],
     )
 
-    def __init__(self, mood=0.5, *args, **kwargs):
+    def __init__(self, ticks, mood=0.5, *args, **kwargs):
         super(Piece, self).__init__(images=self.machine.sub_states.keys(), *args, **kwargs)
+        self.actions = Actions(owner=self, ticks=ticks)
         self.mood = mood
         self.cell = None
 
