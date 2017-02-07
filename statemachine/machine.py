@@ -102,7 +102,6 @@ class Transition(object):
             raise
 
     def _execute(self, obj, *args, **kwargs):
-        self.machine.prepare(obj, *args, **kwargs)
         if ((not self.condition or self.condition(obj, *args, **kwargs)) and
             (not self.new_state.condition or self.new_state.condition(obj, *args, **kwargs))):
             self.machine.exit(obj, *args, **kwargs)
@@ -406,6 +405,7 @@ class ParentState(BaseState):
 
     def trigger(self, obj, trigger, *args, **kwargs):
         """ Executes the transition when called through a trigger """
+        self.prepare(obj, *args, **kwargs)
         for transition in self._get_transitions(Path(obj.state), trigger):
             if transition.execute(obj, *args, **kwargs):
                 return True
