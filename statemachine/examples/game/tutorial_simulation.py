@@ -4,7 +4,10 @@ import pygame
 from pygame.locals import *
 
 from statemachine.machine import StatefulObject, state_machine, state_machine
-from statemachine.tools import toss
+
+
+def coin_toss(prob=0.5):
+    return random.random() < prob
 
 
 class PygameImages(dict):
@@ -223,9 +226,9 @@ class Piece(StatefulObject, Sprite):
         return success
 
     def interact(self, other):
-        if toss(0.8):
+        if coin_toss(0.8):
             self.talk(other=other, text="hi")
-        elif toss(0.5):
+        elif coin_toss(0.5):
             self.please(other=other, text="hi, love")
         else:
             self.annoy(other=other, text="hiiiiiii")

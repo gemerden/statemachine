@@ -4,7 +4,7 @@ from random import random
 __author__ = "lars van gemerden"
 
 
-def toss(prob=0.5):
+def coin_toss(prob=0.5):
     return random() < prob
 
 
