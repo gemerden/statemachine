@@ -99,6 +99,7 @@ class Transition(object):
         old_state = obj._state
         try:
             yield
+        except BaseException:
             obj._state = old_state
             raise
 
