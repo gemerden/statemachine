@@ -18,7 +18,7 @@ On entering, exiting or transitioning between states, actions can be executed th
 * The sections in this tutorial are ordered by complexity of the functionality. Most state machines do not need nested states (but they are definitely handy when needed). The first sections already allow you to implement a functional state machine,
 * All code examples in this tutorial should be runnable (please let me know if they are not).
 
-### Classes
+### Main API
 
 The following functions and classes are part of the public API of the statemachine.
 
