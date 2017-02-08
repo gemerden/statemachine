@@ -592,7 +592,7 @@ Notes:
 
 ### Example: All Callbacks
 
-Here we will demonstrate the order all (including nested) callbacks are called and when the state of the object actually changes. In this case the output might be more interesting then the actual code. Suffice to say that all callbacks for the two transitions that are called, are implemented. 
+Here we will demonstrate the order all (including nested) callbacks are called and when the state of the object actually changes. In this case the output might be more interesting then the actual code. Suffice to say that all callbacks for the two transitions that are called, are implemented.
 ```python
 from contextlib import contextmanager
 
