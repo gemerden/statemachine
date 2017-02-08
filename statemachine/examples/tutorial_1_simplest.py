@@ -22,11 +22,8 @@ if __name__ == "__main__":
     lightswitch.state = "on"  # you can explicitly set the state through the "state" property
     assert lightswitch.state == "on"
 
-    lightswitch.state = "off"
-    assert lightswitch.state == "off"
-
-    lightswitch.state = "off"  # this will not raise an exception, although there is no transition from "off" to "off"
-    assert lightswitch.state == "off"
+    lightswitch.state = "on"  # this will not raise an exception, although there is no transition from "on" to "on"
+    assert lightswitch.state == "on"
 
     try:
         lightswitch.state = "nix"  # this will not raise an exception; there is no state "nix"
