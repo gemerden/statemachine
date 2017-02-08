@@ -168,15 +168,17 @@ class Path(tuple):
             p = (p,)
         return Path(super(Path, self).__add__(p))
 
-    def iter_in(self, map):
+    def iter_in(self, map, include=False):
         """ iterates into the map, e.g. Path("a.b").iter_in({"a":{"b":1}}) yields {"b":1} and 1"""
+        if include:
+            yield map
         for key in self:
             map = map[key]
             yield map
 
-    def iter_out(self, map):
+    def iter_out(self, map, include=False):
         """ same as iter_in, but in reversed order"""
-        return reversed(list(self.iter_in(map)))
+        return reversed(list(self.iter_in(map, include)))
 
     def iter_paths(self, cast=None):
         """ iterates over sub-paths, e.g. Path("a.b.c").iter_paths() yields Path("a"), Path("a.b"), Path("a.b.c")"""
