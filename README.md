@@ -1,5 +1,5 @@
 # statemachine
-Easy to use state machine to manage the state of python objects
+Easy to use state machine to manage the state of python objects.
 
 ## Introduction
 This state machine implementation is developed with the following goals in mind:
