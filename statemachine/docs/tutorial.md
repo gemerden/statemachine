@@ -6,9 +6,9 @@ _This tutorial covers basic and advanced use of the `statemachine` module. All c
 ---
 
 A statemachine is a relatively simple and intuitive model to add functionality to a class. It can be used in many cases where an object can be in a finite number of states, like:
-* a character in a game, where animations are shown depending on actions or transitions between actions (sitting, standing, standing-up),
 * a process for administrative records, e.g. customer orders (ordering, ordered, payed, shipped, delivered),
-* a button in a user interface that can have multiple states, like a simple checkbox (checked, unchecked, disabled)
+* a button in a user interface that can have multiple states, like a simple checkbox (checked, unchecked, disabled),
+* a character in a game, where animations are shown depending on actions or transitions between actions (sitting, standing, standing-up).
 
 On entering, exiting or transitioning between states, actions can be executed through callbacks, that are specific for that state or transition, like showing an animation, committing to a database, sending a message or updating a user-interface.
 
