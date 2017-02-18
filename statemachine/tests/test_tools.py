@@ -1,6 +1,7 @@
 import random
 import unittest
 
+from statemachine.machine import replace_in_list, has_doubles
 from statemachine.tools import Path
 
 __author__  = "lars van gemerden"
@@ -73,13 +74,6 @@ class PathTest(unittest.TestCase):
     def test_iter_all(self):
         self.assertDictEqual(dict(Path.iter_all(self.mapping, key_cast=str)),
                              {"a": 1, "b.c": 2, "b.d.e": 3, "f.0": 4, "f.1": 5})
-
-    def test_replace_in_list(self):
-        self.assertEqual(replace_in_list([1, 2, 3], 2, [4, 5]), [1, 4, 5, 3])
-
-    def test_has_doubles(self):
-        self.assertTrue(has_doubles([1, 2, 3, 2]))
-        self.assertFalse(has_doubles([1, 2, 3, 4]))
 
 
 
