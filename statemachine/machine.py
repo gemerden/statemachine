@@ -1,10 +1,8 @@
 import json
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
-from functools import partial
-
-from collections import defaultdict
+from functools import partial, wraps
 
 from statemachine.tools import Path
 
@@ -539,6 +537,35 @@ class StateMachine(StateParent, State):
             return nameify(item)
         return Path.apply_all(kwargs, convert)
 
+    def __call__(self, cls):
+        cls.machine = self
+        cls.state = property(fget=lambda obj: obj._state,
+                             fset=lambda obj, state: self.set_state(obj, state))
+
+        def init_decorator(func):
+            def new_init(obj, initial=None, *args, **kwargs):
+                func(obj, *args, **kwargs)
+                obj._state = str(self.get_initial_path(initial))
+            new_init.__name__ = func.__name__ # @wraps does not work here, must be __init__ is special
+            new_init.__doc__ = func.__doc__
+            return new_init
+
+        cls.__init__ = init_decorator(cls.__init__)
+
+        def trigger_decorator(func):
+            @wraps(func)
+            def new_trigger(obj, *args, **kwargs):
+                func(obj, *args, **kwargs)
+                return self.trigger(obj, func.__name__, *args, **kwargs)
+            return new_trigger
+
+        for trigger in self.triggers:
+            if not hasattr(cls, trigger):
+                raise NotImplementedError("trigger '%s' is not implemented in '%s'" % (trigger, cls.__name__))
+            setattr(cls, trigger, trigger_decorator(getattr(cls, trigger)))
+
+        return cls
+
     def __repr__(self):
         """
         :return: A JSON representation of the state machine, similar to the arguments of the state machine
@@ -597,4 +624,37 @@ class StatefulObject(object):
     def state(self, state):
         """ Causes the state machine to call all relevant callbacks and change the state of the object """
         self.machine.set_state(self, state)
+
+
+if __name__ == "__main__":
+    config = dict(
+        name="matter machine",
+        initial="off",
+        states=[
+            {"name": "on"},
+            {"name": "off"},
+        ],
+        transitions=[
+            {"old_state": "off", "new_state": "on", "triggers": "switch"},
+            {"old_state": "on", "new_state": "off", "triggers": "switch"},
+        ],
+    )
+
+    machine = state_machine(**config)
+
+    @machine
+    class LightSwitch(object):
+
+        def switch(self):
+            print "before switch:", self.state
+
+
+    light = LightSwitch(initial="on")
+
+    print light.state
+    light.switch()
+    print light.state
+    light.switch()
+    print light.state
+
 
