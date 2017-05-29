@@ -42,9 +42,9 @@ def callbackify(callbacks):
 def nameify(f, cast=lambda v: v):
     """ tries to give a name to an item"""
     try:
-        return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
+        return ".".join([f.__module__, f.__name__])
     except AttributeError:
-        pass
+        return getattr(f, "name", cast(f))
 
 
 def replace_in_list(lst, old_item, new_items):
