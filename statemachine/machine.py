@@ -484,10 +484,10 @@ class State(BaseState):
 
 class StateMachine(StateParent, State):
     """
-    This state represents each state in the state machine, as well as the state machine itself (basically saying that
-    each state is a state machine, and vice versa). Of course the root machine will never be entered or exited and
-    states without substates will not have transitions, etc., but only one state_machine class representing all states
-    and (nested) machines, simplifies navigation in case of transitions considerably.
+    This class represents each state with substates in the state machine, as well as the state machine itself (basically
+    saying that each state can be a state machine, and vice versa). Of course the root machine will never be entered or
+    exited and states without substates will not have transitions, etc., but only one state_machine class representing all
+    states and (nested) machines, simplifies navigation in case of transitions considerably.
 
     The arguments passed to the constructor (__init__) determine whether the state is a 'root'/'top' state machine,
     a nested state & machine or just a state; e.g. the root state machine does not have an on_exit/on_entry (because
