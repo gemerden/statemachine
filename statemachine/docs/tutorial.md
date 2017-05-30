@@ -37,11 +37,12 @@ from statemachine.machine import state_machine, TransitionError, StatefulObject
 
 class LightSwitch(StatefulObject):  # inherit from "StatefulObject" to get stateful behaviour
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
         ],
+        initial = "off",
         transitions=[
             {"old_state": "off", "new_state": "on"},
             {"old_state": "on", "new_state": "off"},
@@ -50,7 +51,7 @@ class LightSwitch(StatefulObject):  # inherit from "StatefulObject" to get state
 
 
 if __name__ == "__main__":
-    lightswitch = LightSwitch(initial="off")  # argument "initial" defines the initial state
+    lightswitch = LightSwitch()  # initial state is set by the state machine, but can be set by lightswitch.initial = "on"
     assert lightswitch.state == "off"  # the lightswitch is now in the "off" state
 
     lightswitch.state = "on"  # you can explicitly set the state through the "state" property
@@ -60,15 +61,15 @@ if __name__ == "__main__":
     assert lightswitch.state == "on"
 
     try:
-        lightswitch.state = "nix"  # raises exception; there is no state "nix"
+        lightswitch.state = "nix"  # this will not raise an exception; there is no state "nix"
     except TransitionError:
         pass
-    assert lightswitch.state == "off"
+    assert lightswitch.state == "on"
 ```
 Notes:
 * The state machine itself is stateless; it does not keep any information about the stateful objects,
-* If no `initial` argument to the constructor is given, the first state in the state machine is taken as initial state,
-* You can also define the statemachine outside the class and add it in the class definition as class attribute or in the constructor as normal attribute (it is called internally through `self.machine`),
+* If `initial` state is not explicitely defined, the first state in the state machine is taken as initial state,
+* You can also define the statemachine outside the class and add it in the class definition as class attribute or in the constructor as normal attribute (it is called internally through `self.state_machine`),
 * Another option is to define the arguments to the state machine constructor as a separate dictionary and use it to contruct the state machine `state_machine(**state_machine_config)`. This configuration can be serialized and persisted or sent over a network (This requires callbacks to be configured as strings).
 * By adding a statemachine to a stateful object in its constructor (instead of using a class attribute), you could use different state machines for objects of the same class,
 * If any `TransitionError` is raised, the state of the object is returned to the `old_state`,
@@ -81,45 +82,47 @@ Although this example adds states and transitions to the LightSwitch object, it 
 The next step is to add triggers to the state machine. Triggers cause the stateful object to change state; they allow you to control the state machine.  
 ```python
 
+from statemachine.machine import state_machine, TransitionError, StatefulObject
 
-from statemachine.machine import state_machine, StatefulObject, TransitionError
- 
+
 class LightSwitch(StatefulObject):
-
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
         ],
+        initial = "off",
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},  # adds 2 triggers for this transition
+            {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},  # adds two triggers for this transition
             {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "flick"]},
         ],
     )
 
+
 if __name__ == "__main__":
-    lightswitch = LightSwitch(initial="off")  # argument "initial" defines the initial state
-    assert lightswitch.state == "off"         # the lightswitch is now in the "off" state
-    
-    lightswitch.turn_on()                     # triggering "turn_on" turns the switch on
-    assert lightswitch.state == "on"          # the switch is now "on"
-    
-    lightswitch.turn_off()                    # turning the switch back off
-    assert lightswitch.state == "off"         # the switch is now "off" again
-    
+    lightswitch = LightSwitch()  # argument "initial" defines the initial state
+    assert lightswitch.state == "off"  # the lightswitch is now in the "off" state
+
+    lightswitch.turn_on()  # triggering "turn_on" turns the switch on
+    assert lightswitch.state == "on"  # the switch is now "on"
+
+    lightswitch.turn_off()  # turning the switch back off
+    assert lightswitch.state == "off"  # the switch is now "off" again
+
     try:
-        lightswitch.turn_off()                # cannot turn the switch off, it is already off (and there is no transition "off" to "off")
+        lightswitch.turn_off()  # cannot turn the switch off, it is already off (and there is no transition "off" to "off")
     except TransitionError:
         pass
-    assert lightswitch.state == "off"         # the object is still in a legal state!   
-    
-    lightswitch.flick()                       # another trigger to change state
-    assert lightswitch.state == "on"  
-           
-    lightswitch.flick()                       # flick() works both ways
-    assert lightswitch.state == "off"          
+    assert lightswitch.state == "off"  # the object is still in a legal state!
+
+    lightswitch.flick()  # another trigger to change state
+    assert lightswitch.state == "on"
+
+    lightswitch.flick()  # flick() works both ways
+    assert lightswitch.state == "off"
     
 ```
+
 Now we know how to cause transitions and to guard against illegal transitions. However nothing happens yet apart from the object changing  state.
  
 Notes:
@@ -149,11 +152,12 @@ def entry_printer(obj):
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on", "on_exit": "exit_printer", "on_entry": entry_printer},
             {"name": "off", "on_exit": "exit_printer", "on_entry": entry_printer},
         ],
+        initial = "off",
         transitions=[
             {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "transfer"},
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
@@ -175,9 +179,10 @@ class LightSwitch(StatefulObject):
 
 if __name__ == "__main__":
 
-    lightswitch = LightSwitch(initial="off")  # setting the initial state does not call any callback functions
-    lightswitch.flick()                       # another trigger to change state
-    lightswitch.flick()                       # flick() works both ways
+    lightswitch = LightSwitch()
+    lightswitch.initial = "off"  # setting the initial state does not call any callback functions
+    lightswitch.flick()          # another trigger to change state
+    lightswitch.flick()          # flick() works both ways
 
     #prints:
 
@@ -199,35 +204,37 @@ The arguments to the trigger method are passed to all the callback functions. Th
 ```python
 from statemachine.machine import state_machine, StatefulObject
 
+
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on", "on_entry": "time_printer"},
             {"name": "off", "on_entry": "time_printer"},
         ],
+        initial = "off",
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "name_printer"},
-            {"old_state": "on", "new_state": "off", "triggers": "flick", "on_transfer": "name_printer"},
+            {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "transfer_printer"},
+            {"old_state": "on", "new_state": "off", "triggers": "flick", "on_transfer": "transfer_printer"},
         ],
     )
 
     def time_printer(self, time, **kwargs):
         print "switch turned %s at %s" % (self.state, str(time))
 
-    def name_printer(self, name="who", **kwargs):
+    def transfer_printer(self, name="who", **kwargs):
         print "%s is using the switch" % name
 
 if __name__ == "__main__":
 
     from datetime import datetime
 
-    lightswitch = LightSwitch(initial="off")
+    lightswitch = LightSwitch()
     lightswitch.flick(name="bob", time=datetime(1999, 12, 31, 23, 59))
     lightswitch.flick(time=datetime(2000, 1, 1, 0, 0))
-    
+
     # prints:
-    
+
     # bob is using the switch
     # switch turned on at 1999-12-31 23:59:00
     # who is using the switch
@@ -248,8 +255,10 @@ The implementation has the same features as those for callbacks (it is a callbac
 ```python
 from statemachine.machine import state_machine, StatefulObject
 
+from statemachine.machine import state_machine, StatefulObject
+
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on", "condition": "is_nighttime"},
             {"name": "off"},
@@ -260,8 +269,8 @@ class LightSwitch(StatefulObject):
         ],
     )
 
-    def __init__(self, *args, **kwargs):
-        super(LightSwitch, self).__init__(*args, **kwargs)
+    def __init__(self, initial):
+        self.initial = initial
         self.daytime = False
 
     def is_nighttime(self):
@@ -278,7 +287,6 @@ if __name__ == "__main__":
     switch.daytime = True
     switch.flick()
     assert switch.state == "off"
-
 ```
 Notes:
 * Here we only show the use of condition for entry of a state. Conditions can also be used for specific transitions by adding them to the transition parameters `"condition": callback`.
@@ -294,7 +302,7 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -307,7 +315,6 @@ class LightSwitch(StatefulObject):
     )
 
     def __init__(self):
-        super(LightSwitch, self).__init__()
         self.history = [self.state]  # store the initial state
 
     def store_in_history(self, **kwargs):
@@ -345,7 +352,7 @@ In this case we implement the `flick` trigger method ourselves, to be able to up
 from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -356,13 +363,13 @@ class LightSwitch(StatefulObject):
         ],
     )
 
-    def __init__(self, time=0, *args, **kwargs):
-        super(LightSwitch, self).__init__(*args, **kwargs)
+    def __init__(self, initial, time=0):
+        self.initial = initial
         self.time = time
 
-    def flick(self, hours_later, *args, **kwargs):  # *args, **kwargs are only added to show passing arguments to the machine
-        self.time = (self.time + hours_later)%24    # increment time with hours and start counting from 0 if >24 (midnight)
-        self.machine.trigger(self, "flick", *args, **kwargs)  # use the trigger name to call the trigger method on the state machine
+    def flick(self, hours):
+        self.time = (self.time + hours)%24  # increment time with hours and start counting from 0 if >24 (midnight)
+        self.state_machine.trigger(self, "flick")
 
     def is_night(self):
         return self.time < 6 or self.time > 18
@@ -371,13 +378,12 @@ class LightSwitch(StatefulObject):
 if __name__ == "__main__":
     switch = LightSwitch(time=0, initial="on")
     assert switch.is_night()
-    switch.flick(hours_later=7)  # switch.time == 7
+    switch.flick(hours=7)  # switch.time == 7
     assert switch.state == "off"
-    switch.flick(hours_later=7)  # switch.time == 14
+    switch.flick(hours=7)  # switch.time == 14
     assert switch.state == "off"
-    switch.flick(hours_later=7)  # switch.time == 21
+    switch.flick(hours=7)  # switch.time == 21
     assert switch.state == "on"
-
 ```
 Note that `flick` has a `hours` argument that is not passed to the state machines `trigger' method.
 
@@ -389,19 +395,21 @@ Note that if multiple states are given for `new_state`, no triggers can be defin
 ```python
 from statemachine.machine import state_machine, StatefulObject
 
+
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on", "on_entry": "printer"},
             {"name": "off", "on_entry": "printer"},
             {"name": "broken", "on_entry": "printer"}
         ],
+        initial="off",
         transitions=[
             {"old_state": "off", "new_state": "on", "triggers": "flick"},
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
             {"old_state": "*", "new_state": "broken", "triggers": "smash"},
-            # or: {"old_state": ["on", "off", "broken"], "new_state": "broken", "triggers": "smash"},
+            # or: {"old_state": ["on", "off"], "new_state": "broken", "triggers": "smash"},
             {"old_state": "broken", "new_state": "off", "triggers": "fix"},
         ],
     )
@@ -412,7 +420,7 @@ class LightSwitch(StatefulObject):
 
 if __name__ == "__main__":
 
-    lightswitch = LightSwitch(initial="off")
+    lightswitch = LightSwitch()
     lightswitch.flick()
     lightswitch.smash()
     lightswitch.fix()
@@ -422,7 +430,6 @@ if __name__ == "__main__":
     # entering state 'on'
     # entering state 'broken'
     # entering state 'off'
-
 ```
 Note that only listed states and wildcards can be used for the "from" state (`old_state`) of the transition, since having multiple "to" states would require a condition to determine the state to go to.
 
@@ -437,7 +444,7 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         name="matter machine",
         states=[
             {"name": "on"},
@@ -455,7 +462,7 @@ class LightSwitch(StatefulObject):
     )
 
     def __init__(self, initial=None):
-        super(LightSwitch, self).__init__(initial=initial)
+        self.initial = initial
         self.old_state = None
 
     def store_state(self):
@@ -503,7 +510,7 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {
                 "name": "normal",
@@ -523,6 +530,10 @@ class LightSwitch(StatefulObject):
             {"old_state": "broken", "new_state": "normal", "triggers": "fix"},
         ],
     )
+
+    def printer(self):
+        print "entering state '%s'" % self.state
+
 
 if __name__ == "__main__":
 
@@ -554,7 +565,7 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -567,7 +578,6 @@ class LightSwitch(StatefulObject):
     )
 
     def __init__(self):
-        super(LightSwitch, self).__init__()
         self.managed = False
 
     @contextmanager
@@ -601,16 +611,16 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {
                 "name": "normal",
                 "on_exit": "on_exit_from_normal",
                 "states": [
                     {"name": "off", "on_exit": "on_exit_from_off"},
-                    {"name": "on", "on_entry": "on_entry_of_on", "on_exit": "on_exit_from_on", 
-                        "condition": "on_state_condition"},
+                    {"name": "on", "on_entry": "on_entry_of_on", "on_exit": "on_exit_from_on", "condition": "on_state_condition"},
                 ],
+                "initial": "off",
                 "transitions": [
                     {"old_state": "off", "new_state": "on", "triggers": "flick",
                         "on_transfer": "on_transfer_from_off_to_on", "condition": "off_on_transition_condition"},
@@ -627,6 +637,7 @@ class LightSwitch(StatefulObject):
                 "condition": "broken_state_condition",
             }
         ],
+        initial="normal",
         transitions=[
             {"old_state": "normal", "new_state": "broken", "triggers": "smash",
                 "on_transfer": "on_transfer_from_normal_to_broken", "condition": "normal_broken_transition_condition"},
@@ -691,26 +702,28 @@ class LightSwitch(StatefulObject):
         return True
 
     @contextmanager
+    def normal_context_manager(self, *args, **kwargs):
+        print "entering context for 'normal', state =", self.state
+        yield
+        print "exiting context for 'normal', state =", self.state
+
+    @contextmanager
     def context_manager(self, *args, **kwargs):
         print "entering main context, state =", self.state
         yield
         print "exiting main context, state =", self.state
 
-    @contextmanager
-    def normal_context_manager(self, *args, **kwargs):
-        print "entering 'normal' context, state =", self.state
-        yield
-        print "exiting 'normal' context, state =", self.state
-
 
 
 if __name__ == "__main__":
 
-    lightswitch = LightSwitch(initial="normal.off")
+    lightswitch = LightSwitch()
     lightswitch.flick()
     print "-"
     lightswitch.smash()
+
     assert lightswitch.state == "broken"
+
 ```
 Running this will print:
 ```
@@ -745,7 +758,7 @@ Process finished with exit code 0
 
 Currently there are two code examples in the tutorial sections:
 1. One shows the use of multiple state machines interacting. 
-2. The other is an example of a simple graphical mood simulation, using [pygame](https://www.pygame.org/).
+2. The other is an not very polished example of a simple graphical mood simulation, using [pygame](https://www.pygame.org/).
 
 Although these examples work, they are pretty undocumented at the moment.
 

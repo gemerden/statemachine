@@ -42,7 +42,7 @@ class Registered(object):
 
 class Person(StatefulObject, Registered):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "happy", "on_entry": []},
             {"name": "neutral", "on_entry": []},

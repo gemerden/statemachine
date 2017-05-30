@@ -2,7 +2,7 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         name="matter machine",
         states=[
             {"name": "on"},
@@ -20,7 +20,7 @@ class LightSwitch(StatefulObject):
     )
 
     def __init__(self, initial=None):
-        super(LightSwitch, self).__init__(initial=initial)
+        self.initial = initial
         self.old_state = None
 
     def store_state(self):

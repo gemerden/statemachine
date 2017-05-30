@@ -3,7 +3,7 @@ from statemachine.machine import state_machine, StatefulObject
 
 class Room(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "empty", "on_entry": ["write_left", "turn_off_lights"], "condition": "is_empty"},
             {"name": "occupied", "on_entry": ["write_entered", "turn_on_lights"]},
@@ -35,11 +35,11 @@ class Room(StatefulObject):
         if person.room:
             person.room.exit(person=person)
         person.room = self
-        self.machine.trigger(self, "enter", person=person, **kwargs)
+        self.state_machine.trigger(self, "enter", person=person, **kwargs)
 
     def exit(self, **kwargs):
         self.people -= 1
-        self.machine.trigger(self, "exit", **kwargs)
+        self.state_machine.trigger(self, "exit", **kwargs)
 
     def is_empty(self, **kwargs):
         return self.people == 0
@@ -61,7 +61,7 @@ class Person(object):
 
 class Light(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "off", "on_entry": "write"},
             {"name": "on", "on_entry": "write"},

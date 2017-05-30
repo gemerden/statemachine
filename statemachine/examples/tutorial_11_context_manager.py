@@ -3,7 +3,7 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -16,7 +16,6 @@ class LightSwitch(StatefulObject):
     )
 
     def __init__(self):
-        super(LightSwitch, self).__init__()
         self.managed = False
 
     @contextmanager

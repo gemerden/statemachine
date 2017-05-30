@@ -187,14 +187,14 @@ def react(text):
 
 class Action(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
 
     )
 
 
 class Piece(StatefulObject, Sprite):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "happy", "on_entry": ["set_image", react("yippie")], "condition": "has_good_mood"},
             {"name": "normal", "on_entry": ["set_image", react("meh")], "condition": "has_normal_mood"},

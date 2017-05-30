@@ -3,11 +3,12 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on", "on_entry": "time_printer"},
             {"name": "off", "on_entry": "time_printer"},
         ],
+        initial = "off",
         transitions=[
             {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "transfer_printer"},
             {"old_state": "on", "new_state": "off", "triggers": "flick", "on_transfer": "transfer_printer"},
@@ -24,7 +25,7 @@ if __name__ == "__main__":
 
     from datetime import datetime
 
-    lightswitch = LightSwitch(initial="off")
+    lightswitch = LightSwitch()
     lightswitch.flick(name="bob", time=datetime(1999, 12, 31, 23, 59))
     lightswitch.flick(time=datetime(2000, 1, 1, 0, 0))
 

@@ -5,7 +5,7 @@ from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {
                 "name": "normal",
@@ -14,6 +14,7 @@ class LightSwitch(StatefulObject):
                     {"name": "off", "on_exit": "on_exit_from_off"},
                     {"name": "on", "on_entry": "on_entry_of_on", "on_exit": "on_exit_from_on", "condition": "on_state_condition"},
                 ],
+                "initial": "off",
                 "transitions": [
                     {"old_state": "off", "new_state": "on", "triggers": "flick",
                         "on_transfer": "on_transfer_from_off_to_on", "condition": "off_on_transition_condition"},
@@ -30,6 +31,7 @@ class LightSwitch(StatefulObject):
                 "condition": "broken_state_condition",
             }
         ],
+        initial="normal",
         transitions=[
             {"old_state": "normal", "new_state": "broken", "triggers": "smash",
                 "on_transfer": "on_transfer_from_normal_to_broken", "condition": "normal_broken_transition_condition"},
@@ -109,7 +111,7 @@ class LightSwitch(StatefulObject):
 
 if __name__ == "__main__":
 
-    lightswitch = LightSwitch(initial="normal.off")
+    lightswitch = LightSwitch()
     lightswitch.flick()
     print "-"
     lightswitch.smash()

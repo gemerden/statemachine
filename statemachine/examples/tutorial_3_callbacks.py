@@ -6,11 +6,12 @@ def entry_printer(obj):
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on", "on_exit": "exit_printer", "on_entry": entry_printer},
             {"name": "off", "on_exit": "exit_printer", "on_entry": entry_printer},
         ],
+        initial = "off",
         transitions=[
             {"old_state": "off", "new_state": "on", "triggers": "flick", "on_transfer": "transfer"},
             {"old_state": "on", "new_state": "off", "triggers": "flick"},
@@ -32,9 +33,10 @@ class LightSwitch(StatefulObject):
 
 if __name__ == "__main__":
 
-    lightswitch = LightSwitch(initial="off")  # setting the initial state does not call any callback functions
-    lightswitch.flick()                       # another trigger to change state
-    lightswitch.flick()                       # flick() works both ways
+    lightswitch = LightSwitch()
+    lightswitch.initial = "off"  # setting the initial state does not call any callback functions
+    lightswitch.flick()          # another trigger to change state
+    lightswitch.flick()          # flick() works both ways
 
     #prints:
 

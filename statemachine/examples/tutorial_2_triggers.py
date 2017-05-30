@@ -2,11 +2,12 @@ from statemachine.machine import state_machine, TransitionError, StatefulObject
 
 
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
         ],
+        initial = "off",
         transitions=[
             {"old_state": "off", "new_state": "on", "triggers": ["turn_on", "flick"]},  # adds two triggers for this transition
             {"old_state": "on", "new_state": "off", "triggers": ["turn_off", "flick"]},
@@ -15,7 +16,7 @@ class LightSwitch(StatefulObject):
 
 
 if __name__ == "__main__":
-    lightswitch = LightSwitch(initial="off")  # argument "initial" defines the initial state
+    lightswitch = LightSwitch()  # argument "initial" defines the initial state
     assert lightswitch.state == "off"  # the lightswitch is now in the "off" state
 
     lightswitch.turn_on()  # triggering "turn_on" turns the switch on

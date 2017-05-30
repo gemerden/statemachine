@@ -1,7 +1,7 @@
 from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on"},
             {"name": "off"},
@@ -12,13 +12,13 @@ class LightSwitch(StatefulObject):
         ],
     )
 
-    def __init__(self, time=0, *args, **kwargs):
-        super(LightSwitch, self).__init__(*args, **kwargs)
+    def __init__(self, initial, time=0):
+        self.initial = initial
         self.time = time
 
     def flick(self, hours):
         self.time = (self.time + hours)%24  # increment time with hours and start counting from 0 if >24 (midnight)
-        self.machine.trigger(self, "flick")
+        self.state_machine.trigger(self, "flick")
 
     def is_night(self):
         return self.time < 6 or self.time > 18

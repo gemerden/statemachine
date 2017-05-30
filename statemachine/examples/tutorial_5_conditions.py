@@ -1,7 +1,7 @@
 from statemachine.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    state_machine = state_machine(
         states=[
             {"name": "on", "condition": "is_nighttime"},
             {"name": "off"},
@@ -12,8 +12,8 @@ class LightSwitch(StatefulObject):
         ],
     )
 
-    def __init__(self, *args, **kwargs):
-        super(LightSwitch, self).__init__(*args, **kwargs)
+    def __init__(self, initial):
+        self.initial = initial
         self.daytime = False
 
     def is_nighttime(self):
