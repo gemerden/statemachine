@@ -95,7 +95,7 @@ class Transition(object):
             raise MachineError("inner transitions in a nested state machine cannot be defined at the outer level")
 
     def update_state(self, obj):
-        obj._state = str(self.machine.full_path + self.new_path + self.new_path.get_in(self.machine).initial_path)
+        obj._state = str(self.machine.path + self.new_path + self.new_path.get_in(self.machine).initial_path)
 
     @contextmanager
     def transitioning(self, obj):
@@ -337,7 +337,7 @@ class StateParent(BaseState):
         for (_, trigger), transitions in trigger_dict.iteritems():
             for i, transition in enumerate(transitions[:-1]):
                 if not (transition.condition or transition.new_state.condition):
-                    raise MachineError("unreachable transition %s for trigger %s" % (str(transitions[i+1]), trigger))
+                    raise MachineError("unreachable transition %s for trigger '%s'" % (str(transitions[i+1]), trigger))
         return trigger_dict
 
     def _get_context_manager(self, context_manager):
@@ -433,13 +433,13 @@ class State(BaseState):
         self.initial_path = Path()
 
     @property
-    def full_path(self):
+    def path(self):
         """ returns the path from the top state machine to this state """
         try:
-            return self.__full_path
+            return self.__path
         except AttributeError:
-            self.__full_path = Path(reversed([s.name for s in self.iter_up()]))
-            return self.__full_path
+            self.__path = Path(reversed([s.name for s in self.iter_up()]))
+            return self.__path
 
     @property
     def root_machine(self):
@@ -478,7 +478,7 @@ class State(BaseState):
             yield state
 
     def __str__(self):
-        return str(self.full_path)
+        return str(self.path)
 
 
 class StateMachine(StateParent, State):
@@ -501,21 +501,21 @@ class StateMachine(StateParent, State):
     def get_initial_path(self, initial=None):
         """ returns the path string to the actual initial state the object will be in """
         try:
-            full_initial_path = Path(initial or ()).get_in(self).get_nested_initial_state().full_path
+            full_initial_path = Path(initial or ()).get_in(self).get_nested_initial_state().path
         except KeyError:
             raise TransitionError("state '%s' does not exist in state '%s'" % (initial, self.name))
-        return full_initial_path.tail(self.full_path)
+        return full_initial_path.tail(self.path)
 
     def do_prepare(self, obj, *args, **kwargs):
-        for state in Path(obj.state).tail(self.full_path).iter_out(self, include=True):
+        for state in Path(obj.state).tail(self.path).iter_out(self, include=True):
             state.prepare(obj, *args, **kwargs)
 
     def do_exit(self, obj, *args, **kwargs):
-        for state in Path(obj.state).tail(self.full_path).iter_out(self):
+        for state in Path(obj.state).tail(self.path).iter_out(self):
             state._exit(obj, *args, **kwargs)
 
     def do_enter(self, obj, *args, **kwargs):
-        for state in Path(obj.state).tail(self.full_path).iter_in(self):
+        for state in Path(obj.state).tail(self.path).iter_in(self):
             state._enter(obj, *args, **kwargs)
 
     def get_context_manager(self):
@@ -630,6 +630,7 @@ if __name__ == "__main__":
         ],
         transitions=[
             {"old_state": "off", "new_state": "on", "triggers": "switch"},
+            {"old_state": "off", "new_state": "off", "triggers": "switch"},
             {"old_state": "on", "new_state": "off", "triggers": "switch"},
         ],
     )
