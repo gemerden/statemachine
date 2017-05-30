@@ -1,8 +1,9 @@
+import inspect
 import json
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
-from functools import partial, wraps
+from functools import partial
 
 from statemachine.tools import Path
 
@@ -219,7 +220,10 @@ class StateParent(BaseState):
         for state in states:
             if state["name"] in state_dict:
                 raise MachineError("two states with the same name in state machine")
-            state_dict[state["name"]] = state_machine(machine=self, **state)
+            if "states" in state:
+                state_dict[state["name"]] = StateMachine(machine=self, **state)
+            else:
+                state_dict[state["name"]] = State(machine=self, **state)
         return state_dict
 
     def _create_transitions(self, transitions):
@@ -408,14 +412,6 @@ class StateParent(BaseState):
                 return True
         return False
 
-    def set_state(self, obj, state):
-        """ Executes the transition when called by setting the state: obj.state = 'some_state' """
-        if obj.state != state:
-            transition = self._get_transition(Path(obj.state), Path(state))
-            if not transition:
-                raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state))
-            transition.execute(obj)
-
 
 class State(BaseState):
     """class for the internal representation of a state without substates in the state machine"""
@@ -497,9 +493,9 @@ class StateMachine(StateParent, State):
     the object can never leave that state), states without sub-states do not get 'states' and 'transitions' arguments
     and nested state machines get both. See constructors for ChildState and ParentState for possible arguments.
     """
-    def __init__(self, **kwargs):
-        self.config = self._config(**kwargs)
-        super(StateMachine, self).__init__(**kwargs)
+    def __init__(self, **config):
+        self.config = self._config(**config)
+        super(StateMachine, self).__init__(**config)
         self.initial_path = self.get_initial_path()
 
     def get_initial_path(self, initial=None):
@@ -542,32 +538,39 @@ class StateMachine(StateParent, State):
             return nameify(item)
         return Path.apply_all(kwargs, convert)
 
+    def get_state(self, obj):
+        try:
+            return obj._state
+        except AttributeError:
+            obj._state = str(self.get_initial_path())
+            return obj._state
+
+    def set_state(self, obj, state):
+        """ Executes the transition when called by setting the state: obj.state = 'some_state' """
+        if obj.state != state:
+            transition = self._get_transition(Path(obj.state), Path(state))
+            if not transition:
+                raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state))
+            transition.execute(obj)  # this will fail when callbacks except extra arguments
+
+    def get_initial(self, obj):
+        return obj._initial
+
+    def set_initial(self, obj, initial):
+        obj._state = str(self.get_initial_path(initial))
+        obj._initial = obj._state
+
     def __call__(self, cls):
         cls.machine = self
-        cls.state = property(fget=lambda obj: obj._state,
-                             fset=lambda obj, state: self.set_state(obj, state))
-
-        def init_decorator(func):
-            def new_init(obj, initial=None, *args, **kwargs):
-                func(obj, *args, **kwargs)
-                obj._state = str(self.get_initial_path(initial))
-            new_init.__name__ = func.__name__ # @wraps does not work here, must be that __init__ is special
-            new_init.__doc__ = func.__doc__
-            return new_init
-
-        cls.__init__ = init_decorator(cls.__init__)
-
-        def trigger_decorator(func):
-            @wraps(func)
-            def new_trigger(obj, *args, **kwargs):
-                func(obj, *args, **kwargs)
-                return self.trigger(obj, func.__name__, *args, **kwargs)
-            return new_trigger
+        cls.state = property(self.get_state, self.set_state)
+        cls.initial = property(self.get_initial, self.set_initial)
 
         for trigger in self.triggers:
             if not hasattr(cls, trigger):
-                raise NotImplementedError("trigger '%s' is not implemented in '%s'" % (trigger, cls.__name__))
-            setattr(cls, trigger, trigger_decorator(getattr(cls, trigger)))
+                def trigger_function(obj, trigger=trigger, *args, **kwargs):
+                    return self.trigger(obj, trigger=trigger, *args, **kwargs)
+                trigger_function.__name__ = trigger
+                setattr(cls, trigger, trigger_function)
 
         return cls
 
@@ -581,9 +584,7 @@ class StateMachine(StateParent, State):
 
 
 def state_machine(**config):
-    if "states" in config:
-        return StateMachine(**config)
-    return State(**config)
+    return StateMachine(**deepcopy(config))
 
 
 class StatefulObject(object):
@@ -599,15 +600,13 @@ class StatefulObject(object):
 
      The last 2 allow for different machines to be used for objects of the same class.
     """
+    state_machine = None  # will be set by subclass
 
-    def __init__(self, initial=None, *args, **kwargs):
-        """
-        Constructor for the base class
-        :param initial: a ('.' separated) string indicating the initial (sub-)state of the object; if not given, take
-                the initial state as configured in the machine (either explicit or the first in list of states).
-        """
-        super(StatefulObject, self).__init__(*args, **kwargs)
-        self._state = str(self.machine.get_initial_path(initial))
+    initial = property(lambda self: self.state_machine.get_initial(self),
+                       lambda self, initial: self.state_machine.set_initial(self, initial))
+
+    state = property(lambda self: self.state_machine.get_state(self),
+                     lambda self, state: self.state_machine.set_state(self, state))
 
     def __getattr__(self, trigger):
         """
@@ -616,19 +615,9 @@ class StatefulObject(object):
         :param trigger: name of the trigger
         :return: partial function that allows the trigger to be called like obj.some_trigger(*args, **kwargs)
         """
-        if trigger in self.machine.triggers:
-            return partial(self.machine.trigger, obj=self, trigger=trigger)
+        if trigger in self.state_machine.triggers:
+            return partial(self.state_machine.trigger, obj=self, trigger=trigger)
         raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, trigger))
-
-    @property
-    def state(self):
-        """ returns the current (nested) state, as a '.' separated string """
-        return self._state
-
-    @state.setter
-    def state(self, state):
-        """ Causes the state machine to call all relevant callbacks and change the state of the object """
-        self.machine.set_state(self, state)
 
 
 if __name__ == "__main__":
@@ -648,11 +637,12 @@ if __name__ == "__main__":
     @state_machine(**config)
     class LightSwitch(object):
 
-        def switch(self):
-            print "before switch:", self.state
+        def __init__(self, initial):
+            self.initial = initial
 
 
     light = LightSwitch(initial="on")
+    print light.initial
 
     print light.state
     light.switch()
