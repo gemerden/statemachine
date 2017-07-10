@@ -343,16 +343,17 @@ class StateParent(BaseState):
                 return context_manager
 
     def __len__(self):
-        """ number of states """
+        """ number of sub-states """
         return len(self.sub_states)
 
     def __contains__(self, key):
         """ return whether the key exists in states or transitions """
         try:
             self[key]
-            return True
         except KeyError:
             return False
+        else:
+            return True
 
     def __getitem__(self, key):
         """
@@ -366,7 +367,7 @@ class StateParent(BaseState):
         raise KeyError("key is not a string or 2-tuple")
 
     def __iter__(self):
-        """ runs through states, not keys/state-names """
+        """ runs through sub_states, not keys/state-names """
         return self.sub_states.itervalues()
 
     def iter_initial(self, include_self=False):
