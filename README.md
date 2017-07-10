@@ -1,3 +1,5 @@
+![Travis](https://travis-ci.org/gemerden/statemachine.svg?branch=master)
+
 # statemachine
 Easy to use state machine to manage the state of python objects.
 
