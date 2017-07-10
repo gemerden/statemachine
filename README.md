@@ -80,7 +80,7 @@ The state machine in the module has the following rules for setting up states an
     * <C.E, A>: transition from a specific sub-state of C to A
     * <C, D.G>: transition from any sub-state of C to specific state D.G
     * <A, C>: transition from A to C.E, E being the initial state of C because it was explicitly set or because it is the first state in E
-    * <C.F, D.H>: transitioning from one sub-state in a state to another sub-state in another state. Note that:
+    * <C.F, D.H>: transitioning from one sub-state in a state to another sub-state in another state. Note that this would call (if present) on_exit on F and C and on_entry on D and H in that order.
 * non-allowed transitions:
     * <C.E, C.F>: inner transitions cannot be defined on the top level; define <E, F> in state C
 * adding switched transitions, given transition <A, B or C or D>:
