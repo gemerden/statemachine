@@ -402,9 +402,18 @@ class StateParent(BaseState):
     def trigger(self, obj, trigger, *args, **kwargs):
         """ Executes the transition when called through a trigger """
         for transition in self._get_transitions(Path(obj.state), trigger):
-            if transition.execute(obj, *args, **kwargs):
+            if transition.execute(obj=obj, *args, **kwargs):
                 return True
         return False
+
+    def get_trigger(self, obj, trigger):
+        """ Executes the transition when called through a trigger """
+        def inner_trigger(*args, **kwargs):
+            for transition in self._get_transitions(Path(obj.state), trigger):
+                if transition.execute(obj, *args, **kwargs):
+                    return True
+            return False
+        return inner_trigger
 
     def set_state(self, obj, state):
         """ Executes the transition when called by setting the state: obj.state = 'some_state' """
@@ -586,7 +595,7 @@ class StatefulObject(object):
         :return: partial function that allows the trigger to be called like obj.some_trigger(*args, **kwargs)
         """
         if trigger in self.machine.triggers:
-            return partial(self.machine.trigger, obj=self, trigger=trigger)
+            return self.machine.get_trigger(obj=self, trigger=trigger)
         raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, trigger))
 
     @property
