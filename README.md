@@ -1,4 +1,4 @@
-![Travis](https://travis-ci.org/gemerden/statemachine.svg?branch=master)
+![Travis](https://travis-ci.org/gemerden/statessvg?branch=master)
 
 # statemachine
 Easy to use state machine to manage the state of python objects.
@@ -11,7 +11,30 @@ This state machine implementation is developed with the following goals in mind:
 * Fully featured, including nested states, conditional transitions, shorthand notations, many ways to configure callbacks,
 * Simple state machines do not require advanced knowledge; complexity of configuration scales with complexity of requirements, 
 * One state machine instance can manage the state of many stateful objects; the objects only store their current state string,
-* Reasonably fast
+* Reasonably fast.
+
+## Code Example
+
+Here is a simple statemachine to give some idea of what the configuration looks like.
+```python
+class LightSwitch(StatefulObject):
+
+    machine = state_machine(
+        states=[
+            {"name": "on"},
+            {"name": "off"},
+        ],
+        transitions=[
+            {"old_state": "off", "new_state": "on", "triggers": ["flick"]},  
+            {"old_state": "on", "new_state": "off", "triggers": ["flick"]},
+        ],
+    )
+    
+    
+lightswitch = LightSwitch(initial="off") 
+lightswitch.flick()                  
+```
+
 
 ## Limitations
 The state machine module has been tested with python 2.7, if requested I will definitely consider python 3 support, depending on time constraints.
