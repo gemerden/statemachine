@@ -87,4 +87,12 @@ The state machine in the module has the following rules for setting up states an
     * B and C must have conditions attached in the transition, these condition will be run though in order
     * D does not need to have a condition attached meaning it will always be the next state if the conditions on the transition to B and C fail
 
+## Authors
+
+Lars van Gemerden (rational-it) - initial code and documentation.
+
+## License
+
+This project is licensed under the license in LICENSE.txt.
+
 
