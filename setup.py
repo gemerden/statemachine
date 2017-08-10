@@ -14,7 +14,7 @@ except (IOError, ImportError):
 
 setup(
     name='states',
-    version='0.1.2',
+    version='0.1.6',
     description='state machine for python classes',
     long_description=long_description,
     author='Lars van Gemerden',
