@@ -6,7 +6,7 @@ from functools import partial
 
 from collections import defaultdict
 
-from statemachine.tools import Path
+from states.tools import Path
 
 __author__  = "lars van gemerden"
 

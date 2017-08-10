@@ -3,7 +3,7 @@ import os, random
 import pygame
 from pygame.locals import *
 
-from statemachine.machine import StatefulObject, state_machine, state_machine
+from states.machine import StatefulObject, state_machine, state_machine
 
 
 def coin_toss(prob=0.5):

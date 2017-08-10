@@ -1,4 +1,4 @@
-from statemachine.machine import state_machine, TransitionError, StatefulObject
+from states.machine import state_machine, TransitionError, StatefulObject
 
 
 class LightSwitch(StatefulObject):

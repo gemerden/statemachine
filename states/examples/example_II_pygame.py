@@ -2,7 +2,7 @@ import random
 
 from collections import defaultdict
 
-from statemachine.machine import state_machine, StatefulObject
+from states.machine import state_machine, StatefulObject
 
 class Registered(object):
     

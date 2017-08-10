@@ -14,13 +14,13 @@ except (IOError, ImportError):
 
 setup(
     name='states',
-    version='0.1.1',
+    version='0.1.2',
     description='state machine for python classes',
     long_description=long_description,
     author='Lars van Gemerden',
     author_email='gemerden@gmail.com',
     license='MIT License',
-    packages=['statemachine'],
+    packages=['states'],
     install_requires=[],
     classifiers=[
         # How mature is this project? Common values are

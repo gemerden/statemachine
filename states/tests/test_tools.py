@@ -1,8 +1,8 @@
 import random
 import unittest
 
-from statemachine.machine import replace_in_list, has_doubles
-from statemachine.tools import Path
+from states.machine import replace_in_list, has_doubles
+from states.tools import Path
 
 __author__  = "lars van gemerden"
 

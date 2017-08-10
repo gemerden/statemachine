@@ -1,4 +1,4 @@
-from statemachine.machine import state_machine, StatefulObject
+from states.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
     machine = state_machine(
