@@ -1,6 +1,11 @@
 from collections import Sequence, Mapping, MutableMapping
 from random import random
 
+try:
+    basestring
+except NameError:
+    basestring = str
+
 __author__ = "lars van gemerden"
 
 
@@ -75,7 +80,7 @@ class Path(tuple):
         """
         path = path or Path()
         if isinstance(map, Mapping):
-            for k, m in map.iteritems():
+            for k, m in map.items():
                 for path_value in cls.iter_all(m, key_cast, path+k):
                     yield path_value
         elif isinstance(map, Sequence) and not isinstance(map, basestring):
@@ -91,7 +96,7 @@ class Path(tuple):
         Applies func to all elements without sub elements and replaces the original with the return value of func
         """
         if isinstance(map, MutableMapping):
-            for k, m in map.iteritems():
+            for k, m in map.items():
                 map[k] = cls.apply_all(m, func)
             return map
         elif isinstance(map, Sequence) and not isinstance(map, basestring):
@@ -115,9 +120,11 @@ class Path(tuple):
             string_s = (validate(s) for s in string_s.split(cls.separator) if len(s))
         return super(Path, cls).__new__(cls, string_s)
 
-    def __getslice__(self, i, j):
+    def __getitem__(self, key):
         """ makes sure the slicing returns a Path object, not a tuple"""
-        return Path(super(Path, self).__getslice__(i, j))
+        if isinstance(key, slice):
+            return self.__class__(tuple.__getitem__(self, key))
+        return tuple.__getitem__(self, key)
 
     def has_in(self, map):
         """

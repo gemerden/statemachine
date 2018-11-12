@@ -201,7 +201,7 @@ class StateParent(BaseState):
         if initial:
             return self.sub_states[initial]
         elif len(self.sub_states):
-            return self.sub_states[self.sub_states.keys()[0]]
+            return self.sub_states[list(self.sub_states.keys())[0]]
 
     def _get_triggers(self):
         """ gets a set of all trigger names in the state amchine and all sub states recursively """
@@ -327,7 +327,7 @@ class StateParent(BaseState):
 
     def _check_triggering(self, trigger_dict):
         """checks whether there are transitions that will never be reached and raises an error if so """
-        for (_, trigger), transitions in trigger_dict.iteritems():
+        for (_, trigger), transitions in trigger_dict.items():
             for i, transition in enumerate(transitions[:-1]):
                 if not (transition.condition or transition.new_state.condition):
                     raise MachineError("unreachable transition %s for trigger %s" % (str(transitions[i+1]), trigger))
@@ -368,7 +368,7 @@ class StateParent(BaseState):
 
     def __iter__(self):
         """ runs through sub_states, not keys/state-names """
-        return self.sub_states.itervalues()
+        return iter(self.sub_states.values())
 
     def iter_initial(self, include_self=False):
         """ iterates into nested states, yielding the initial state of every sub-statemachine"""
