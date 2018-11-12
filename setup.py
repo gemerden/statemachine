@@ -8,13 +8,13 @@ here = os.path.abspath(os.path.dirname(__file__))
 try:
     import pypandoc
     long_description = pypandoc.convert_file(os.path.join(here, 'README.md'), 'rst')
-except (IOError, ImportError):
+except Exception:
     with open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
         long_description = f.read()
 
 setup(
     name='states',
-    version='0.1.6',
+    version='0.1.7',
     description='state machine for python classes',
     long_description=long_description,
     author='Lars van Gemerden',
