@@ -1,14 +1,14 @@
 import os
+from codecs import open
 from setuptools import setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 
-
 setup(
     name='states',
-    version='0.1.8',
+    version='0.1.10',
     description='state machine for python classes',
-    long_description='see "https://github.com/gemerden/statemachine"',
+    long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on Pypi
     author='Lars van Gemerden',
     author_email='gemerden@gmail.com',
     license='MIT License',
