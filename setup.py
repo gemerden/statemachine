@@ -6,7 +6,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 
 setup(
     name='states',
-    version='0.1.7',
+    version='0.1.8',
     description='state machine for python classes',
     long_description='see "https://github.com/gemerden/statemachine"',
     author='Lars van Gemerden',
