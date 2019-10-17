@@ -2,8 +2,6 @@ import os
 from codecs import open
 from setuptools import setup
 
-here = os.path.abspath(os.path.dirname(__file__))
-
 setup(
     name='states',
     version='0.1.10',
