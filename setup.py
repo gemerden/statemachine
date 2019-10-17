@@ -1,22 +1,14 @@
 import os
-from codecs import open
 from setuptools import setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 
-# Get the long description from the README file; convert to .rst is possible
-try:
-    import pypandoc
-    long_description = pypandoc.convert_file(os.path.join(here, 'README.md'), 'rst')
-except Exception:
-    with open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
-        long_description = f.read()
 
 setup(
     name='states',
     version='0.1.7',
     description='state machine for python classes',
-    long_description=long_description,
+    long_description='see "https://github.com/gemerden/statemachine"',
     author='Lars van Gemerden',
     author_email='gemerden@gmail.com',
     license='MIT License',
