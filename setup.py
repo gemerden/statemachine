@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='states',
-    version='0.1.10',
+    version='0.1.13',
     description='state machine for python classes',
     long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on Pypi
     author='Lars van Gemerden',
@@ -27,7 +27,8 @@ setup(
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
     ],
-    python_requires='>=2.7, <3',
+    python_requires='>=2.7, >3',
     keywords='access data structure getter setter deleter iterator utility tool',
 )
