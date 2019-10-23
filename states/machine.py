@@ -423,6 +423,39 @@ class StateParent(BaseState):
                 raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state))
             transition.execute(obj)
 
+    def add_before_entry(self, state, *callbacks):
+        """ adds a dynamic (post-construction) callback to be called on entry of this or a sub-state"""
+        Path(state).get_in(self).before_entry.extend(callbacks)
+
+    def add_after_entry(self, state, *callbacks):
+        """ adds a dynamic (post-construction) callback to be called on entry of this or a sub-state"""
+        Path(state).get_in(self).after_entry.extend(callbacks)
+
+    def add_before_exit(self, state, *callbacks):
+        """ adds a dynamic (post-construction) callback to be called on exit of this or a sub-state"""
+        Path(state).get_in(self).before_exit.extend(callbacks)
+
+    def add_after_exit(self, state, *callbacks):
+        """ adds a dynamic (post-construction) callback to be called on exit of this or a sub-state"""
+        Path(state).get_in(self).after_exit.extend(callbacks)
+
+    def clear_before_entry(self, state):
+        """ clears all dynamic (post-construction) callbacks to be called on entry of this or a sub-state"""
+        Path(state).get_in(self).before_entry[:] = []
+
+    def clear_after_entry(self, state):
+        """ clears all dynamic (post-construction) callbacks to be called on entry of this or a sub-state"""
+        Path(state).get_in(self).after_entry[:] = []
+
+    def clear_before_exit(self, state):
+        """ clears all dynamic (post-construction) callbacks to be called on exit of this or a sub-state"""
+        Path(state).get_in(self).before_exit[:] = []
+
+    def clear_after_exit(self, state):
+        """ clears all dynamic (post-construction) callbacks to be called on exit of this or a sub-state"""
+        Path(state).get_in(self).after_exit[:] = []
+
+
 
 class State(BaseState):
     """class for the internal representation of a state without substates in the state machine"""
@@ -442,6 +475,10 @@ class State(BaseState):
         self.on_exit = callbackify(on_exit)
         self.condition = callbackify(condition) if condition else None
         self.initial_path = Path()
+        self.before_entry = []
+        self.after_entry = []
+        self.before_exit = []
+        self.after_exit = []
 
     @property
     def full_path(self):
@@ -461,10 +498,18 @@ class State(BaseState):
 
     def _exit(self, obj, *args, **kwargs):
         self.machine.before_any_exit(obj, *args, **kwargs)
+        for callback in self.before_exit:
+            callback(obj, *args, **kwargs)
         self.on_exit(obj, *args, **kwargs)
+        for callback in self.after_exit:
+            callback(obj, *args, **kwargs)
 
     def _enter(self, obj, *args, **kwargs):
+        for callback in self.before_entry:
+            callback(obj, *args, **kwargs)
         self.on_entry(obj, *args, **kwargs)
+        for callback in self.after_entry:
+            callback(obj, *args, **kwargs)
         self.machine.after_any_entry(obj, *args, **kwargs)
 
     def _get_transitions(self, old_path, trigger):

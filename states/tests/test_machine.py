@@ -3,6 +3,7 @@ import random
 import unittest
 from contextlib import contextmanager
 from copy import deepcopy
+from functools import partial
 
 from states.machine import state_machine, TransitionError, MachineError, StatefulObject, replace_in_list, has_doubles
 from states.tools import Path
@@ -1023,6 +1024,89 @@ class CallbackTest(unittest.TestCase):
 
     def test_callbacks(self):
         self.radio.switch(a=1, b=2, c=3, d=4, e=5, f=6, g=7, h=None)
+
+class DynamicCallbackTest(unittest.TestCase):
+
+    def setUp(self):
+        """called before any individual test method"""
+        self.machine = state_machine(
+            name="washer",
+            initial="off",
+            states=[
+                {"name": "off"},
+                dict(
+                    name="on",
+                    initial="am",
+                    states=[
+                        {"name": "am"},
+                        {"name": "fm"},
+                    ],
+                    transitions=[
+                        {"old_state": "am", "new_state": "fm", "triggers": "flip"},
+                        {"old_state": "fm", "new_state": "am", "triggers": "flip"},
+                    ]
+                )
+            ],
+            transitions=[
+                {"old_state": "off", "new_state": "on", "triggers": "switch"},
+                {"old_state": "on", "new_state": "off", "triggers": "switch"},
+            ],
+        )
+
+        class Radio(StatefulObject):
+            """object class fo which the state is managed"""
+            machine = self.machine
+
+            def __init__(self, testcase):
+                super(Radio, self).__init__()
+                self.testcase = testcase
+
+        self.radio = Radio(self)
+
+    def test_dynamic_callbacks(self):
+        labels = []
+
+        def callback(obj, label, **kwargs):
+            labels.append(label)
+
+        self.radio.machine.add_before_entry("off", partial(callback, label="before_entry: off"))
+        self.radio.machine.add_after_entry("off", partial(callback, label="after_entry: off"))
+        self.radio.machine.add_before_exit("off", partial(callback, label="before_exit: off"))
+        self.radio.machine.add_after_exit("off", partial(callback, label="after_exit: off"))
+        self.radio.machine.add_before_entry("on.am", partial(callback, label="before_entry: on.am"))
+        self.radio.machine.add_after_entry("on.am", partial(callback, label="after_entry: on.am"))
+        self.radio.machine.add_before_exit("on", partial(callback, label="before_exit: on"))
+        self.radio.machine.add_after_exit("on", partial(callback, label="after_exit: on"))
+
+        self.radio.switch()
+        self.radio.flip()
+        self.radio.switch()
+
+        self.assertEqual(labels, ["before_exit: off",
+                                  "after_exit: off",
+                                  "before_entry: on.am",
+                                  "after_entry: on.am",
+                                  "before_exit: on",
+                                  "after_exit: on",
+                                  "before_entry: off",
+                                  "after_entry: off"])
+
+        labels = []
+
+        self.radio.machine.clear_before_entry("off")
+        self.radio.machine.clear_after_entry("off")
+        self.radio.machine.clear_before_exit("off")
+        self.radio.machine.clear_after_exit("off")
+        self.radio.machine.clear_before_entry("on.am")
+        self.radio.machine.clear_after_entry("on.am")
+        self.radio.machine.clear_before_exit("on")
+        self.radio.machine.clear_after_exit("on")
+
+        self.radio.switch()
+        self.radio.switch()
+
+        self.assertEqual(labels, [])
+
 
 class TriggerOverrideTest(unittest.TestCase):
 
