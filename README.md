@@ -11,28 +11,33 @@ This state machine implementation is developed with the following goals in mind:
 * Fully featured, including nested states, conditional transitions, shorthand notations, many ways to configure callbacks,
 * Simple state machines do not require advanced knowledge; complexity of configuration scales with complexity of requirements, 
 * One state machine instance can manage the state of many stateful objects; the objects only store their current state string,
-* Reasonably fast.
+* Fast.
 
 ## Code Example
 
-Here is a simple statemachine to give some idea of what the configuration looks like.
+Here is a very simple statemachine to give some idea of what the configuration looks like.
 ```python
 class LightSwitch(StatefulObject):
 
     machine = state_machine(
+        name="switch",
+        initial="off",
         states=[
-            {"name": "on"},
-            {"name": "off"},
+            {"name": "on", "info": "not turned off"},
+            {"name": "off", "info": "not turned on"},
         ],
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": ["flick"]},  
-            {"old_state": "on", "new_state": "off", "triggers": ["flick"]},
+            {"old_state": "off", "new_state": "on", "triggers": "flick", "info": "turn the light on"},
+            {"old_state": "on", "new_state": "off", "triggers": "flick", "info": "turn the light off"},
         ],
+        after_any_entry="print"  # called after entering any state
     )
+
+    def print(self, **kwargs):
+        print("light switch entered state '%s'" % self.state)    
     
-    
-lightswitch = LightSwitch(initial="off") 
-lightswitch.flick()                  
+lightswitch = LightSwitch() 
+lightswitch.flick()  # prints: "light switch entered state 'on'"                 
 ```
 
 
@@ -65,14 +70,14 @@ The module has the following basic and some more advanced features:
     * to do this, create multiple trasnitions from the same state to different states and give them different conditions
 * state transitions can be started by explicitly setting the state (obj.state = "some_state"):
     * if a condition is set and not met on the transition an exception is raised, because the callbacks would not be called,
-    * if the callbacks function require extra arguments (apart from the state managed object), this method will fail
-* a number of callbacks can be installed for each state and transition, with obj the state managed object and **args, ***kwargs the arguments passed via the trigger to the callback, in calling order:
-    * StateMachine.prepare(self, obj. **args, ***kwargs),
-    * StateMachine.before_any_exit(self, obj. **args, ***kwargs),
-    * State.on_exit(self, obj. **args, ***kwargs),
-    * Transition.on_transfer(self, obj. **args, ***kwargs), # after this the state is changed on the object
-    * State.on_entry(self, obj. **args, ***kwargs),
-    * StateMachine.after_any_entry(self, obj. **args, ***kwargs)
+    * if the callbacks function require extra arguments (apart from the state managed object), this method will not work
+* a number of callbacks can be installed for each state and transition, with obj the state managed object and **kwargs the arguments passed via the trigger to the callback, in calling order:
+    * StateMachine.prepare(self, obj, **kwargs),
+    * StateMachine.before_any_exit(self, obj, **kwargs),
+    * State.on_exit(self, obj, **kwargs),
+    * Transition.on_transfer(self, obj, **kwargs), # after this the state is changed on the object
+    * State.on_entry(self, obj, **kwargs),
+    * StateMachine.after_any_entry(self, obj, **kwargs)
     * note that if a condition is present and not met, none of these functions are called, apart from prepare
 * callbacks can be methods on the class of which the state is managed by the machine:
     * This is the case when the calback is configured as a string (e.g. "on_entry": "do_callback"),
