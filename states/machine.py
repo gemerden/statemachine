@@ -138,7 +138,7 @@ class Transition(object):
 
 class BaseState(object):
     """base class for the both ChildState and ParentState"""
-    def __init__(self, name, *args, **kwargs):
+    def __init__(self, name, info="", *args, **kwargs):
         """
         Constructor of BaseState:
 
@@ -146,6 +146,7 @@ class BaseState(object):
         """
         super(BaseState, self).__init__(*args, **kwargs)
         self.name = self._check_name(name)
+        self.info = info
 
     def _check_name(self, name, exclude=(".", "*", "[", "]")):
         if any(c in name for c in exclude):
