@@ -1,10 +1,8 @@
-import os
-from codecs import open
 from setuptools import setup
 
 setup(
     name='states',
-    version='0.1.13',
+    version='0.2.1',
     description='state machine for python classes',
     long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on Pypi
     author='Lars van Gemerden',
@@ -30,5 +28,5 @@ setup(
         'Programming Language :: Python :: 3',
     ],
     python_requires='>=2.7, >3',
-    keywords='access data structure getter setter deleter iterator utility tool',
+    keywords='statemachine transitions nested callbacks condition contextmanager performance easy-to-use',
 )
