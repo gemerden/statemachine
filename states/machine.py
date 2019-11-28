@@ -72,7 +72,7 @@ class TransitionError(ValueError):
 
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
-    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=(), triggers=()):
+    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=(), triggers=(), info=""):
         self.machine = machine
         self._validate_states(old_state, new_state)
         self.old_path = Path(old_state)
@@ -82,6 +82,7 @@ class Transition(object):
         self.on_transfer = callbackify(on_transfer)
         self.condition = callbackify(condition) if condition else None
         self.triggers = triggers
+        self.info = info
 
     def _validate_states(self, old_state, new_state):
         """ assures that no internal transitions are defined on an outer state level"""
