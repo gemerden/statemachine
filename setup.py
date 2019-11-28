@@ -28,5 +28,5 @@ setup(
         'Programming Language :: Python :: 3',
     ],
     python_requires='>=2.7, >3',
-    keywords='statemachine transitions nested callbacks condition contextmanager performance easy-to-use',
+    keywords='statemachine states transitions nested callbacks condition contextmanager performance easy-to-use memory-efficient',
 )
