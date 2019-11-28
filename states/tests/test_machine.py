@@ -29,12 +29,12 @@ class SimplestStateMachineTest(unittest.TestCase):
                 name="matter machine",
                 initial="off",
                 states=[
-                    {"name": "on"},
-                    {"name": "off"},
+                    {"name": "on", "info": "not turned off"},
+                    {"name": "off", "info": "not turned on"},
                 ],
                 transitions=[
-                    {"old_state": "off", "new_state": "on", "triggers": "switch"},
-                    {"old_state": "on", "new_state": "off", "triggers": "switch"},
+                    {"old_state": "off", "new_state": "on", "triggers": "switch", "info": "turn the light on"},
+                    {"old_state": "on", "new_state": "off", "triggers": "switch", "info": "turn the light off"},
                 ],
             )
 
@@ -66,6 +66,15 @@ class SimplestStateMachineTest(unittest.TestCase):
         self.assertEqual(self.light.state, "on")
         self.light.state = "off"
         self.assertEqual(self.light.state, "off")
+
+    def test_info(self):
+        self.assertEqual(self.light.machine.sub_states["on"].info, "not turned off")
+        self.assertEqual(self.light.machine.transitions[Path("off"), Path("on")].info, "turn the light on")
+
+    def test_config(self):
+        machine_config = self.light.machine.config
+        self.assertEqual(machine_config, self.config)
+
 
 
 class StateMachineTest(unittest.TestCase):
