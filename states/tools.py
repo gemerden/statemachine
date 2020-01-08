@@ -1,55 +1,10 @@
-from collections import Sequence, Mapping, MutableMapping
-from random import random
+from typing import Sequence, Mapping, MutableMapping
 
-try:
-    basestring
-except NameError:
-    basestring = str
 
 __author__ = "lars van gemerden"
 
 
-def coin_toss(prob=0.5):
-    return random() < prob
-
-
 _marker = object()
-
-
-class Registered(object):
-
-    @classmethod
-    def register(cls, item):
-        if "_reg" not in cls.__dict__:
-            cls._reg = {}
-        if item.name in cls._reg:
-            raise ValueError("name '%s' already in class '%s'" % (item.name, cls.__name__))
-        cls._reg[item.name] = item
-
-    @classmethod
-    def remove(cls, item):
-        del cls._reg[item.name]
-
-    @classmethod
-    def get(cls, name):
-        return cls._reg[name]
-
-    @classmethod
-    def all(cls, flt):
-        return cls._reg.values()
-
-    @classmethod
-    def filter(cls, flt):
-        return [r for r in cls._reg.itervalues() if flt(r)]
-
-    @classmethod
-    def random(cls, flt=lambda v: True):
-        return random.choice(cls.filter(flt))
-
-    def __init__(self, name, *args, **kwargs):
-        super(Registered, self).__init__(*args, **kwargs)
-        self.name = name
-        self.__class__.register(self)
 
 
 class Path(tuple):
@@ -83,7 +38,7 @@ class Path(tuple):
             for k, m in map.items():
                 for path_value in cls.iter_all(m, key_cast, path+k):
                     yield path_value
-        elif isinstance(map, Sequence) and not isinstance(map, basestring):
+        elif isinstance(map, Sequence) and not isinstance(map, str):
             for i, m in enumerate(map):
                 for path_value in cls.iter_all(m, key_cast, path+i):
                     yield path_value
@@ -99,7 +54,7 @@ class Path(tuple):
             for k, m in map.items():
                 map[k] = cls.apply_all(m, func)
             return map
-        elif isinstance(map, Sequence) and not isinstance(map, basestring):
+        elif isinstance(map, Sequence) and not isinstance(map, str):
             for i, m in enumerate(map):
                 map[i] = cls.apply_all(m, func)
             return map

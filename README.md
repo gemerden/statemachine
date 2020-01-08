@@ -42,7 +42,7 @@ lightswitch.flick()  # prints: "light switch entered state 'on'"
 
 
 ## Limitations
-The state machine module has been tested with python 2.7, if requested I will definitely consider python 3 support, depending on time constraints.
+The state machine module has been tested with python 2.7 and python 3.
 
 ## Documentation
 To learn more check the extensive [tutorial](https://github.com/gemerden/statemachine/blob/master/statemachine/docs/tutorial.md).
@@ -60,14 +60,14 @@ The following basic state machine concepts are used
 ## Features
 The module has the following basic and some more advanced features:
 
-* trigger state transitions by setting trigger name in machine configuration:
+* enable triggering state transitions by setting trigger name(s) in machine configuration:
     * same trigger can be set for different transitions,
     * trigger method can pass arguments to callbacks like `on_exit` and `on_entry`,
-* conditions (also callbacks) can be set on states and transitions:
+* conditions (and callbacks) can be set on states and transitions:
     * if a transition is triggered, but the condition is not met, the transition does not take place
 * switched transitions can be used to go from one state to another depending on conditions
     * trigger can be used for conditional (switched) transition,
-    * to do this, create multiple trasnitions from the same state to different states and give them different conditions
+    * to do this, create multiple transitions from the same state to different states and give them different conditions
 * state transitions can be started by explicitly setting the state (obj.state = "some_state"):
     * if a condition is set and not met on the transition an exception is raised, because the callbacks would not be called,
     * if the callbacks function require extra arguments (apart from the state managed object), this method will not work
@@ -121,6 +121,6 @@ Lars van Gemerden (rational-it) - initial code and documentation.
 
 ## License
 
-This project is licensed under the license in LICENSE.txt.
+See LICENSE.txt.
 
 

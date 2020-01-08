@@ -1,10 +1,8 @@
 import json
-from collections import OrderedDict
-from contextlib import contextmanager
 from copy import deepcopy
-from functools import partial
-
+from contextlib import contextmanager
 from collections import defaultdict
+from typing import Mapping
 
 from states.tools import Path
 
@@ -18,6 +16,8 @@ def listify(list_or_item):
     else:
         return [list_or_item]
 
+def dummy(*args, **kwargs):
+    return True
 
 def callbackify(callbacks):
     """
@@ -72,19 +72,22 @@ class TransitionError(ValueError):
 
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
-    def __init__(self, machine, old_state, new_state, on_transfer=(), condition=(), triggers=(), info=""):
+    def __init__(self, machine, old_state, new_state, trigger, on_transfer=(), condition=None, info=""):
         self.machine = machine
-        self._validate_states(old_state, new_state)
+        self.trigger = trigger
         self.old_path = Path(old_state)
         self.new_path = Path(new_state)
-        self.old_state = self.old_path.get_in(machine)
-        self.new_state = self.new_path.get_in(machine)
+        self._validate(old_state, new_state)
+        try:
+            self.old_state = self.old_path.get_in(machine)
+            self.new_state = self.new_path.get_in(machine)
+        except KeyError as e:
+            raise MachineError(f"non-existing state {e} when constructing transitions")
         self.on_transfer = callbackify(on_transfer)
         self.condition = callbackify(condition) if condition else None
-        self.triggers = triggers
         self.info = info
 
-    def _validate_states(self, old_state, new_state):
+    def _validate(self, old_state, new_state):
         """ assures that no internal transitions are defined on an outer state level"""
         old_states = old_state.split(".", 1)
         new_states = new_state.split(".", 1)
@@ -164,9 +167,8 @@ class StateParent(BaseState):
                  prepare=(), before_any_exit=(), after_any_entry=(), context_manager=None, *args, **kwargs):
         """
         Constructor of the state machine, used to define all properties of the machine.
-        :param states: a list of state properties:
-        {
-            "name": "solid",  # the state name
+        :param states: a dict {name: {prop_name: property}} of state properties:
+        state_name: {
             "on_entry":[some_method, ..],  # callback function(s) called when an object enters the state (single or list)
             "on_exit":[some_method, ..]  # callback function(s) called when an object exits the state (single or list)
         }
@@ -174,7 +176,7 @@ class StateParent(BaseState):
         {
             "old_state": "solid",  # the name of the 'from' state of the transition
             "new_state": "liquid",  # the name of the 'to' state of the transition
-            "triggers": ["melt", "heat"],  # name of the triggers triggering the transition: e.g. obj.heat()
+            "trigger": ["melt", "heat"],  # name of the trigger(s) triggering the transition: e.g. obj.heat()
             "on_transfer": [printer],# callback function called when an objects transfers from state to
                 state(single or list)
             "condition": function(obj); called to determine whether a transtion will actually take place (return
@@ -186,11 +188,10 @@ class StateParent(BaseState):
         :param context_manager: context manager callback that context for other callbacks to run in (e.g. open and close a file)
 
         Note that all callback functions (including 'condition') have the signature:
-            func(obj, **kwargs); triggers can pass the args and kwargs
+            func(obj, **kwargs); trigger(s)can pass the args and kwargs
         """
         super(StateParent, self).__init__(name=name, *args, **kwargs)
         self.sub_states = self._create_states(states)
-        self.transitions = self._create_transitions(transitions)
         self.triggering = self._create_triggering(transitions)
         self.before_any_exit = callbackify(before_any_exit)
         self.after_any_entry = callbackify(after_any_entry)
@@ -214,40 +215,42 @@ class StateParent(BaseState):
 
     def _create_states(self, states):
         """creates a dictionary of state_name: BaseState key value pairs"""
-        state_dict = OrderedDict()
-        for state in states:
-            if state["name"] in state_dict:
-                raise MachineError("two states with the same name in state machine")
-            state_dict[state["name"]] = state_machine(machine=self, **state)
-        return state_dict
+        return {n: state_machine(machine=self, name=n, **p) for n, p in states.items()}
 
-    def _create_transitions(self, transitions):
+    def _create_transitions(self, transition_dicts):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
+        self._standardize_all(transition_dicts)
+        self._expand_switches(transition_dicts)
+        return self._expand_and_create(transition_dicts)
 
-        if has_doubles([(t["old_state"], t.get("new_state")) for t in transitions]):
-            raise MachineError("two transitions between same states in state machine configuration")
+    def _standardize_all(self, transition_dicts, req_keys=("old_state", "new_state", "trigger")):
+        def listify_state(state):
+            if isinstance(state, str) and state.strip() == "*":
+                return [s.name for s in self]
+            else:
+                return listify(state)
 
-        transition_dict = {}
-        transitions = self._expand_transitions(transitions)
-        for transition in transitions:
-            old_path, new_path = Path(transition["old_state"]), Path(transition["new_state"])
+        for trans_dict in transition_dicts:
+            for key in req_keys:
+                if key not in trans_dict:
+                    raise MachineError(f"key {key} missing from transition {trans_dict}")
+            trans_dict["old_state"] = listify_state(trans_dict["old_state"])
+            new_state = trans_dict["new_state"]
+            if isinstance(new_state, Mapping):
+                for switch in new_state.values():
+                    switch["condition"] = listify(switch.get("condition", ()))
+                    switch["on_transfer"] = listify(switch.get("on_transfer", ()))
+            else:
+                new_state = listify_state(new_state)
+                if len(new_state) > 1:
+                    raise MachineError(f"cannot have transition {trans_dict['new_state']}to multiple states without conditions")
+                else:
+                    trans_dict["new_state"] = new_state
 
-            if (old_path, new_path) in transition_dict:
-                raise MachineError("two transitions between same sub_states in state machine")
+            trans_dict["trigger"] = listify(trans_dict.get("trigger", ()))
+            trans_dict["on_transfer"] = listify(trans_dict.get("on_transfer", ()))
 
-            if not (old_path.has_in(self) and new_path.has_in(self)):
-                raise MachineError("non-existing state when constructing transitions")
-
-            transition_dict[old_path, new_path] = self.transition_class(machine=self, **transition)
-        return transition_dict
-
-    def _expand_transitions(self, transitions):
-        self._expand_switches(transitions)
-        self._expand_listed(transitions)
-        self._expand_wildcards(transitions)
-        return transitions
-
-    def _expand_switches(self, transitions):
+    def _expand_switches(self, transition_dicts):
         """
         Replaces switched transitions with multiple transitions. A basic switched transition looks like:
         {
@@ -257,82 +260,66 @@ class StateParent(BaseState):
                 {"name": "state_name_2", "condition": condition_func_2},
                 {"name": "state_name_3"}  # no condition means default
             ],
-            triggers = ["..."]
+            trigger = ["..."]
         }
         Note that transitions will be checked in order of appearance in new_states.
 
-        :param transitions: the transition configurations
+        :param transition_dicts: the transition configurations
         :return: transition configurations where switched transitions have been replaced with
                  multiple 'normal' transitions
         """
-        def exists(old, new, _marker=object()):
-            return any(old == t["old_state"] and new == t.get("new_state", _marker) for t in transitions)
-
-        for trans in transitions[:]:
-            if "new_states" in trans:
+        for trans_dict in transition_dicts[:]:
+            if isinstance(trans_dict["new_state"], Mapping):
+                if "condition" in trans_dict:
+                    raise MachineError("switched transitions cannot have a new state independent 'condition'")
                 try:
-                    new_transes = []
-                    if any(key in trans for key in ["new_state", "condition"]):
-                        raise MachineError("switched transitions cannot have a single 'new_state' or 'condition'")
-                    for new_state in trans["new_states"]:
-                        if exists(trans["old_state"], new_state["name"]):
-                            raise MachineError("switched transition <%s, %s> overrides existing transition" %
-                                               (trans["old_state"], new_state["name"]))
-                        new_trans = trans.copy()
-                        del new_trans["new_states"]
-                        new_trans.update(new_state=new_state["name"],
-                                         on_transfer=new_state.get("on_transfer", ()),
-                                         condition=new_state.get("condition", ()))
-                        new_transes.append(new_trans)
-                    replace_in_list(transitions, trans, new_transes)
+                    new_transition_dicts = []
+                    for new_state, switch in trans_dict["new_state"].items():
+                        new_trans_dict = trans_dict.copy()
+                        new_trans_dict.update(new_state=[new_state],
+                                              on_transfer=trans_dict["on_transfer"] + switch["on_transfer"],
+                                              condition=switch["condition"])
+                        new_transition_dicts.append(new_trans_dict)
+                    replace_in_list(transition_dicts, trans_dict, new_transition_dicts)
                 except KeyError as e:
                     raise MachineError("missing parameter '%s' in switched transition" % e)
 
-    def _expand_listed(self, transitions):
-        for transition in transitions[:]:
-            if isinstance(transition["new_state"], (list, tuple)):
-                if "triggers" in transition:
-                    raise MachineError("transition %s with parameter 'triggers' has multiple end-states" % str(transition))
-            self._update_transitions(transition, transitions)
+    def _expand_and_create(self, transition_dicts):
+        trans_class = self.transition_class
+        transitions = []
+        for trans_dict in transition_dicts[:]:
+            if len(trans_dict["new_state"]) > 1:
+                if len(trans_dict["trigger"]):
+                    raise MachineError("transition %s has multiple unconditional end-states" % str(trans_dict))
+            for trigger in trans_dict.pop("trigger", ()):
+                for old_state in trans_dict["old_state"]:
+                    for new_state in trans_dict["new_state"]:
+                        new_trans_dict = trans_dict.copy()
+                        new_trans_dict.update(old_state=old_state,
+                                              new_state=new_state)
+                        transitions.append(trans_class(machine=self, trigger=trigger, **new_trans_dict))
+        return transitions
 
-    def _expand_wildcards(self, transitions):
-        for transition in transitions[:]:
-            if transition["old_state"] == "*" or transition["new_state"] == "*":
-                if transition["old_state"] == "*":
-                    transition["old_state"] = [s.name for s in self]
-                if transition["new_state"] == "*":
-                    transition["new_state"] = [s.name for s in self]
-                self._update_transitions(transition, transitions, self_transition=True)
-
-    def _update_transitions(self, transition, transitions, self_transition=True):
-
-        def exists(old, new):
-            return any(old == t["old_state"] and new == t["new_state"] for t in transitions)
-
-        index = transitions.index(transition)
-        transitions.remove(transition)
-        for i, old_state in enumerate(listify(transition["old_state"])):
-            for j, new_state in enumerate(listify(transition["new_state"])):
-                if not exists(old_state, new_state) and (self_transition or old_state != new_state):
-                    new_transition = transition.copy()
-                    new_transition.update(old_state=old_state, new_state=new_state)
-                    transitions.insert(index+i+j, new_transition)
-
-    def _create_triggering(self, transitions):
+    def _create_triggering(self, transition_dicts):
         """creates a dictionary of (old state name/path, trigger name): Transition key value pairs"""
+        transitions = self._create_transitions(transition_dicts)
         trigger_dict = defaultdict(list)
         for transition in transitions:
-            old_path, new_path = Path(transition["old_state"]), Path(transition["new_state"])
-            for trigger_name in listify(transition.get("triggers", ())):
-                trigger_dict[(old_path, trigger_name)].append(self.transitions[old_path, new_path])
+            trigger_dict[transition.old_path, transition.trigger].append(transition)
         return self._check_triggering(trigger_dict)
 
     def _check_triggering(self, trigger_dict):
         """checks whether there are transitions that will never be reached and raises an error if so """
-        for (_, trigger), transitions in trigger_dict.items():
+        seen = set()
+        for (old_state, trigger), transitions in trigger_dict.items():
             for i, transition in enumerate(transitions[:-1]):
                 if not (transition.condition or transition.new_state.condition):
                     raise MachineError("unreachable transition %s for trigger %s" % (str(transitions[i+1]), trigger))
+            for transition in transitions:
+                key = (old_state, transition.new_state, trigger)
+                if key in seen:
+                    raise MachineError(f"transition {old_state}, {transition.new_state} and trigger {trigger} already exists")
+                seen.add(key)
         return trigger_dict
 
     def _get_context_manager(self, context_manager):
@@ -365,7 +352,7 @@ class StateParent(BaseState):
         if isinstance(key, str):
             return self.sub_states[key]
         elif isinstance(key, tuple) and len(key) == 2:
-            return self.transitions[Path(key[0]), Path(key[1])]
+            return self.triggering[Path(key[0]), key[1]]
         raise KeyError("key is not a string or 2-tuple")
 
     def __iter__(self):
@@ -391,16 +378,6 @@ class StateParent(BaseState):
                 return self.triggering[path, trigger]
         return self[old_path[0]]._get_transitions(old_path[1:], trigger)
 
-    def _get_transition(self, old_path, new_path):
-        """ get the correct transition when the state of an statefull object is set (obj.state = "some_state")"""
-        for old_p in reversed(list(old_path.iter_paths())):
-            for new_p in reversed(list(new_path.iter_paths())):
-                if (old_p, new_p) in self.transitions:
-                    return self.transitions[old_p, new_p]
-        if len(old_path) and len(new_path) and  old_path[0] == new_path[0]:
-            return self[old_path[0]]._get_transition(old_path[1:], new_path[1:])
-        raise TransitionError("transition <%s, %s> does not exist" % (old_path, new_path))
-
     def trigger(self, obj, trigger, *args, **kwargs):
         """ Executes the transition when called through a trigger """
         for transition in self._get_transitions(Path(obj.state), trigger):
@@ -416,47 +393,6 @@ class StateParent(BaseState):
                     return True
             return False
         return inner_trigger
-
-    def set_state(self, obj, state):
-        """ Executes the transition when called by setting the state: obj.state = 'some_state' """
-        if obj.state != state:
-            transition = self._get_transition(Path(obj.state), Path(state))
-            if not transition:
-                raise TransitionError("transition <%s, %s> does not exist"  % (obj.state, state))
-            transition.execute(obj)
-
-    def add_before_entry(self, state, *callbacks):
-        """ adds a dynamic (post-construction) callback to be called on entry of this or a sub-state"""
-        Path(state).get_in(self).before_entry.extend(callbacks)
-
-    def add_after_entry(self, state, *callbacks):
-        """ adds a dynamic (post-construction) callback to be called on entry of this or a sub-state"""
-        Path(state).get_in(self).after_entry.extend(callbacks)
-
-    def add_before_exit(self, state, *callbacks):
-        """ adds a dynamic (post-construction) callback to be called on exit of this or a sub-state"""
-        Path(state).get_in(self).before_exit.extend(callbacks)
-
-    def add_after_exit(self, state, *callbacks):
-        """ adds a dynamic (post-construction) callback to be called on exit of this or a sub-state"""
-        Path(state).get_in(self).after_exit.extend(callbacks)
-
-    def clear_before_entry(self, state):
-        """ clears all dynamic (post-construction) callbacks to be called on entry of this or a sub-state"""
-        Path(state).get_in(self).before_entry[:] = []
-
-    def clear_after_entry(self, state):
-        """ clears all dynamic (post-construction) callbacks to be called on entry of this or a sub-state"""
-        Path(state).get_in(self).after_entry[:] = []
-
-    def clear_before_exit(self, state):
-        """ clears all dynamic (post-construction) callbacks to be called on exit of this or a sub-state"""
-        Path(state).get_in(self).before_exit[:] = []
-
-    def clear_after_exit(self, state):
-        """ clears all dynamic (post-construction) callbacks to be called on exit of this or a sub-state"""
-        Path(state).get_in(self).after_exit[:] = []
-
 
 
 class State(BaseState):
@@ -589,6 +525,7 @@ class StateMachine(StateParent, State):
         return state
 
     def _config(self, **kwargs):
+        """ deepcopy can be a problem with non-toplevel callbacks """
         kwargs = deepcopy(kwargs)
         def convert(item):
             if isinstance(item, str):
@@ -634,6 +571,13 @@ class StatefulObject(object):
         super(StatefulObject, self).__init__(*args, **kwargs)
         self._state = str(self.machine.get_initial_path(initial))
 
+    def trigger_initial(self, **kwargs):
+        """
+        use this to call the 'on_entry' callbacks of the initial state, just after initialization, can be used if
+        e.g. the instance must first get an ID by committing to database. Otherwise use if necessary.
+        """
+        self.machine.do_enter(self, **kwargs)
+
     def __getattr__(self, trigger):
         """
         Allows calling the triggers to cause a transition; the triggers return a boolean indicating whether the
@@ -649,9 +593,3 @@ class StatefulObject(object):
     def state(self):
         """ returns the current (nested) state, as a '.' separated string """
         return self._state
-
-    @state.setter
-    def state(self, state):
-        """ Causes the state machine to call all relevant callbacks and change the state of the object """
-        self.machine.set_state(self, state)
-
