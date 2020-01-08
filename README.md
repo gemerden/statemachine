@@ -22,10 +22,10 @@ class LightSwitch(StatefulObject):
     machine = state_machine(
         name="switch",
         initial="off",
-        states=[
-            {"name": "on", "info": "not turned off"},
-            {"name": "off", "info": "not turned on"},
-        ],
+        states={
+            "on": {"info": "not turned off"},
+            "off": {"info": "not turned on"},
+        },
         transitions=[
             {"old_state": "off", "new_state": "on", "triggers": "flick", "info": "turn the light on"},
             {"old_state": "on", "new_state": "off", "triggers": "flick", "info": "turn the light off"},
