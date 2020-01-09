@@ -200,6 +200,20 @@ class StateParent(BaseState):
         self.initial_state = self._get_initial_state(initial)
         self.triggers = self._get_triggers()
 
+    @property
+    def states(self):
+        """ the names of the states """
+        return list(self.sub_states)
+
+    @property
+    def transitions(self):
+        """ 2-tuples of the old and new state names of all transitions """
+        all_transitions = set()
+        for transitions in self.triggering.values():
+            for transition in transitions:
+                all_transitions.add((str(transition.old_path), str(transition.new_path)))
+        return all_transitions
+
     def _get_initial_state(self, initial):
         if initial:
             return self.sub_states[initial]
@@ -207,7 +221,7 @@ class StateParent(BaseState):
             return self.sub_states[list(self.sub_states.keys())[0]]
 
     def _get_triggers(self):
-        """ gets a set of all trigger names in the state amchine and all sub states recursively """
+        """ gets a set of all trigger names in the state machine and all sub states recursively """
         triggers = set(t[1] for t in self.triggering)
         for state in self:
             triggers.update(state._get_triggers())
