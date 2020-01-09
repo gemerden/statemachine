@@ -1,6 +1,8 @@
 # statemachine
 Easy to use state machine to manage the state of python objects.
 
+Note: this is the python >= 3.6 version of the module. For the previous version see branch "states2". This version is not backward compatible (it uses the ordered dicts introduced in python 3.6)
+
 ## Introduction
 This state machine implementation is developed with the following goals in mind:
 
@@ -9,21 +11,23 @@ This state machine implementation is developed with the following goals in mind:
 * Fully featured, including nested states, conditional transitions, shorthand notations, many ways to configure callbacks,
 * Simple state machines do not require advanced knowledge; complexity of configuration scales with complexity of requirements, 
 * One state machine instance can manage the state of many stateful objects; the objects only store their current state string,
-* Fast.
+* Fast and memory efficient.
+
+## installation
+To install the module you can use: `pip install states3`
 
 ## Code Example
 
-Here is a very simple statemachine to give some idea of what the configuration looks like.
+Here is a simple statemachine to give some idea of what the configuration looks like.
 ```python
 from states.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
     machine = state_machine(
-        name="switch",
         initial="off",
         states={
-            "on": {"info": "not turned off"},
-            "off": {"info": "not turned on"},
+            "on": {"info": "see the light"},
+            "off": {"info": "stay in dark"},
         },
         transitions=[
             {"old_state": "off", "new_state": "on", "trigger": "flick", "info": "turn the light on"},
@@ -71,17 +75,17 @@ The module has the following basic and some more advanced features:
     * if a condition is set and not met on the transition an exception is raised, because the callbacks would not be called,
     * if the callbacks function require extra arguments (apart from the state managed object), this method will not work
 * a number of callbacks can be installed for each state and transition, with obj the state managed object and **kwargs the arguments passed via the trigger to the callback, in calling order:
-    * StateMachine.prepare(self, obj, **kwargs),
-    * StateMachine.before_any_exit(self, obj, **kwargs),
-    * State.on_exit(self, obj, **kwargs),
-    * Transition.on_transfer(self, obj, **kwargs), # after this the state is changed on the object
-    * State.on_entry(self, obj, **kwargs),
-    * StateMachine.after_any_entry(self, obj, **kwargs)
+    * `StateMachine.prepare(self, obj, **kwargs)`,
+    * `StateMachine.before_any_exit(self, obj, **kwargs)`,
+    * `State.on_exit(self, obj, **kwargs)`,
+    * `Transition.on_transfer(self, obj, **kwargs)`, # after this the state is changed on the object
+    * `State.on_entry(self, obj, **kwargs)`,
+    * `StateMachine.after_any_entry(self, obj, **kwargs)`
     * note that if a condition is present and not met, none of these functions are called, apart from prepare
 * callbacks can be methods on the class of which the state is managed by the machine:
     * This is the case when the calback is configured as a string (e.g. "on_entry": "do_callback"),
 * wildcards and listed states can be used to define multiple transitions at once:
-    * e.g. transition {"old_state": "*", "new_state": ["A", "B"]} would create transitions from all states to both state A and B
+    * e.g. transition `{"old_state": ["A", "B"], "new_state": "C"}` would create transitions from all states to both state A and B
 * nested states can be used to better organize states and transitions, states can be nested to any depth,
 * context managers can be used to create a context for all callbacks,
 * custom exceptions:
