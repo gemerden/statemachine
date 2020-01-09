@@ -7,6 +7,7 @@ setup(
     long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on PyPI
     author='Lars van Gemerden',
     author_email='gemerden@gmail.com',
+    url = 'https://github.com/gemerden/statemachine',
     license='MIT License',
     packages=['states'],
     install_requires=[],
