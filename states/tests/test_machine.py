@@ -699,15 +699,9 @@ class NestedStateMachineTest(unittest.TestCase):
                                ("transitions.0.old_state", "off.working"),
                                ("transitions.3.trigger", ["just_dry_already"]),
                                ("transitions.3.new_state", "on.drying"),
-                               ("transitions.3.condition", "NONE")]:
+                               ("transitions.3.condition", "NONE"),
+                               ("states.off.states.working.on_exit", "states.tests.test_machine.on_exit")]:
             self.assertEqual(Path(path).get_in(config, "NONE"), expected)
-
-        if sys.version_info.major == 3 and sys.version_info.minor <= 6:
-            self.assertEqual(Path("states.off.states.working.on_exit").get_in(config, "NONE"),
-                             "test_machine.on_exit")
-        else:
-            self.assertEqual(Path("states.off.states.working.on_exit").get_in(config, "NONE"),
-                             "states.tests.test_machine.on_exit")
 
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
