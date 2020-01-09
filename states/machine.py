@@ -163,7 +163,7 @@ class StateParent(BaseState):
 
     transition_class = Transition  # class used for the internal representation of transitions
 
-    def __init__(self, name="root state machine", states=(), transitions=(), initial=None,
+    def __init__(self, name="root", states=(), transitions=(), initial=None,
                  prepare=(), before_any_exit=(), after_any_entry=(), context_manager=None, *args, **kwargs):
         """
         Constructor of the state machine, used to define all properties of the machine.
@@ -564,9 +564,9 @@ class StatefulObject(object):
 
     def __init__(self, initial=None, *args, **kwargs):
         """
-        Constructor for the base class
+        Constructor for this base class
         :param initial: a ('.' separated) string indicating the initial (sub-)state of the object; if not given, take
-                the initial state as configured in the machine (either explicit or the first in list of states).
+                the initial state as configured in the machine (either explicit or the first in the list of states).
         """
         super(StatefulObject, self).__init__(*args, **kwargs)
         self._state = str(self.machine.get_initial_path(initial))
@@ -580,8 +580,8 @@ class StatefulObject(object):
 
     def __getattr__(self, trigger):
         """
-        Allows calling the triggers to cause a transition; the triggers return a boolean indicating whether the
-            transition took place.
+        Allows calling the triggers as methods to cause a transition; the triggers return a boolean indicating
+            whether the transition took place.
         :param trigger: name of the trigger
         :return: partial function that allows the trigger to be called like obj.some_trigger(*args, **kwargs)
         """

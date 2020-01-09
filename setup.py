@@ -1,10 +1,10 @@
 from setuptools import setup
 
 setup(
-    name='states',
-    version='0.2.1',
+    name='states3',
+    version='0.3.0',
     description='state machine for python classes',
-    long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on Pypi
+    long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on PyPI
     author='Lars van Gemerden',
     author_email='gemerden@gmail.com',
     license='MIT License',
@@ -24,9 +24,10 @@ setup(
 
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
     ],
-    python_requires='>=2.7, >3',
+    python_requires='>=3.6',
     keywords='statemachine states transitions nested callbacks condition contextmanager performance easy-to-use memory-efficient',
 )

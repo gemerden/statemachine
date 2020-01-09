@@ -3,7 +3,7 @@ import os, random
 import pygame
 from pygame.locals import *
 
-from states.machine import StatefulObject, state_machine, state_machine
+from states.machine import StatefulObject, state_machine
 
 
 def coin_toss(prob=0.5):
@@ -26,7 +26,7 @@ class PygameImages(dict):
         try:
             image = pygame.image.load(fullname)
         except Exception as e:
-            print 'Cannot load image:', fullname
+            print('Cannot load image:', fullname)
             raise SystemExit(e)
         # image = image.convert()
         if self.colorkey is not None:

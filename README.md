@@ -17,8 +17,9 @@ This state machine implementation is developed with the following goals in mind:
 
 Here is a very simple statemachine to give some idea of what the configuration looks like.
 ```python
-class LightSwitch(StatefulObject):
+from states.machine import state_machine, StatefulObject
 
+class LightSwitch(StatefulObject):
     machine = state_machine(
         name="switch",
         initial="off",
@@ -27,22 +28,22 @@ class LightSwitch(StatefulObject):
             "off": {"info": "not turned on"},
         },
         transitions=[
-            {"old_state": "off", "new_state": "on", "triggers": "flick", "info": "turn the light on"},
-            {"old_state": "on", "new_state": "off", "triggers": "flick", "info": "turn the light off"},
+            {"old_state": "off", "new_state": "on", "trigger": "flick", "info": "turn the light on"},
+            {"old_state": "on", "new_state": "off", "trigger": "flick", "info": "turn the light off"},
         ],
-        after_any_entry="print"  # called after entering any state
+        after_any_entry="print"  # after entering any state method 'print' is called 
     )
 
-    def print(self, **kwargs):
-        print("light switch entered state '%s'" % self.state)    
+    def print(self, name):
+        print(f"{name} turned the light {self.state}")    
     
 lightswitch = LightSwitch() 
-lightswitch.flick()  # prints: "light switch entered state 'on'"                 
+lightswitch.flick(name="Bob")  # prints: "Bob turned the light on"                 
 ```
 
 
 ## Limitations
-The state machine module has been tested with python 2.7 and python 3.
+The state machine module has been tested with python python 3.6 and higher.
 
 ## Documentation
 To learn more check the extensive [tutorial](https://github.com/gemerden/statemachine/blob/master/statemachine/docs/tutorial.md).

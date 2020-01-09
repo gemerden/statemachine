@@ -92,13 +92,9 @@ if __name__ == "__main__":
     Bob = Person("Bob")
 
     living.enter(person=Ann)
-    print '-'
     living.enter(person=Bob)
-    print '-'
     kitchen.enter(person=Ann)
-    print '-'
     bedroom.enter(person=Bob)
-    print '-'
     bedroom.enter(person=Ann)
 
 
