@@ -83,9 +83,9 @@ The module has the following basic and some more advanced features:
     * `StateMachine.after_any_entry(self, obj, **kwargs)`
     * note that if a condition is present and not met, none of these functions are called, apart from prepare
 * callbacks can be methods on the class of which the state is managed by the machine:
-    * This is the case when the calback is configured as a string (e.g. "on_entry": "do_callback"),
+    * This is the case the calback is configured as a string (e.g. `"on_entry": "do_callback"`),
 * wildcards and listed states can be used to define multiple transitions at once:
-    * e.g. transition `{"old_state": ["A", "B"], "new_state": "C"}` would create transitions from all states to both state A and B
+    * e.g. transition `{"old_state": ["A", "B"], "new_state": "C"}` would create 2 transitions from A and B to C,
 * nested states can be used to better organize states and transitions, states can be nested to any depth,
 * context managers can be used to create a context for all callbacks,
 * custom exceptions:
