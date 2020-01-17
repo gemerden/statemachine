@@ -44,7 +44,7 @@ lightswitch.flick(name="Bob")  # prints: "Bob turned the light on"
 
 
 ## Limitations
-The state machine module has been tested with python python 3.6 and higher.
+The state machine module has been tested with python 3.6 and higher.
 
 ## Documentation
 To learn more check the extensive [tutorial](https://github.com/gemerden/statemachine/blob/master/statemachine/docs/tutorial.md).
