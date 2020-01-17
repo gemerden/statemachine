@@ -29,8 +29,8 @@ class LightSwitch(StatefulObject):
             "off": {"info": "stay in dark"},
         },
         transitions=[
-            {"old_state": "off", "new_state": "on", "trigger": "flick", "info": "turn the light on"},
-            {"old_state": "on", "new_state": "off", "trigger": "flick", "info": "turn the light off"},
+            {"old_state": "off", "new_state": "on", "trigger": "flick"},
+            {"old_state": "on", "new_state": "off", "trigger": "flick"},
         ],
         after_any_entry="print"  # after entering any state method 'print' is called 
     )
