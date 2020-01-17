@@ -24,7 +24,6 @@ from states.machine import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
     machine = state_machine(
-        initial="off",
         states={
             "on": {"info": "see the light"},
             "off": {"info": "stay in dark"},
@@ -39,7 +38,7 @@ class LightSwitch(StatefulObject):
     def print(self, name):
         print(f"{name} turned the light {self.state}")    
     
-lightswitch = LightSwitch() 
+lightswitch = LightSwitch(initial="off") 
 lightswitch.flick(name="Bob")  # prints: "Bob turned the light on"                 
 ```
 
