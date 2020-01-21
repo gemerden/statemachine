@@ -20,7 +20,7 @@ To install the module you can use: `pip install states3`
 
 Here is a simple statemachine to give some idea of what the configuration looks like.
 ```python
-from states.machine import state_machine, StatefulObject
+from states import state_machine, StatefulObject
 
 class LightSwitch(StatefulObject):
     machine = state_machine(
@@ -70,9 +70,6 @@ The module has the following basic and some more advanced features:
 * switched transitions can be used to go from one state to another depending on conditions
     * trigger can be used for conditional (switched) transition,
     * to do this, create multiple transitions from the same state to different states and give them different conditions
-* state transitions can be started by explicitly setting the state (obj.state = "some_state"):
-    * if a condition is set and not met on the transition an exception is raised, because the callbacks would not be called,
-    * if the callbacks function require extra arguments (apart from the state managed object), this method will not work
 * a number of callbacks can be installed for each state and transition, with obj the state managed object and **kwargs the arguments passed via the trigger to the callback, in calling order:
     * `StateMachine.prepare(self, obj, **kwargs)`,
     * `StateMachine.before_any_exit(self, obj, **kwargs)`,
