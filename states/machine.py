@@ -401,8 +401,9 @@ class StateParent(BaseState):
 
     def get_trigger(self, obj, trigger):
         """ Executes the transition when called through a trigger """
+        transitions = self._get_transitions(Path(obj.state), trigger)
         def inner_trigger(*args, **kwargs):
-            for transition in self._get_transitions(Path(obj.state), trigger):
+            for transition in transitions:
                 if transition.execute(obj, *args, **kwargs):
                     return True
             return False
