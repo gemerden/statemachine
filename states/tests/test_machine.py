@@ -5,7 +5,9 @@ import unittest
 from contextlib import contextmanager
 from copy import deepcopy
 
-from states.machine import state_machine, TransitionError, MachineError, StatefulObject, replace_in_list, has_doubles
+from states import state_machine, StatefulObject, TransitionError, MachineError
+from states.machine import has_doubles, replace_in_list
+
 from states.tools import Path
 
 __author__ = "lars van gemerden"
