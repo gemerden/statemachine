@@ -81,8 +81,8 @@ class StateMachineTest(unittest.TestCase):
         self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
         self.temperature_ignore = True  # used to switch condition function on or off
 
-        def callback(obj, **kwrags):
-            """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
+        def callback(obj, **kwargs):
+            """checks whether the object arrives; callback_counter is used to check whether callbacks are all called"""
             self.assertEqual(type(obj), Matter)
             self.callback_counter += 1
 
