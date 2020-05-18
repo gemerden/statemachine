@@ -2,12 +2,12 @@ from setuptools import setup
 
 setup(
     name='states3',
-    version='0.3.2',
+    version='0.3.3',
     description='state machine for python classes',
     long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on PyPI
     author='Lars van Gemerden',
     author_email='gemerden@gmail.com',
-    url = 'https://github.com/gemerden/statemachine',
+    url='https://github.com/gemerden/statemachine',
     license='MIT License',
     packages=['states'],
     install_requires=[],
@@ -30,5 +30,5 @@ setup(
         'Programming Language :: Python :: 3.8',
     ],
     python_requires='>=3.6',
-    keywords='statemachine states transitions nested callbacks condition contextmanager performance easy-to-use memory-efficient',
+    keywords='statemachine states transitions nested multi-state callbacks condition contextmanager performance easy-to-use low-memory',
 )

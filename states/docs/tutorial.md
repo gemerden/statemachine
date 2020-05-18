@@ -1,7 +1,7 @@
 ## Statemachine Tutorial
 
 ---
-_This tutorial covers basic and advanced use of the `statemachine` module. All code examples can be found in the "\examples" folder._
+_This tutorial covers basic and advanced use of the `statemachine` module. Most code examples can be found in the "\examples" folder._
 
 ---
 
@@ -23,7 +23,7 @@ On entering, exiting or transitioning between states, actions can be executed th
 The following functions and classes are part of the public API of the statemachine.
 
 * `state_machine(**config)`: the function returning instances of the correct state machine class,
-* `StatefulObject(object)`: the class that can be subclassed to make (almost) any python object stateful,
+* `StatefulObject(object)/MultiStateObject(object)`: the class that can be subclassed to make (almost) any python object stateful,
 * exception classes:
     * `MachineError(Exception)`: raised in case of a misconfiguration of the state machine,
     * `TransitionError(Exception)`: raised when a state transition fails,
@@ -436,9 +436,9 @@ To model this the object (person) can have multiple state machines, as shown in 
 
  
 ```python
-from states.machine import state_machine, MultiStatefulObject
+from states.machine import state_machine, MultiStateObject
 
-class MoodyColor(MultiStatefulObject):
+class MoodyColor(MultiStateObject):
     color = state_machine(
         states=dict(
             red={'on_entry': 'on_entry'},

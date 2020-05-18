@@ -604,7 +604,7 @@ class StatefulObject(object):
         return getattr(self, trigger_name)
 
 
-class MultiStatefulObject(object):
+class MultiStateObject(object):
     machines = None
 
     def __init_subclass__(cls, **kwargs):
@@ -670,7 +670,7 @@ class MultiStatefulObject(object):
 
 if __name__ == '__main__':
 
-    class MultiSome(MultiStatefulObject):
+    class MultiSome(MultiStateObject):
 
         color = state_machine(
             states=dict(

@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 
 from states import state_machine, StatefulObject, TransitionError, MachineError
-from states.machine import has_doubles, replace_in_list, MultiStatefulObject
+from states.machine import has_doubles, replace_in_list, MultiStateObject
 
 from states.tools import Path
 
@@ -1062,7 +1062,7 @@ class TriggerOverrideTest(unittest.TestCase):
 class MultiStateTest(unittest.TestCase):
 
     def setUp(self):
-        class MoodyColor(MultiStatefulObject):
+        class MoodyColor(MultiStateObject):
             color = state_machine(
                 states=dict(
                     red={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
