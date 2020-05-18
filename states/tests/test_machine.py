@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 
 from states import state_machine, StatefulObject, TransitionError, MachineError
-from states.machine import has_doubles, replace_in_list
+from states.machine import has_doubles, replace_in_list, MultiStatefulObject
 
 from states.tools import Path
 
@@ -1057,6 +1057,111 @@ class TriggerOverrideTest(unittest.TestCase):
         switch.flick(hours=7)  # switch.time == 21
         self.assertTrue(switch.time == 21)
         self.assertTrue(switch.state == "on")
+
+
+class MultiStateTest(unittest.TestCase):
+
+    def setUp(self):
+        class MoodyColor(MultiStatefulObject):
+            color = state_machine(
+                states=dict(
+                    red={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
+                    blue={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
+                    green={'on_exit': 'on_exit', 'on_entry': 'on_entry'}
+                ),
+                transitions=[
+                    dict(old_state='red', new_state='blue', trigger=['next', 'change'], on_transfer='on_transfer'),
+                    dict(old_state='blue', new_state='green', trigger=['next', 'change'], on_transfer='on_transfer'),
+                    dict(old_state='green', new_state='red', trigger=['next', 'change'], on_transfer='on_transfer'),
+                ],
+                after_any_entry='count_calls'
+            )
+            mood = state_machine(
+                states=dict(
+                    good={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
+                    bad={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
+                    ugly={'on_exit': 'on_exit', 'on_entry': 'on_entry'}
+                ),
+                transitions=[
+                    dict(old_state='good', new_state='bad', trigger='next', on_transfer='on_transfer'),
+                    dict(old_state='bad', new_state='ugly', trigger='next', on_transfer='on_transfer'),
+                    dict(old_state='ugly', new_state='good', trigger='next', on_transfer='on_transfer'),
+                ],
+                after_any_entry='count_calls'
+            )
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.counter = 0
+                self.exit_history = []
+                self.entry_history = []
+                self.transfer_history = []
+
+            def count_calls(self):
+                self.counter += 1
+
+            def on_exit(self):
+                self.exit_history.append(self.state.copy())
+
+            def on_entry(self):
+                self.entry_history.append(self.state.copy())
+
+            def on_transfer(self):
+                self.transfer_history.append(self.state.copy())
+
+        self.state_class = MoodyColor
+
+    def test_combines(self):
+        moodycolor = self.state_class()
+        moodycolor.next()
+        assert moodycolor.counter == 2
+        assert moodycolor.color == 'blue'
+        assert moodycolor.mood == 'bad'
+        assert moodycolor.state == {'color': 'blue', 'mood': 'bad'}
+        n = 3
+        for _ in range(n):
+            moodycolor.next()
+        assert moodycolor.counter == 2 + n*2
+
+    def test_only_color(self):
+        moodycolor = self.state_class()
+        moodycolor.change()
+        assert moodycolor.counter == 1
+        assert moodycolor.color == 'blue'
+        assert moodycolor.mood == 'good'
+
+    def test_initial(self):
+        moodycolor = self.state_class(initial=dict(color='green', mood='ugly'))
+        assert moodycolor.color == 'green'
+        assert moodycolor.mood == 'ugly'
+        moodycolor.next()
+        assert moodycolor.counter == 2
+        assert moodycolor.color == 'red'
+        assert moodycolor.mood == 'good'
+
+    def test_trigger_initial(self):
+        moodycolor = self.state_class()
+        assert moodycolor.color == 'red'
+        assert moodycolor.mood == 'good'
+        moodycolor.trigger_initial()
+        assert moodycolor.entry_history == [{'color': 'red', 'mood': 'good'},
+                                            {'color': 'red', 'mood': 'good'}]
+        assert moodycolor.counter == 2
+        moodycolor.next()
+        assert moodycolor.counter == 4
+        assert moodycolor.color == 'blue'
+        assert moodycolor.mood == 'bad'
+
+    def test_callbacks(self):
+        moodycolor = self.state_class()
+        moodycolor.next()
+        assert moodycolor.exit_history == [{'color': 'red', 'mood': 'good'},
+                                           {'color': 'blue', 'mood': 'good'}]  # color already changed
+        assert moodycolor.entry_history == [{'color': 'blue', 'mood': 'good'},  # mood did not change yet
+                                            {'color': 'blue', 'mood': 'bad'}]
+        assert moodycolor.transfer_history == [{'color': 'red', 'mood': 'good'},
+                                               {'color': 'blue', 'mood': 'good'}]
+
 
 
 class TransitioningTest(unittest.TestCase):
