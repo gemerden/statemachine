@@ -427,6 +427,64 @@ Notes:
 
 Behind the scenes: for each state in `new_state` the state machine will create a normal conditional transition. A switched transition is shorthand for a number of conditional transitions.
  
+### Advanced: Multiple States
+
+Sometimes the problem at hand requires an object to have multiple relatively unrelated states. Think of a person with a 
+marital state (maried, unmaried, ..) and an employment status (employed, unemployed, sick, ...).
+
+To model this the object (person) can have multiple state machines, as shown in the simple exampe below (note the different baseclass): 
+
+ 
+```python
+from states.machine import state_machine, MultiStatefulObject
+
+class MoodyColor(MultiStatefulObject):
+    color = state_machine(
+        states=dict(
+            red={'on_entry': 'on_entry'},
+            blue={'on_entry': 'on_entry'},
+        ),
+        transitions=[
+            dict(old_state='red', new_state='blue', trigger='next'),
+            dict(old_state='blue', new_state='red', trigger='next'),
+        ],
+    )
+    mood = state_machine(
+        states=dict(
+            good={'on_entry': 'on_entry'},
+            bad={'on_entry': 'on_entry'},
+        ),
+        transitions=[
+            dict(old_state='good', new_state='bad', trigger='next'),
+            dict(old_state='bad', new_state='good', trigger='next'),
+        ],
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.last_call = None
+        self.counter = 0
+
+    def on_entry(self, call_name):
+        self.last_call = call_name
+        self.counter += 1
+
+if __name__ == "__main__":
+
+    moodycolor = MoodyColor()
+    moodycolor.next('next')
+    assert moodycolor.state == {'color': 'blue', 'mood': 'bad'}
+    assert moodycolor.color == 'blue'
+    assert moodycolor.mood == 'bad'
+    assert moodycolor.last_call == 'next'
+    assert moodycolor.counter == 2
+```
+Notes:
+* As you can see above, calling 'next' will make transition in both state machines occur, because both transitions define 'next' as trigger,
+* Getting an attribute with a state machine name (like 'moodycolor.mood') will return the state with respect to that state machine ('bad'),
+* Callbacks defined with a string are still looked up on the object; ofcourse different callbacks can be defined for each state machine,
+* Setting a custom initial state (top state of machine.states is default initial state), requires a dictionary like '{'color': 'blue', 'mood': 'bad'}'.
+
 ### Advanced: Nested States
 
 When the number of states an object can be in becomes larger, often it is helpful to use nested states. Each state here can be nested, meaning each state can have substates. 
