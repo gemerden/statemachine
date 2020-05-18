@@ -2,6 +2,7 @@ import json
 from copy import deepcopy
 from contextlib import contextmanager
 from collections import defaultdict
+from functools import partial
 from typing import Mapping
 
 from states.tools import Path
@@ -383,33 +384,23 @@ class StateParent(BaseState):
             yield state
             state = state.initial
 
-    def _get_transitions(self, old_path, trigger):
+    def _get_transitions(self, old_path, trigger_name):
         """
         gets the correct transitions when transitions are triggered obj.some_trigger() with argument 'trigger' the
          name of the trigger.
          """
         for path in old_path.iter_paths():
-            if (path, trigger) in self.triggering:
-                return self.triggering[path, trigger]
-        return self[old_path[0]]._get_transitions(old_path[1:], trigger)
+            if (path, trigger_name) in self.triggering:
+                return self.triggering[path, trigger_name]
+        return self[old_path[0]]._get_transitions(old_path[1:], trigger_name)
 
-    def trigger(self, obj, trigger, *args, _target=None, **kwargs):
+    def trigger(self, obj, trigger_name, *args, _target=None, **kwargs):
         """ Executes the transition when called through a trigger """
-        for transition in self._get_transitions(Path(obj.state), trigger):
+        for transition in self._get_transitions(Path(obj.state), trigger_name):
             if transition.execute(obj, *args, _target=_target, **kwargs):
                 return True
         return False
 
-    def get_trigger(self, obj, trigger, _target=None):
-        """ Executes the transition when called through a trigger """
-        transitions = self._get_transitions(Path(obj.state), trigger)
-
-        def inner_trigger(*args, **kwargs):
-            for transition in transitions:
-                if transition.execute(obj, *args, _target=_target, **kwargs):
-                    return True
-            return False
-        return inner_trigger
 
 
 class State(BaseState):
@@ -585,26 +576,29 @@ class StatefulObject(object):
         """ returns the current (nested) state, as a '.' separated string """
         return self._state
 
-    def __getattr__(self, trigger):
+    def __getattr__(self, trigger_name):
         """
         Allows calling the triggers as methods to cause a transition; the triggers return a boolean indicating
             whether the transition took place.
-        :param trigger: name of the trigger
+        :param trigger_name: name of the trigger
         :return: new function that allows the trigger to be called like obj.some_trigger(*args, **kwargs)
         """
-        if trigger not in self.machine.triggers:
-            raise AttributeError(f"{type(self).__name__} object has no attribute '{trigger}'")
+        if trigger_name not in self.machine.triggers:
+            raise AttributeError(f"{type(self).__name__} object has no attribute '{trigger_name}'")
 
-        return self.machine.get_trigger(obj=self, trigger=trigger)
+        setattr(self, trigger_name, partial(self.machine.trigger, self, trigger_name))
+        return getattr(self, trigger_name)
 
 
 class MultiStatefulObject(object):
 
     @classmethod
     def _get_substate_class(cls, name, machine):
+        """ Create a subclass of StatefulObject with state machine. Used to handle one of the sub states of the object """
         return type(name, (StatefulObject,), {'machine': machine})
 
     def __init_subclass__(cls, **kwargs):
+        """ create a subclass for each machine in the multi-machine class """
         super().__init_subclass__(**kwargs)
         cls.substate_classes = {}
         for c in cls.__mro__:
@@ -614,43 +608,49 @@ class MultiStatefulObject(object):
                     cls.substate_classes[name] = cls._get_substate_class(name, attr)
 
     def __init__(self, initial=None, *args, **kwargs):
+        """ see StatefulObject, but initial is a dictionary (if not None) with initials states for multiple state machines """
         super().__init__(*args, **kwargs)
         for name, sub_class in self.__class__.substate_classes.items():
             setattr(self, name, sub_class(initial=(initial or {}).get(name)))
-        self._trigger_callers = {}
 
-    def trigger_initial(self, **kwargs):
-        """
-        use this to call the 'on_entry' callbacks of the initial state, just after initialization, can be used if
-        e.g. the instance must first get an ID by committing to database. Otherwise use if necessary.
-        """
+    def trigger_initial(self, *args, **kwargs):
+        """ see StatefulObject, but now for multiple state machines """
         for name in self.substate_classes:
             getattr(self, name).machine.do_enter(self, **kwargs)
 
     @property
     def state(self):
-        """ returns the current (nested) state, as a '.' separated string """
+        """ return the current states as a dictionary, for each machine """
         return {name: getattr(self, name).state for name in self.__class__.substate_classes}
 
-    def __getattr__(self, trigger):
-        """
-        Allows calling the triggers as methods to cause a transition; the triggers return a boolean indicating
-            whether the transition took place.
-        :param trigger: name of the trigger
-        :return: new function that allows the trigger to be called like obj.some_trigger(*args, **kwargs)
-        """
+    def _get_machine_triggers(self, trigger_name):
+        """ used to pre-calculate data for closure of inner func in __getattr__()  for performance reasons """
+        success = False
+        machine_triggers = []
+        for name in self.substate_classes:
+            substate_object = getattr(self, name)
+            if trigger_name in substate_object.machine.triggers:
+                trigger = partial(substate_object.machine.trigger,
+                                  substate_object, trigger_name, _target=self)
+                machine_triggers.append(trigger)
+                success = True
+
+        if not success:
+            raise AttributeError(f"{type(self).__name__} object has no attribute '{trigger_name}'")
+
+        return machine_triggers
+
+    def __getattr__(self, trigger_name):
+        """ see StatefulObject, but will try to trigger each state machine (AttributeError if all would fail) """
+        machine_triggers = self._get_machine_triggers(trigger_name)
+
         def trigger_func(*args, **kwargs):
             success = False
-            for name in self.substate_classes:
-                substate_object = getattr(self, name)
-                try:
-                    substate_object.machine.trigger(substate_object, trigger, *args, _target=self, **kwargs)
-                except TransitionError:
-                    pass
-                else:
-                    success = True
-            if not success:
-                raise AttributeError(f"{type(self).__name__} object has no attribute '{trigger}'")
+            for trigger in machine_triggers:
+                success |= trigger(*args, **kwargs)
+            return success
+
+        setattr(self, trigger_name, trigger_func)
         return trigger_func
 
 
@@ -665,13 +665,12 @@ if __name__ == '__main__':
                 green={}
             ),
             transitions=[
-                dict(old_state='red', new_state='blue', trigger='prev'),
-                dict(old_state='blue', new_state='green', trigger='prev'),
-                dict(old_state='green', new_state='red', trigger='prev'),
+                dict(old_state='red', new_state='blue', trigger='next'),
+                dict(old_state='blue', new_state='green', trigger='next'),
+                dict(old_state='green', new_state='red', trigger='next'),
             ],
-            after_any_entry=lambda s, i: print(i, s.state)
         )
-        smell = state_machine(
+        mood = state_machine(
             states=dict(
                 good={},
                 bad={},
@@ -682,27 +681,15 @@ if __name__ == '__main__':
                 dict(old_state='bad', new_state='ugly', trigger='next'),
                 dict(old_state='ugly', new_state='good', trigger='next'),
             ],
-            after_any_entry=lambda s, i: print(i, s.state)
+            after_any_entry='printer'
         )
+
+        def printer(self, count):
+            print(count, self.state)
 
     some = MultiSome()
     for i in range(10):
         some.next(i)
-
-    for i in range(10):
-        some.prev(i)
-
-    print(some.color.state)
-    print(some.smell.state)
-
-    class A(object):
-        def __init__(self):
-            self.a = 1
-            self.b = 2
-
-    a = A()
-
-    delattr(a, 'a')
 
 
 
