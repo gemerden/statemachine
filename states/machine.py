@@ -71,6 +71,19 @@ class TransitionError(ValueError):
     pass
 
 
+def get_path(obj, name=None):
+    if name is None:
+        return Path(obj._state)
+    return Path(obj._state[name])
+
+
+def set_state(obj, state, name=None):
+    if name is None:
+        obj._state = str(state)
+    else:
+        obj._state[name] = str(state)
+
+
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
     def __init__(self, machine, old_state, new_state, trigger, on_transfer=(), condition=None, info=""):
@@ -86,6 +99,7 @@ class Transition(object):
             raise MachineError(f"non-existing state {e} when constructing transitions")
         self.on_transfer = callbackify(on_transfer)
         self.condition = callbackify(condition) if condition else None
+        self.new_obj_path = self.machine.full_path + self.new_path + self.new_path.get_in(self.machine).initial_path
         self.info = info
 
     def _validate(self, old_state, new_state):
@@ -95,8 +109,8 @@ class Transition(object):
         if (len(old_states) > 1 or len(new_states) > 1) and old_states[0] == new_states[0]:
             raise MachineError("inner transitions in a nested state machine cannot be defined at the outer level")
 
-    def update_state(self, obj):
-        obj._state = str(self.machine.full_path + self.new_path + self.new_path.get_in(self.machine).initial_path)
+    def update_state(self, obj, _name):
+        set_state(obj, self.new_obj_path, name=_name)
 
     @contextmanager
     def transitioning(self, obj):
@@ -108,15 +122,15 @@ class Transition(object):
             obj._state = old_state
             raise
 
-    def _execute(self, obj, *args, _target=None, **kwargs):
-        target = obj if _target is None else _target
-        self.machine.do_prepare(obj, *args, _target=_target, **kwargs)
-        if ((not self.condition or self.condition(target, *args, **kwargs)) and
-            (not self.new_state.condition or self.new_state.condition(target, *args, **kwargs))):
-            self.machine.do_exit(obj, *args, _target=_target, **kwargs)
-            self.on_transfer(target, *args, **kwargs)
-            self.update_state(obj)
-            self.machine.do_enter(obj, *args, _target=_target, **kwargs)
+    def _execute(self, obj, *args, _name=None, **kwargs):
+        path = get_path(obj, _name)
+        self.machine._do_prepare(obj, *args, _path=path, **kwargs)
+        if ((not self.condition or self.condition(obj, *args, **kwargs)) and
+            (not self.new_state.condition or self.new_state.condition(obj, *args, **kwargs))):
+            self.machine._do_exit(obj, *args, _path=path, **kwargs)
+            self.on_transfer(obj, *args, **kwargs)
+            self.update_state(obj, _name)
+            self.machine._do_enter(obj, *args, _path=path, **kwargs)
             return True
         return False
 
@@ -298,7 +312,7 @@ class StateParent(BaseState):
                         new_transition_dicts.append(new_trans_dict)
                     replace_in_list(transition_dicts, trans_dict, new_transition_dicts)
                 except KeyError as e:
-                    raise MachineError("missing parameter '%s' in switched transition" % e)
+                    raise MachineError(f"missing parameter '{e}' in switched transition")
 
     def _expand_and_create(self, transition_dicts):
         trans_class = self.transition_class
@@ -306,7 +320,7 @@ class StateParent(BaseState):
         for trans_dict in transition_dicts[:]:
             if len(trans_dict["new_state"]) > 1:
                 if len(trans_dict["trigger"]):
-                    raise MachineError("transition %s has multiple unconditional end-states" % str(trans_dict))
+                    raise MachineError(f"transition {str(trans_dict)} has multiple unconditional end-states")
             for trigger in trans_dict.pop("trigger", ()):
                 for old_state in trans_dict["old_state"]:
                     for new_state in trans_dict["new_state"]:
@@ -330,7 +344,7 @@ class StateParent(BaseState):
         for (old_state, trigger), transitions in trigger_dict.items():
             for i, transition in enumerate(transitions[:-1]):
                 if not (transition.condition or transition.new_state.condition):
-                    raise MachineError("unreachable transition %s for trigger %s" % (str(transitions[i+1]), trigger))
+                    raise MachineError(f"unreachable transition {str(transitions[i+1])} for trigger '{trigger}'")
             for transition in transitions:
                 key = (old_state, transition.new_state, trigger)
                 if key in seen:
@@ -394,10 +408,10 @@ class StateParent(BaseState):
                 return self.triggering[path, trigger_name]
         return self[old_path[0]]._get_transitions(old_path[1:], trigger_name)
 
-    def trigger(self, obj, trigger_name, *args, _target=None, **kwargs):
+    def trigger(self, obj, trigger_name, *args, _name=None, **kwargs):
         """ Executes the transition when called through a trigger """
-        for transition in self._get_transitions(Path(obj.state), trigger_name):
-            if transition.execute(obj, *args, _target=_target, **kwargs):
+        for transition in self._get_transitions(get_path(obj, _name), trigger_name):
+            if transition.execute(obj, *args, _name=_name, **kwargs):
                 return True
         return False
 
@@ -485,25 +499,25 @@ class StateMachine(StateParent, State):
         try:
             full_initial_path = Path(initial or ()).get_in(self).get_nested_initial_state().full_path
         except KeyError:
-            raise TransitionError("state '%s' does not exist in state '%s'" % (initial, self.name))
+            raise TransitionError(f"state {initial} does not exist in state '{self.name}'")
         return full_initial_path.tail(self.full_path)
 
-    def do_prepare(self, obj, *args, _target=None, **kwargs):
-        target = obj if _target is None else _target
-        for state in Path(obj.state).tail(self.full_path).iter_out(self, include=True):
-            state.prepare(target, *args, **kwargs)
+    def _do_prepare(self, obj, *args, _path=None, **kwargs):
+        for state in _path.tail(self.full_path).iter_out(self, include=True):
+            state.prepare(obj, *args, **kwargs)
 
-    def do_exit(self, obj, *args, _target=None, **kwargs):
-        target = obj if _target is None else _target
-        for state in Path(obj.state).tail(self.full_path).iter_out(self):
-            state.machine.before_any_exit(target, *args, **kwargs)
-            state.on_exit(target, *args, **kwargs)
+    def _do_exit(self, obj, *args, _path=None, **kwargs):
+        for state in _path.tail(self.full_path).iter_out(self):
+            state.machine.before_any_exit(obj, *args, **kwargs)
+            state.on_exit(obj, *args, **kwargs)
 
-    def do_enter(self, obj, *args, _target=None, **kwargs):
-        target = obj if _target is None else _target
-        for state in Path(obj.state).tail(self.full_path).iter_in(self):
-            state.on_entry(target, *args, **kwargs)
-            state.machine.after_any_entry(target, *args, **kwargs)
+    def _do_enter(self, obj, *args, _path=None, **kwargs):
+        for state in _path.tail(self.full_path).iter_in(self):
+            state.on_entry(obj, *args, **kwargs)
+            state.machine.after_any_entry(obj, *args, **kwargs)
+
+    def do_enter(self, obj, *args, _name=None, **kwargs):
+        return self._do_enter(obj, *args, _path=get_path(obj, _name), **kwargs)
 
     def get_context_manager(self):
         machine = self
@@ -591,67 +605,67 @@ class StatefulObject(object):
 
 
 class MultiStatefulObject(object):
-
-    @classmethod
-    def _get_substate_class(cls, name, machine):
-        """ Create a subclass of StatefulObject with state machine. Used to handle one of the sub states of the object """
-        return type(name, (StatefulObject,), {'machine': machine})
+    machines = None
 
     def __init_subclass__(cls, **kwargs):
-        """ create a subclass for each machine in the multi-machine class """
+        """ gather machines and set properties """
         super().__init_subclass__(**kwargs)
-        cls.substate_classes = {}
+        cls.machines = {}
         for c in cls.__mro__:
             for name in dir(c):
                 attr = getattr(cls, name)
                 if isinstance(attr, StateMachine):
-                    cls.substate_classes[name] = cls._get_substate_class(name, attr)
+                    cls.machines[name] = attr
+                    delattr(cls, name)
 
     def __init__(self, initial=None, *args, **kwargs):
         """ see StatefulObject, but initial is a dictionary (if not None) with initials states for multiple state machines """
         super().__init__(*args, **kwargs)
-        for name, sub_class in self.__class__.substate_classes.items():
-            setattr(self, name, sub_class(initial=(initial or {}).get(name)))
+        self._state = {}
+        for name, machine in self.machines.items():
+            self._state[name] = str(machine.get_initial_path((initial or {}).get(name)))
 
     def trigger_initial(self, *args, **kwargs):
         """ see StatefulObject, but now for multiple state machines """
-        for name in self.substate_classes:
-            getattr(self, name).machine.do_enter(self, **kwargs)
+        for name, machine in self.machines.items():
+            machine.do_enter(self, *args, _name=name, **kwargs)
 
     @property
     def state(self):
-        """ return the current states as a dictionary, for each machine """
-        return {name: getattr(self, name).state for name in self.__class__.substate_classes}
+        """ return the current states as a dictionary, with an entry for each machine """
+        return self._state
 
     def _get_machine_triggers(self, trigger_name):
         """ used to pre-calculate data for closure of inner func in __getattr__()  for performance reasons """
-        success = False
         machine_triggers = []
-        for name in self.substate_classes:
-            substate_object = getattr(self, name)
-            if trigger_name in substate_object.machine.triggers:
-                trigger = partial(substate_object.machine.trigger,
-                                  substate_object, trigger_name, _target=self)
-                machine_triggers.append(trigger)
-                success = True
+        for name, machine in self.machines.items():
+            if trigger_name in machine.triggers:
+                machine_triggers.append(partial(machine.trigger, self, trigger_name, _name=name))
 
-        if not success:
+        if not len(machine_triggers):
             raise AttributeError(f"{type(self).__name__} object has no attribute '{trigger_name}'")
 
         return machine_triggers
 
-    def __getattr__(self, trigger_name):
-        """ see StatefulObject, but will try to trigger each state machine (AttributeError if all would fail) """
-        machine_triggers = self._get_machine_triggers(trigger_name)
+    def __getattr__(self, name):
+        """
+        Gets state related to state machine with name 'name'.
+        Otherwise see StatefulObject, but will try to trigger
+        each state machine (AttributeError if all fail)
+        """
+        try:
+            return self._state[name]
+        except KeyError:
+            machine_triggers = self._get_machine_triggers(name)
 
-        def trigger_func(*args, **kwargs):
-            success = False
-            for trigger in machine_triggers:
-                success |= trigger(*args, **kwargs)
-            return success
+            def trigger_function(*args, **kwargs):
+                success = False
+                for trigger in machine_triggers:
+                    success |= trigger(*args, **kwargs)
+                return success
 
-        setattr(self, trigger_name, trigger_func)
-        return trigger_func
+            setattr(self, name, trigger_function)
+            return trigger_function
 
 
 if __name__ == '__main__':
