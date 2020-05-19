@@ -605,18 +605,16 @@ class StatefulObject(object):
 
 
 class MultiStateObject(object):
-    machines = None
 
     def __init_subclass__(cls, **kwargs):
         """ gather machines and set properties """
         super().__init_subclass__(**kwargs)
-        cls.machines = {}
-        for c in cls.__mro__:
-            for name in dir(c):
-                attr = getattr(cls, name)
-                if isinstance(attr, StateMachine):
-                    cls.machines[name] = attr
-                    delattr(cls, name)
+        cls.machines = getattr(cls, 'machines', {})
+        for name in dir(cls):
+            attr = getattr(cls, name)
+            if isinstance(attr, StateMachine):
+                cls.machines[name] = attr
+                delattr(cls, name)
 
     def __init__(self, initial=None, *args, **kwargs):
         """ see StatefulObject, but initial is a dictionary (if not None) with initials states for multiple state machines """

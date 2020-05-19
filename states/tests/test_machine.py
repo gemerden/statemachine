@@ -1062,7 +1062,7 @@ class TriggerOverrideTest(unittest.TestCase):
 class MultiStateTest(unittest.TestCase):
 
     def setUp(self):
-        class MoodyColor(MultiStateObject):
+        class Colored(MultiStateObject):
             color = state_machine(
                 states=dict(
                     red={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
@@ -1076,6 +1076,9 @@ class MultiStateTest(unittest.TestCase):
                 ],
                 after_any_entry='count_calls'
             )
+
+        class MoodyColor(Colored):
+
             mood = state_machine(
                 states=dict(
                     good={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
@@ -1110,6 +1113,10 @@ class MultiStateTest(unittest.TestCase):
                 self.transfer_history.append(self.state.copy())
 
         self.state_class = MoodyColor
+
+    def test_inheritance(self):
+        mc = self.state_class()
+        assert len(mc.machines) == 2
 
     def test_combines(self):
         moodycolor = self.state_class()
