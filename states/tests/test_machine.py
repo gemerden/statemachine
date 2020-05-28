@@ -1138,7 +1138,7 @@ class MultiStateTest(unittest.TestCase):
         assert moodycolor.mood == 'good'
 
     def test_initial(self):
-        moodycolor = self.state_class(initial=dict(color='green', mood='ugly'))
+        moodycolor = self.state_class(color='green', mood='ugly')
         assert moodycolor.color == 'green'
         assert moodycolor.mood == 'ugly'
         moodycolor.next()

@@ -616,12 +616,12 @@ class MultiStateObject(object):
                 cls.machines[name] = attr
                 delattr(cls, name)
 
-    def __init__(self, initial=None, *args, **kwargs):
-        """ see StatefulObject, but initial is a dictionary (if not None) with initials states for multiple state machines """
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        """ see StatefulObject, but initial is replaced by {name: state} pairs in kwargs """
         self._state = {}
         for name, machine in self.machines.items():
-            self._state[name] = str(machine.get_initial_path((initial or {}).get(name)))
+            self._state[name] = str(machine.get_initial_path(kwargs.pop(name, None)))
+        super().__init__(*args, **kwargs)
 
     def trigger_initial(self, *args, **kwargs):
         """ see StatefulObject, but now for multiple state machines """
