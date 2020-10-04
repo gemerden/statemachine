@@ -625,6 +625,42 @@ class SwitchedDoubleTransitionStateMachineTest(unittest.TestCase):
         self.assertEqual(lamp.state, "broken")
 
 
+class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condition fails but no self transition
+    machine_dict = dict(
+        name="lamp",
+        states={
+            "on": {},
+            "off": {"condition": lambda o: False},
+            "broken": {},
+        },
+        transitions=[
+            {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
+            {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
+            {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
+            {"old_state": "broken", "trigger": "fix", "new_state": {"off": {},
+                                                                    "broken": {}}},
+            {"old_state": "broken", "new_state": "broken", "trigger": ["leave"]},
+        ],
+    )
+
+    def test_transitions(self):
+        class Lamp(StatefulObject):
+            machine = state_machine(**deepcopy(self.machine_dict))
+
+        lamp = Lamp()
+        self.assertEqual(lamp.state, "on")
+        lamp.switch()
+        self.assertEqual(lamp.state, "on")
+        lamp.smash()
+        self.assertEqual(lamp.state, "broken")
+        lamp.fix()
+        self.assertEqual(lamp.state, "off")
+        lamp.smash()
+        self.assertEqual(lamp.state, "broken")
+        lamp.leave()
+        self.assertEqual(lamp.state, "broken")
+
+
 class NestedStateMachineTest(unittest.TestCase):
     """test the case where transition configuration contains wildcards '*' """
 
