@@ -63,6 +63,8 @@ class SimplestStateMachineTest(unittest.TestCase):
         self.assertEqual(self.light.state, "on")
         self.light.switch()
         self.assertEqual(self.light.state, "off")
+        self.light.switch().switch()
+        self.assertEqual(self.light.state, "off")
 
     def test_info(self):
         self.assertEqual(self.light.machine.sub_states["on"].info, "not turned off")
