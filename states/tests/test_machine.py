@@ -1,8 +1,6 @@
 import json
 import random
-import sys
 import unittest
-from collections import defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
 
@@ -222,23 +220,19 @@ class StateMachineTest(unittest.TestCase):
         self.temperature_ignore = False
         block = self.object_class("block", temperature=-10)
 
-        transfer = block.heat_by(5)
-        self.assertEqual(transfer, False)
+        block = block.heat_by(5)
         self.assertEqual(block.state, "solid")
         self.assertEqual(self.callback_counter, 0)
 
-        transfer = block.heat_by(10)
-        self.assertEqual(transfer, True)
+        block = block.heat_by(10)
         self.assertEqual(block.state, "liquid")
         self.assertEqual(self.callback_counter, 5)
 
-        transfer = block.heat_by(10)
-        self.assertEqual(transfer, False)
+        block = block.heat_by(10)
         self.assertEqual(block.state, "liquid")
         self.assertEqual(self.callback_counter, 5)
 
-        transfer = block.heat_by(100)
-        self.assertEqual(transfer, True)
+        block = block.heat_by(100)
         self.assertEqual(block.state, "gas")
         self.assertEqual(self.callback_counter, 10)
 
@@ -653,8 +647,8 @@ class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condit
             {"old_state": "broken",
              "trigger": "fix",
              "on_transfer": "do_before_transfer",
-             "new_state": {"off": {'on_transfer': 'do_after_transfer'},
-                           "broken": {}}},
+             "new_state": {"off": {},
+                           "broken": {'on_transfer': 'do_after_transfer'}}},
             {"old_state": "broken", "new_state": "broken", "trigger": ["leave"]},
         ],
     )
