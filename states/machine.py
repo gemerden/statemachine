@@ -132,19 +132,18 @@ class Transition(object):
             raise
 
     def _execute(self, obj, *args, _name=None, **kwargs):
-        path = get_path(obj, _name)
-        self.machine._do_prepare(obj, *args, _path=path, **kwargs)
+        self.machine._do_prepare(obj, *args, _path=get_path(obj, _name), **kwargs)
         if self.condition(obj, *args, **kwargs) and self.new_state.condition(obj, *args, **kwargs):
             if self.same_state:
                 self.before_transfer(obj, *args, **kwargs)
                 self.old_state.on_stay(obj, *args, **kwargs)
                 self.after_transfer(obj, *args, **kwargs)
             else:
-                self.machine._do_exit(obj, *args, _path=path, **kwargs)
+                self.machine._do_exit(obj, *args, _path=get_path(obj, _name), **kwargs)
                 self.before_transfer(obj, *args, **kwargs)
                 self.update_state(obj, _name)
                 self.after_transfer(obj, *args, **kwargs)
-                self.machine._do_enter(obj, *args, _path=path, **kwargs)
+                self.machine._do_enter(obj, *args, _path=get_path(obj, _name), **kwargs)
             return True
         return False
 
