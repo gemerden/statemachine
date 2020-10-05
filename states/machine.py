@@ -5,9 +5,11 @@ from collections import defaultdict
 from functools import partial
 from typing import Mapping
 
-from states.tools import Path
+from states.tools import Path, DummyFunction
 
 __author__  = "lars van gemerden"
+
+nocondition = DummyFunction(True)
 
 
 def listify(list_or_item):
@@ -17,9 +19,6 @@ def listify(list_or_item):
     else:
         return [list_or_item]
 
-def dummy(*args, **kwargs):
-    return True
-
 def callbackify(callbacks):
     """
     Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
@@ -28,6 +27,9 @@ def callbackify(callbacks):
     :param callbacks: single or list of functions or method names, all with the same signature
     :return: new function that performs all the callbacks when called
     """
+    if not callbacks:
+        return nocondition
+
     callbacks = listify(callbacks)
 
     def result_callback(obj, *args, **kwargs):
@@ -97,10 +99,14 @@ class Transition(object):
             self.new_state = self.new_path.get_in(machine)
         except KeyError as e:
             raise MachineError(f"non-existing state {e} when constructing transitions")
+        self.same_state = self._is_same_state()
         self.on_transfer = callbackify(on_transfer)
-        self.condition = callbackify(condition) if condition else None
+        self.condition = callbackify(condition)
         self.new_obj_path = self.machine.full_path + self.new_path + self.new_path.get_in(self.machine).initial_path
         self.info = info
+
+    def _is_same_state(self):
+        return isinstance(self.old_state, State) and self.old_state is self.new_state
 
     def _validate(self, old_state, new_state):
         """ assures that no internal transitions are defined on an outer state level"""
@@ -125,12 +131,15 @@ class Transition(object):
     def _execute(self, obj, *args, _name=None, **kwargs):
         path = get_path(obj, _name)
         self.machine._do_prepare(obj, *args, _path=path, **kwargs)
-        if ((not self.condition or self.condition(obj, *args, **kwargs)) and
-            (not self.new_state.condition or self.new_state.condition(obj, *args, **kwargs))):
-            self.machine._do_exit(obj, *args, _path=path, **kwargs)
-            self.on_transfer(obj, *args, **kwargs)
-            self.update_state(obj, _name)
-            self.machine._do_enter(obj, *args, _path=path, **kwargs)
+        if self.condition(obj, *args, **kwargs) and self.new_state.condition(obj, *args, **kwargs):
+            if self.same_state:
+                self.on_transfer(obj, *args, **kwargs)
+                self.old_state.on_stay(obj, *args, **kwargs)
+            else:
+                self.machine._do_exit(obj, *args, _path=path, **kwargs)
+                self.on_transfer(obj, *args, **kwargs)
+                self.update_state(obj, _name)
+                self.machine._do_enter(obj, *args, _path=path, **kwargs)
             return True
         return False
 
@@ -416,11 +425,10 @@ class StateParent(BaseState):
         return False
 
 
-
-class State(BaseState):
+class ChildState(BaseState):
     """ internal representation of a state without substates in the state machine"""
 
-    def __init__(self, machine=None, on_entry=(), on_exit=(), condition=(), *args, **kwargs):
+    def __init__(self, machine=None, on_entry=(), on_exit=(), condition=None, *args, **kwargs):
         """
         Constructor of ChildState:
 
@@ -429,11 +437,11 @@ class State(BaseState):
         :param on_exit: callback(s) that will be called, when an object exits this state
         :param condition: callback(s) (all()) that determine whether entry in this state is allowed
         """
-        super(State, self).__init__(*args, **kwargs)
+        super(ChildState, self).__init__(*args, **kwargs)
         self.machine = machine
         self.on_entry = callbackify(on_entry)
         self.on_exit = callbackify(on_exit)
-        self.condition = callbackify(condition) if condition else None
+        self.condition = callbackify(condition)
         self.initial_path = Path()
 
     @property
@@ -477,7 +485,14 @@ class State(BaseState):
         return str(self.full_path)
 
 
-class StateMachine(StateParent, State):
+class State(ChildState):
+
+    def __init__(self, *args, on_stay=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.on_stay = callbackify(on_stay)
+
+
+class StateMachine(StateParent, ChildState):
     """
     This class represents each state with substates in the state machine, as well as the state machine itself (basically
     saying that each state can be a state machine, and vice versa). Of course the root machine will never be entered or
@@ -667,42 +682,7 @@ class MultiStateObject(object):
 
 
 if __name__ == '__main__':
-
-    class MultiSome(MultiStateObject):
-
-        color = state_machine(
-            states=dict(
-                red={},
-                blue={},
-                green={}
-            ),
-            transitions=[
-                dict(old_state='red', new_state='blue', trigger='next'),
-                dict(old_state='blue', new_state='green', trigger='next'),
-                dict(old_state='green', new_state='red', trigger='next'),
-            ],
-        )
-        mood = state_machine(
-            states=dict(
-                good={},
-                bad={},
-                ugly={}
-            ),
-            transitions=[
-                dict(old_state='good', new_state='bad', trigger='next'),
-                dict(old_state='bad', new_state='ugly', trigger='next'),
-                dict(old_state='ugly', new_state='good', trigger='next'),
-            ],
-            after_any_entry='printer'
-        )
-
-        def printer(self, count):
-            print(count, self.state)
-
-    some = MultiSome()
-    for i in range(10):
-        some.next(i)
-
+    pass
 
 
 
