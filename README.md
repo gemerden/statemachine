@@ -14,8 +14,22 @@ This state machine implementation is developed with the following goals in mind:
 * Option to use multiple state machines in the same class,
 * Fast and memory efficient.
 
-## installation
+## Installation
 To install the module you can use: `pip install states3`
+
+## Versions
+This is a new section of the readme, starting with version 0.4.0:
+
+**Features**
+ - trigger calls now return the object itself, making them idempotent: `object.trigger1().trigger2()` works,
+ - added an `on_stay` callback option to states, called when a trigger is called which results in the state not changing. This and `on_transfer` are the only callbacks being called in such a case.
+ 
+**Bug fixes**
+- no current bugs, please inform me if any are found
+  
+**Changes**
+ - when no transition takes place on a trigger call, `on_exit`, `on_entry` etc. are not called anymore (`on_transfer` will be if defined). `on_stay` can be used to register callbacks for this case. This breaks backward-compatibility in some cases, but in practice makes the definition of the state machine a lot easier when calling `on_exit` etc. is undesirable when the actual state does not change. It makes configuration also a lot more intuitive (at least for me ;-).
+ - trigger calls do not return whether a state change has taken place (a `bool`), but the object on which the trigger was called, making them idempotent.
 
 ## Code Example
 
