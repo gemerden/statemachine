@@ -2,6 +2,7 @@ import json
 import random
 import sys
 import unittest
+from collections import defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
 
@@ -99,7 +100,7 @@ class StateMachineTest(unittest.TestCase):
             name="matter machine",
             initial="gas",
             states={
-               "solid": {"on_entry": [callback], "on_exit": [callback]},
+               "solid": {"on_entry": [callback], "on_exit": [callback], "on_stay": [callback, 'do_on_stay']},
                "liquid": {"on_entry": [callback], "on_exit": [callback]},
                "gas": {"on_entry": [callback], "on_exit": [callback]}
             },
@@ -127,6 +128,7 @@ class StateMachineTest(unittest.TestCase):
                 super(Matter, self).__init__(initial=initial)
                 self.name = name
                 self.temperature = temperature  # used in tests of condition callback in transition class
+                self.stayed = 0
 
             def do_callback(self, **kwargs):
                 """used to test callback lookup bu name"""
@@ -143,6 +145,9 @@ class StateMachineTest(unittest.TestCase):
                 assert delta >= 0
                 self.temperature -= delta
                 return self.cool()
+
+            def do_on_stay(self, **kwargs):
+                self.stayed += 1
 
             def __str__(self):
                 return self.name + "(%s)" % self.state
@@ -210,7 +215,7 @@ class StateMachineTest(unittest.TestCase):
         self.block.cool()
         self.assertEqual(self.callback_counter, 20)
         self.block.dont()
-        self.assertEqual(self.callback_counter, 25)
+        self.assertEqual(self.callback_counter, 22)
 
     def test_condition(self):
         """tests whether the condition callback works: if the condition fails, no transition takes place"""
@@ -236,6 +241,13 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(transfer, True)
         self.assertEqual(block.state, "gas")
         self.assertEqual(self.callback_counter, 10)
+
+    def test_on_stay(self):
+        block = self.object_class("block", temperature=-10)
+        self.assertEqual(block.state, "solid")
+        block.dont()
+        self.assertEqual(block.state, "solid")
+        self.assertEqual(block.stayed, 1)
 
     def test_transition_errors(self):
         """tests whether non-existent transitions are detected"""
@@ -393,7 +405,7 @@ class WildcardStateMachineTest(unittest.TestCase):
         block.zap()
         self.assertEqual(self.callback_counter, 12)
         block.zap()
-        self.assertEqual(self.callback_counter, 15)
+        self.assertEqual(self.callback_counter, 13)
 
     def test_transition_exceptions(self):
         """tests whether non-existent transitions are detected"""
@@ -626,19 +638,23 @@ class SwitchedDoubleTransitionStateMachineTest(unittest.TestCase):
 
 
 class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condition fails but no self transition
+
     machine_dict = dict(
         name="lamp",
         states={
             "on": {},
-            "off": {"condition": lambda o: False},
+            "off": {"condition": lambda obj: False},
             "broken": {},
         },
         transitions=[
             {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
             {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
             {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
-            {"old_state": "broken", "trigger": "fix", "new_state": {"off": {},
-                                                                    "broken": {}}},
+            {"old_state": "broken",
+             "trigger": "fix",
+             "on_transfer": "do_before_transfer",
+             "new_state": {"off": {'on_transfer': 'do_after_transfer'},
+                           "broken": {}}},
             {"old_state": "broken", "new_state": "broken", "trigger": ["leave"]},
         ],
     )
@@ -647,6 +663,17 @@ class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condit
         class Lamp(StatefulObject):
             machine = state_machine(**deepcopy(self.machine_dict))
 
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.before_transfer = False
+                self.after_transfer = False
+
+            def do_before_transfer(self):
+                pass
+
+            def do_after_transfer(self):
+                pass
+
         lamp = Lamp()
         self.assertEqual(lamp.state, "on")
         lamp.switch()
@@ -654,11 +681,30 @@ class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condit
         lamp.smash()
         self.assertEqual(lamp.state, "broken")
         lamp.fix()
-        self.assertEqual(lamp.state, "off")
-        lamp.smash()
         self.assertEqual(lamp.state, "broken")
         lamp.leave()
         self.assertEqual(lamp.state, "broken")
+
+    def test_double_on_transfer(self):
+        class Lamp(StatefulObject):
+            machine = state_machine(**deepcopy(self.machine_dict))
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.before_transfer = False
+                self.after_transfer = False
+
+            def do_before_transfer(self):
+                self.before_transfer = True
+
+            def do_after_transfer(self):
+                self.after_transfer = True
+
+        lamp = Lamp(initial='broken')
+        self.assertEqual(lamp.state, "broken")
+        lamp.fix()
+        self.assertTrue(lamp.before_transfer)
+        self.assertTrue(lamp.after_transfer)
 
 
 class NestedStateMachineTest(unittest.TestCase):
@@ -1206,7 +1252,6 @@ class MultiStateTest(unittest.TestCase):
                                                {'color': 'blue', 'mood': 'good'}]
 
 
-
 class TransitioningTest(unittest.TestCase):
 
     def setUp(self):
@@ -1249,3 +1294,53 @@ class TransitioningTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.radio.switch(item="item")
         self.assertEqual(self.radio.state, "off")
+
+
+class MultiStateMachineTest(unittest.TestCase):
+
+    class MultiSome(MultiStateObject):
+
+        color = state_machine(
+            states=dict(
+                red={'on_exit': 'color_callback'},
+                blue={'on_exit': 'color_callback'},
+                green={'on_exit': 'color_callback'}
+            ),
+            transitions=[
+                dict(old_state='red', new_state='blue', trigger='next'),
+                dict(old_state='blue', new_state='green', trigger='next'),
+                dict(old_state='green', new_state='red', trigger='next'),
+            ],
+        )
+        mood = state_machine(
+            states=dict(
+                good={'on_exit': 'mood_callback'},
+                bad={'on_exit': 'mood_callback'},
+                ugly={'on_exit': 'mood_callback'}
+            ),
+            transitions=[
+                dict(old_state='good', new_state='bad', trigger='next'),
+                dict(old_state='bad', new_state='ugly', trigger='next'),
+                dict(old_state='ugly', new_state='good', trigger='next'),
+            ],
+        )
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.history = dict(color=[], mood=[])
+
+        def color_callback(self):
+            self.history['color'].append(self.color)
+
+        def mood_callback(self):
+            self.history['mood'].append(self.mood)
+
+    def test_transitions(self):
+        some = self.MultiSome()
+        for _ in range(6):
+            some.next()
+
+        assert some.history['color'] == ['red', 'blue', 'green', 'red', 'blue', 'green']
+        assert some.history['mood'] == ['good', 'bad', 'ugly', 'good', 'bad', 'ugly']
+
+
