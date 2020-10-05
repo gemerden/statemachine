@@ -45,7 +45,7 @@ lightswitch.flick(name="Bob")  # prints: "Bob turned the light on"
 
 
 ## Limitations
-The state machine module has been tested with python 3.6 and higher.
+The state machine module 'states3' with python version below 3.6.
 
 ## Documentation
 To learn more check the extensive [tutorial](https://github.com/gemerden/statemachine/blob/master/statemachine/docs/tutorial.md).
@@ -72,13 +72,13 @@ The module has the following basic and some more advanced features:
     * trigger can be used for conditional (switched) transition,
     * to do this, create multiple transitions from the same state to different states and give them different conditions
 * a number of callbacks can be installed for each state and transition, with obj the state managed object and **kwargs the arguments passed via the trigger to the callback, in calling order:
-    * `StateMachine.prepare(self, obj, **kwargs)`,
+    * `StateMachine.prepare(self, obj, **kwargs)` (will always be called),
     * `StateMachine.before_any_exit(self, obj, **kwargs)`,
     * `State.on_exit(self, obj, **kwargs)`,
     * `Transition.on_transfer(self, obj, **kwargs)`, # after this the state is changed on the object
     * `State.on_entry(self, obj, **kwargs)`,
     * `StateMachine.after_any_entry(self, obj, **kwargs)`
-    * note that if a condition is present and not met, none of these functions are called, apart from prepare
+    * note that if a condition is present and not met, the object will stay in its state and an optional callback `State.on_stay` will be called.
 * callbacks can be methods on the class of which the state is managed by the machine:
     * This is the case the calback is configured as a string (e.g. `"on_entry": "do_callback"`) that is looked op on the stateful class,
 * wildcards and listed states can be used to define multiple transitions at once:
@@ -100,7 +100,6 @@ The state machine in the module has the following rules for setting up states an
     * A.B : sub-state B of A; A.B is called a state path
     * <A, B>   : transition between state A and state B
     * <A, B or C>: transition from A to B or C, depending on condition functions (there is no 'and')
-    * <A, [B, C]>: shorthand for transitions <A, B> and <A, C>
     * <A, *>: shorthand for all transitions from A to states in the same machine
 * an object cannot just be in state A if A has substates; given state A(B, C), the object can be in A.B or A.C, not in A
 * allowed transitions, given states A,  B, C(E, F) and D(G, H):

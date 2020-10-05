@@ -57,6 +57,9 @@ if __name__ == "__main__":
 
     lightswitch.flick()
     assert lightswitch.state == "off"
+
+    lightswitch.flick().flick()        # triggers are idempotent and can be chained together
+    assert lightswitch.state == "off"
 ```
 Notes:
 * The state machine itself is stateless; it does not keep any information about the stateful objects,
@@ -94,11 +97,12 @@ class LightSwitch(StatefulObject):
 
     machine = state_machine(
         states={
-            "on": {"on_exit": "exit_printer", "on_entry": entry_printer},  # string or function
+            "on": {"on_exit": "exit_printer", "on_entry": entry_printer, "on_stay": "stay_printer"},  # string or function
             "off": {"on_exit": "exit_printer", "on_entry": entry_printer},
         },
         transitions=[
             {"old_state": "off", "new_state": "on", "trigger": "flick", "on_transfer": "transfer"},
+            {"old_state": "on", "new_state": "on", "trigger": "noflick"},
             {"old_state": "on", "new_state": "off", "trigger": "flick"},
         ],
         after_any_entry="success"
@@ -106,6 +110,9 @@ class LightSwitch(StatefulObject):
 
     def exit_printer(self):
         print(f"{str(self)} exiting state '{self.state}'")
+
+    def stay_printer(self):
+        print(f"{str(self)} stays in state '{self.state}'")
 
     def transfer(self):
         print(f"{str(self)} flicking")
@@ -120,6 +127,7 @@ if __name__ == "__main__":
 
     lightswitch = LightSwitch(initial="off")  # setting the initial state does not call any callback functions
     lightswitch.flick()                       # another trigger to change state
+    lightswitch.noflick()                     # switch stays in state 'on'
     lightswitch.flick()                       # flick() works both ways
 
     #prints:
@@ -128,6 +136,7 @@ if __name__ == "__main__":
     # lightswitch flicking
     # lightswitch entering state 'on'
     # it worked
+    # lightswitch stays in state 'on'
     # lightswitch exiting state 'on'
     # lightswitch entering state 'off'
     # it worked
