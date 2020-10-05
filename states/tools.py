@@ -170,3 +170,13 @@ class Path(tuple):
         return self.separator.join([str(s) for s in self])
 
 
+class DummyFunction(object):
+
+    def __init__(self, returns):
+        self.returns = returns
+
+    def __call__(self, *args, **kwargs):
+        return self.returns
+
+    def __bool__(self):
+        return False
