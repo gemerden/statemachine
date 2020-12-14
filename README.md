@@ -19,6 +19,7 @@ To install the module you can use: `pip install states3`
 
 ## Versions
 This is a new section of the readme, starting with version 0.4.0.
+
 ####Version 0.4.1:
 
 **Bug fixes**
