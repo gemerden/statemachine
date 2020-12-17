@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import Sequence, Mapping, MutableMapping
 
 
@@ -180,3 +181,82 @@ class DummyFunction(object):
 
     def __bool__(self):
         return False
+
+
+nocondition = DummyFunction(True)
+
+
+def listify(list_or_item):
+    """utitity function to ensure an argument becomes a list if it is not one yet"""
+    if isinstance(list_or_item, (list, tuple, set)):
+        return list(list_or_item)
+    else:
+        return [list_or_item]
+
+
+def callbackify(callbacks):
+    """
+    Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
+    first argument (obj) of the actual call to the callback.
+
+    :param callbacks: single or list of functions or method names, all with the same signature
+    :return: new function that performs all the callbacks when called
+    """
+    if not callbacks:
+        return nocondition
+
+    callbacks = listify(callbacks)
+
+    def result_callback(obj, *args, **kwargs):
+        result = []  # introduced to be able to use this method for "condition" callback to return a value
+        for callback in callbacks:
+            if isinstance(callback, str):
+                result.append(getattr(obj, callback)(*args, **kwargs))
+            else:
+                result.append(callback(obj, *args, **kwargs))
+        return all(result)
+
+    return result_callback
+
+
+def nameify(f, cast=lambda v: v):
+    """ tries to give a name to an item"""
+    return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
+
+
+def replace_in_list(lst, old_item, new_items):
+    """ replaces single old_item with a list new_item(s), retaining order of new_items """
+    new_items = listify(new_items)
+    index = lst.index(old_item)
+    lst.remove(old_item)
+    for i, item in enumerate(new_items):
+        lst.insert(index + i, item)
+    return lst
+
+
+def has_doubles(lst):  # slow, O(n^2)
+    return any(lst.count(l) > 1 for l in lst)
+
+
+class lazy_property(object):
+    """A read-only @property that is only evaluated once."""
+
+    def __init__(self, getter):
+        self.getter = getter
+        self.name = getter.__name__
+        self.__doc__ = getter.__doc__
+
+    def __get__(self, obj, cls):
+        if obj is None:
+            return self
+        obj.__dict__[self.name] = result = self.getter(obj)
+        return result
+
+class MachineError(ValueError):
+    """Exception indicating an error in the construction of the state machine"""
+    pass
+
+
+class TransitionError(ValueError):
+    """Exception indicating an error in the in a state transition of an object"""
+    pass

@@ -32,7 +32,8 @@ The following functions and classes are part of the public API of the statemachi
 
 We will show the simplest example of state machine. It defines states and transitions. 
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 
 class LightSwitch(StatefulObject):  # inherit from "StatefulObject" to get stateful behaviour
@@ -87,7 +88,8 @@ If the value of the callback parameter is a string, the callback will be looked 
 In this simple case the signature of the callback must be `func(obj)` with `obj` the stateful object (or `func(self)` in case of a method on the stateful object). Later we will look at passing parameters to the callback.
 
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 
 def entry_printer(obj):
@@ -149,7 +151,8 @@ The use fo callbacks can be enhanced by allowing triggers to pass arguments to t
 The arguments to the trigger method are passed to all the callback functions. The callbacks can ignore arguments by defining `*args` and/or `**kwargs` in their signature.
 
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
@@ -198,7 +201,8 @@ Sometimes you want a transition to take place only under specific circumstances.
 
 The implementation has the same features as those for callbacks (it is a callback), including using strings to use methods on the stateful object and for passing parameters. If multiple callbacks are given, all callbacks need to return a `True` value for the transition to pass.
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 class LightSwitch(StatefulObject):
     machine = state_machine(
@@ -242,7 +246,8 @@ Notes:
 Often it is practical to let a stateful object store a history of all states visited in the past. This can easily be done with the `after_any_entry` callback. As an example we show you how:
 
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
@@ -294,7 +299,8 @@ It is possible to directly trigger a transition on the state machine itself, pos
 In this case we implement the `flick` trigger method ourselves, to be able to update the stateful object without introducing a new method name (`flick` is already defined in the state machine, it now first updates the object):
 
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 class LightSwitch(StatefulObject):
     machine = state_machine(
@@ -339,7 +345,8 @@ Sometimes many transitions need to be defined with the same end-state and callba
 
 Note that if multiple states are given for `new_state`, no triggers can be defined for the transition; a `MachineError` will be raised. This means that the transition can only take place bij explicitly giving the state `obj.state = "some_state"` (no parameters can be passed to the callbacks in these cases).
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
@@ -385,7 +392,8 @@ In some cases you might want to transition to different states depending on some
 The example below shows the same lightswitch as we used before, but now, after it breaks and is fixed it returns to the same state is was before breaking.
 
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
@@ -508,7 +516,8 @@ First some rules:
 Before we go into more detail we will describe a very simple example where the lightswitch has 2 main states "normal" and "broken", The "normal" state has 2 substates "on" and "off". 
 
 ```python
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 
 class LightSwitch(StatefulObject):
@@ -557,7 +566,8 @@ In some cases, a context manager (`with ... as ...:`) is useful to e.g. only com
 
 ```python
 from contextlib import contextmanager
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 

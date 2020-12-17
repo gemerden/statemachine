@@ -1,4 +1,5 @@
-from states.machine import state_machine, StatefulObject
+from states.machine import state_machine
+from states import StatefulObject
 
 
 class Room(StatefulObject):

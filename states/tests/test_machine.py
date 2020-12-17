@@ -5,9 +5,8 @@ from contextlib import contextmanager
 from copy import deepcopy
 
 from states import state_machine, StatefulObject, TransitionError, MachineError
-from states.machine import has_doubles, replace_in_list, MultiStateObject
 
-from states.tools import Path
+from states.tools import Path, replace_in_list, has_doubles
 
 __author__ = "lars van gemerden"
 
@@ -30,11 +29,9 @@ class SimplestStateMachineTest(unittest.TestCase):
 
     def setUp(self):
         self.config = dict(
-            name="matter machine",
-            initial="off",
             states={
-                "on": {"info": "not turned off"},
                 "off": {"info": "not turned on"},
+                "on": {"info": "not turned off"},
             },
             transitions=[
                 {"old_state": "off", "new_state": "on", "trigger": "switch", "info": "turn the light on"},
@@ -43,18 +40,16 @@ class SimplestStateMachineTest(unittest.TestCase):
         )
         self.config_copy = deepcopy(self.config)
 
-        self.machine = state_machine(**self.config)
-
         class LightSwitch(StatefulObject):
-            machine = self.machine
+            state = state_machine(**self.config)
 
         self.light = LightSwitch()
 
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
-        self.assertEqual(len(self.machine), 2)
-        self.assertEqual(count_transitions(self.machine), 2)
-        self.assertEqual(len(self.machine.triggering), 2)
+        self.assertEqual(len(type(self.light).state), 2)
+        self.assertEqual(count_transitions(type(self.light).state), 2)
+        self.assertEqual(len(type(self.light).state.triggering), 2)
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -67,11 +62,11 @@ class SimplestStateMachineTest(unittest.TestCase):
         self.assertEqual(self.light.state, "off")
 
     def test_info(self):
-        self.assertEqual(self.light.machine.sub_states["on"].info, "not turned off")
-        self.assertEqual(self.light.machine.triggering[Path("off"), "switch"][0].info, "turn the light on")
+        self.assertEqual(type(self.light).state.sub_states["on"].info, "not turned off")
+        self.assertEqual(type(self.light).state.triggering[Path("off"), "switch"][0].info, "turn the light on")
 
     def test_config(self):
-        machine_config = self.light.machine.config
+        machine_config = type(self.light).state.config
         self.assertEqual(machine_config, self.config_copy)
 
 
@@ -95,10 +90,7 @@ class StateMachineTest(unittest.TestCase):
 
             return inner
 
-        # create a machine based on phase changes of matter (solid, liquid, gas)
-        self.machine = state_machine(
-            name="matter machine",
-            initial="gas",
+        self.config = dict(
             states={
                "solid": {"on_entry": [callback], "on_exit": [callback], "on_stay": [callback, 'do_on_stay']},
                "liquid": {"on_entry": [callback], "on_exit": [callback]},
@@ -122,16 +114,16 @@ class StateMachineTest(unittest.TestCase):
 
         class Matter(StatefulObject):
             """object class fo which the state is managed"""
-            machine = self.machine
+            state = state_machine(**self.config)
 
-            def __init__(self, name, temperature=0, initial="solid"):
-                super(Matter, self).__init__(initial=initial)
+            def __init__(self, name, temperature=0, state="solid"):
+                super(Matter, self).__init__(state=state)
                 self.name = name
                 self.temperature = temperature  # used in tests of condition callback in transition class
                 self.stayed = 0
 
             def do_callback(self, **kwargs):
-                """used to test callback lookup bu name"""
+                """used to test callback lookup by name"""
                 callback(self, **kwargs)
 
             def heat_by(self, delta):
@@ -154,6 +146,7 @@ class StateMachineTest(unittest.TestCase):
 
         self.object_class = Matter
         self.block = Matter("block")
+        self.machine = Matter.state
 
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
@@ -175,9 +168,9 @@ class StateMachineTest(unittest.TestCase):
 
     def test_initial(self):
         class Dummy(StatefulObject):
-            machine = self.machine
+            state = state_machine(**self.config)
 
-        dummy = Dummy()
+        dummy = Dummy(state='gas')
         self.assertEqual(dummy.state, "gas")
 
     def test_triggers(self):
@@ -257,13 +250,12 @@ class StateMachineTest(unittest.TestCase):
     def test_init_error(self):
         """tests whether a non-existing initial state is detected"""
         with self.assertRaises(TransitionError):
-            self.object_class("block", initial="plasma")
+            self.object_class("block", state="plasma")
 
     def test_machine_errors(self):
         """tests whether double state names, transitions and trigger(s) and non-existing state names are detected"""
         with self.assertRaises(MachineError):
             state_machine(
-                name="matter machine",
                 states={
                     "solid": {},
                     "liquid": {},
@@ -274,7 +266,6 @@ class StateMachineTest(unittest.TestCase):
             )
         with self.assertRaises(MachineError):
             state_machine(
-                name="matter machine",
                 states={
                     "solid": {},
                     "liquid": {},
@@ -286,7 +277,6 @@ class StateMachineTest(unittest.TestCase):
             )
         with self.assertRaises(MachineError):
             state_machine(
-                name="matter machine",
                 states={
                     "solid": {},
                     "liquid": {},
@@ -300,9 +290,7 @@ class StateMachineTest(unittest.TestCase):
             )
         with self.assertRaises(AttributeError):
             class A(StatefulObject):
-                machine = state_machine(
-                    name="matter machine",
-                    initial="solid",
+                state = state_machine(
                     states={
                         "solid": {},
                         "liquid": {},
@@ -330,7 +318,6 @@ class WildcardStateMachineTest(unittest.TestCase):
 
         # create a machine based on phase changes of matter (solid, liquid, gas)
         self.machine = state_machine(
-            name="matter machine",
             states={
                 "solid": {"on_entry": [callback], "on_exit": [callback]},
                 "liquid": {"on_entry": [callback], "on_exit": [callback]},
@@ -349,10 +336,10 @@ class WildcardStateMachineTest(unittest.TestCase):
 
         class Matter(StatefulObject):
             """object class fo which the state is managed"""
-            machine = self.machine
+            state = self.machine
 
-            def __init__(self, name, initial="solid"):
-                super(Matter, self).__init__(initial=initial)
+            def __init__(self, name, state="solid"):
+                super(Matter, self).__init__(state=state)
                 self.name = name
 
             def __str__(self):
@@ -367,7 +354,7 @@ class WildcardStateMachineTest(unittest.TestCase):
         self.assertEqual(len(self.machine.triggering), 2+2+2+2+4+1)
 
     def test_config(self):
-        config = repr(self.object_class.machine)
+        config = repr(self.object_class.state)
         config = json.loads(config)
         self.assertEqual(Path("transitions.4.old_state").get_in(config), "*")
 
@@ -406,6 +393,7 @@ class WildcardStateMachineTest(unittest.TestCase):
     def test_transition_exceptions(self):
         """tests whether non-existent transitions are detected"""
         block = self.object_class("block")
+        self.assertEqual(block.state, 'solid')
         with self.assertRaises(TransitionError):
             block.evaporate()
         with self.assertRaises(TransitionError):
@@ -417,7 +405,6 @@ class WildcardStateMachineTest(unittest.TestCase):
         """tests that new_state wildcard transitions cannot have trigger(s)"""
         with self.assertRaises(MachineError):
             state_machine(
-                name="matter machine",
                 states={
                     "solid": {},
                     "liquid": {},
@@ -431,7 +418,6 @@ class WildcardStateMachineTest(unittest.TestCase):
     def test_double_wildcard(self):
         with self.assertRaises(MachineError):
             machine = state_machine(
-                name="matter machine",
                 states={
                     "solid": {},
                     "liquid": {},
@@ -456,8 +442,7 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
         # create a machine based on phase changes of matter (solid, liquid, gas)
         class Matter(StatefulObject):
             """object class fo which the state is managed"""
-            machine = state_machine(
-                name="matter machine",
+            state = state_machine(
                 states={
                     "solid": {},
                     "liquid": {},
@@ -470,23 +455,24 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
                 ],
             )
 
-            def __init__(self, name, initial="solid"):
-                super(Matter, self).__init__(initial=initial)
+            def __init__(self, name, state="solid"):
+                super(Matter, self).__init__(state=state)
                 self.name = name
 
             def __str__(self):
                 return self.name + "(%s)" % self.state
 
         self.object_class = Matter
+        self.machine = Matter.state
 
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
-        self.assertEqual(len(self.object_class.machine.sub_states), 3)
-        self.assertEqual(len(self.object_class.machine.triggering), 4)
-        self.assertEqual(sum(map(len, self.object_class.machine.triggering.values())), 4)
+        self.assertEqual(len(self.machine.sub_states), 3)
+        self.assertEqual(len(self.machine.triggering), 4)
+        self.assertEqual(sum(map(len, self.machine.triggering.values())), 4)
 
     def test_config(self):
-        config = repr(self.object_class.machine)
+        config = repr(self.machine)
         config = json.loads(config)
         self.assertEqual(Path("transitions.0.old_state").get_in(config), ["solid", "liquid"])
 
@@ -502,7 +488,7 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
 
     def test_error(self):
         """test transition error"""
-        block = self.object_class("block", initial="gas")
+        block = self.object_class("block", state="gas")
         with self.assertRaises(TransitionError):
             block.zap()
 
@@ -511,8 +497,7 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
 
     def setUp(self):
         class LightSwitch(StatefulObject):
-            machine = state_machine(
-                name="matter machine",
+            state = state_machine(
                 states={
                     "on": {},
                     "off": {},
@@ -528,12 +513,12 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
                 before_any_exit="store_state"
             )
 
-            def __init__(self, initial=None):
-                super(LightSwitch, self).__init__(initial=initial)
+            def __init__(self, state=None):
+                super(LightSwitch, self).__init__(state=state)
                 self._old_state = None
 
             def store_state(self):
-                self._old_state = self._state
+                self._old_state = self.state
 
             def was_on(self):
                 return str(self._old_state) == "on"
@@ -541,13 +526,13 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
         self.object_class = LightSwitch
 
     def test_off(self):
-        light_switch = self.object_class(initial="off")
+        light_switch = self.object_class(state="off")
         light_switch.smash()
         light_switch.fix()
         self.assertEqual(light_switch.state, "off")
 
     def test_on(self):
-        light_switch = self.object_class(initial="on")
+        light_switch = self.object_class(state="on")
         light_switch.smash()
         light_switch.fix()
         self.assertEqual(light_switch.state, "on")
@@ -555,7 +540,6 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
     def test_machine_error(self):
         with self.assertRaises(MachineError):
             state_machine(
-                name="matter machine",
                 states={
                     "on": {},
                     "off": {},
@@ -573,7 +557,6 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
 
 class SwitchedDoubleTransitionStateMachineTest(unittest.TestCase):
     good_machine_dict = dict(
-        name="lamp",
         states={
             "on": {},
             "off": {},
@@ -589,7 +572,6 @@ class SwitchedDoubleTransitionStateMachineTest(unittest.TestCase):
         ],
     )
     bad_machine_dict = dict(
-        name="lamp",
         states={
             "on": {},
             "off": {},
@@ -607,17 +589,17 @@ class SwitchedDoubleTransitionStateMachineTest(unittest.TestCase):
 
     def test_good_double_transition(self):
         class Lamp(StatefulObject):
-            machine = state_machine(**deepcopy(self.good_machine_dict))
-        self.assertEqual(count_transitions(Lamp.machine), 9)
+            state = state_machine(**deepcopy(self.good_machine_dict))
+        self.assertEqual(count_transitions(Lamp.state), 9)
 
     def test_bad_double_transition(self):
         with self.assertRaises(MachineError):
             class Lamp(StatefulObject):
-                machine = state_machine(**deepcopy(self.bad_machine_dict))
+                state = state_machine(**deepcopy(self.bad_machine_dict))
 
     def test_transitions(self):
         class Lamp(StatefulObject):
-            machine = state_machine(**deepcopy(self.good_machine_dict))
+            state = state_machine(**deepcopy(self.good_machine_dict))
 
         lamp = Lamp()
         self.assertEqual(lamp.state, "on")
@@ -636,7 +618,6 @@ class SwitchedDoubleTransitionStateMachineTest(unittest.TestCase):
 class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condition fails but no self transition
 
     machine_dict = dict(
-        name="lamp",
         states={
             "on": {},
             "off": {"condition": lambda obj: False},
@@ -657,7 +638,7 @@ class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condit
 
     def test_transitions(self):
         class Lamp(StatefulObject):
-            machine = state_machine(**deepcopy(self.machine_dict))
+            state = state_machine(**deepcopy(self.machine_dict))
 
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -683,7 +664,7 @@ class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condit
 
     def test_double_on_transfer(self):
         class Lamp(StatefulObject):
-            machine = state_machine(**deepcopy(self.machine_dict))
+            state = state_machine(**deepcopy(self.machine_dict))
 
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -696,7 +677,7 @@ class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condit
             def do_after_transfer(self):
                 self.after_transfer = True
 
-        lamp = Lamp(initial='broken')
+        lamp = Lamp(state='broken')
         self.assertEqual(lamp.state, "broken")
         lamp.fix()
         self.assertTrue(lamp.before_transfer)
@@ -729,11 +710,8 @@ class NestedStateMachineTest(unittest.TestCase):
 
         # create a machine config based on phase changes of matter (solid, liquid, gas)
         self.machine_config = dict(
-            name="washing machine",
-            initial="off",
             states=dict(
                 off=dict(
-                    initial="working",
                     on_entry=on_entry,
                     on_exit=on_exit,
                     states={
@@ -747,7 +725,6 @@ class NestedStateMachineTest(unittest.TestCase):
                     before_any_exit=before_any_exit
                 ),
                 on=dict(
-                    initial="none",
                     on_entry=on_entry,
                     on_exit=on_exit,
                     states={
@@ -772,7 +749,7 @@ class NestedStateMachineTest(unittest.TestCase):
         )
 
         class WashingMachine(StatefulObject):
-            machine = state_machine(**self.machine_config)
+            state = state_machine(**self.machine_config)
 
         self.object_class = WashingMachine
 
@@ -783,10 +760,9 @@ class NestedStateMachineTest(unittest.TestCase):
 
     def test_config(self):
 
-        config = repr(self.object_class.machine)
+        config = repr(self.object_class.state)
         config = json.loads(config)
         for path, expected in [("on_exit", "NONE"),
-                               ("states.off.initial", "working"),
                                ("states.off.transitions.0.old_state", "working"),
                                ("transitions.0.old_state", "off.working"),
                                ("transitions.3.trigger", ["just_dry_already"]),
@@ -797,29 +773,29 @@ class NestedStateMachineTest(unittest.TestCase):
 
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
-        self.assertEqual(len(self.object_class.machine), 2)
-        self.assertEqual(len(self.object_class.machine.triggering), 6)
-        child_state = self.object_class.machine["on"]
+        self.assertEqual(len(self.object_class.state), 2)
+        self.assertEqual(len(self.object_class.state.triggering), 6)
+        child_state = self.object_class.state["on"]
         self.assertEqual(len(child_state), 3)
         self.assertEqual(len(child_state.triggering), 3)
-        child_state = self.object_class.machine["off"]
+        child_state = self.object_class.state["off"]
         self.assertEqual(len(child_state), 2)
         self.assertEqual(len(child_state.triggering), 2)
 
     def test_len_in_getitem_iter_for_states(self):
-        machine = self.object_class.machine
+        machine = self.object_class.state
         self.assertEqual(len(machine), 2)
         self.assertTrue("off" in machine)
         self.assertEqual(machine["on"].name, "on")
         self.assertEqual(machine["on"]["drying"].name, "drying")
-        child_state = self.object_class.machine["on"]
+        child_state = self.object_class.state["on"]
         self.assertEqual(len(child_state), 3)
         self.assertTrue("washing" in child_state)
         self.assertEqual(child_state["none"].name, "none")
-        self.assertEqual(len([s for s in self.object_class.machine]), 2)
+        self.assertEqual(len([s for s in self.object_class.state]), 2)
 
     def test_getitem_for_triggers(self):
-        machine = self.object_class.machine
+        machine = self.object_class.state
         self.assertEqual(machine["on", "switch"][0].old_state, machine["on"])
         self.assertEqual(machine["on", "switch"][0].new_state, machine["off"])
         self.assertEqual(str(machine["on"]["washing", "dry"][0].old_path), "washing")
@@ -828,7 +804,7 @@ class NestedStateMachineTest(unittest.TestCase):
         self.assertEqual(str(machine["off.working", "just_dry_already"][0].new_path), "on.drying")
 
     def test_in_for_transitions(self):
-        machine = self.object_class.machine
+        machine = self.object_class.state
         self.assertTrue(("off.working", "on.drying") in machine)
         self.assertTrue(("washing", "dry") in machine["on"])
         self.assertTrue(("none", "wash") in machine["on"])
@@ -859,12 +835,13 @@ class NestedStateMachineTest(unittest.TestCase):
         self.assert_counters(8, 8, 5)
 
     def test_state_string(self):
-        self.assertEqual(str(self.object_class.machine["on"]), "on")
-        self.assertEqual(str(self.object_class.machine["on"]["washing"]), "on.washing")
+        self.assertEqual(str(self.object_class.state["on"]), "on")
+        self.assertEqual(str(self.object_class.state["on"]["washing"]), "on.washing")
 
     def test_transition_errors(self):
         washer = self.object_class()
         self.assert_counters(0, 0, 0)
+        self.assertEqual(washer.state, "off.working")
 
         with self.assertRaises(TransitionError):
             washer.dry()
@@ -884,7 +861,7 @@ class NestedStateMachineTest(unittest.TestCase):
         self.assert_counters(1, 1, 1)
 
     def test_machine_errors(self):  # TODO
-        pass
+        assert "dry" in self.object_class._trigger_func_dict
 
 
 class SwitchedTransitionTest(unittest.TestCase):
@@ -893,13 +870,10 @@ class SwitchedTransitionTest(unittest.TestCase):
     def setUp(self):
         # create a machine config based on phase changes of matter (solid, liquid, gas)
         self.machine_config = dict(
-            name="washing machine",
-            initial="off",
             states=dict(
                 broken={},
                 off={},
                 on=dict(
-                    initial="none",
                     states={
                         "none": {},
                         "washing": {},
@@ -916,16 +890,14 @@ class SwitchedTransitionTest(unittest.TestCase):
                 {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
                 {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
                 {"old_state": "*", "new_state": "broken", "trigger": "smash"},
-                {
-                    "old_state": "broken",
-                    "new_state": {"off": {"condition": lambda obj: random.random() > 0},
-                                  "on": {}},
-                    "trigger": "fix"},
+                {"old_state": "broken", "new_state": {"off": {"condition": lambda obj: random.random() > 0},
+                                                      "on": {}},
+                 "trigger": "fix"},
             ]
         )
 
         class WashingMachine(StatefulObject):
-            machine = state_machine(**deepcopy(self.machine_config))
+            state = state_machine(**deepcopy(self.machine_config))
 
         self.object_class = WashingMachine
 
@@ -969,8 +941,6 @@ class ContextManagerTest(unittest.TestCase):
             obj.managed = False
 
         self.config = dict(
-            name="matter machine",
-            initial="solid",
             states={
                 "solid": {"on_exit": "on_action", "on_entry": "on_action"},
                 "liquid": {"on_exit": "on_action", "on_entry": "on_action"},
@@ -987,11 +957,9 @@ class ContextManagerTest(unittest.TestCase):
             context_manager=manager,
         )
 
-        self.machine = state_machine(**deepcopy(self.config))
-
         class Matter(StatefulObject):
             """object class fo which the state is managed"""
-            machine = self.machine
+            state = state_machine(**deepcopy(self.config))
 
             def __init__(self, testcase):
                 super(Matter, self).__init__()
@@ -1023,8 +991,11 @@ class ContextManagerTest(unittest.TestCase):
 
     def test_manager_in_object(self):
         self.config["context_manager"] = "object_manager"
-        self.object_class.machine = state_machine(**deepcopy(self.config))
-        matter = self.object_class(testcase=self)
+
+        class NewMatter(self.object_class):
+            state = state_machine(**self.config)
+
+        matter = NewMatter(testcase=self)
         self.assertEqual(matter.managed, False)
         matter.heat()
         self.assertEqual(matter.managed, False)
@@ -1040,9 +1011,7 @@ class CallbackTest(unittest.TestCase):
 
     def setUp(self):
         """called before any individual test method"""
-        self.machine = state_machine(
-            name="washer",
-            initial="off",
+        self.config = dict(
             states={
                 "off": {"on_exit": "on_exit"},
                 "on": {"on_entry": "on_entry"},
@@ -1058,7 +1027,7 @@ class CallbackTest(unittest.TestCase):
 
         class Radio(StatefulObject):
             """object class fo which the state is managed"""
-            machine = self.machine
+            state = state_machine(**self.config)
 
             def __init__(self, testcase):
                 super(Radio, self).__init__()
@@ -1100,7 +1069,7 @@ class TriggerOverrideTest(unittest.TestCase):
         """called before any individual test method"""
 
         class LightSwitch(StatefulObject):
-            machine = state_machine(
+            state = state_machine(
                 states={
                     "on": {},
                     "off": {},
@@ -1118,7 +1087,7 @@ class TriggerOverrideTest(unittest.TestCase):
 
             def flick(self, hours, *args, **kwargs):
                 self.time = (self.time + hours) % 24  # increment time with hours and start from 0 if >24 (midnight)
-                self.machine.trigger(self, "flick", hours=hours, *args, **kwargs)
+                self.trigger(self, "flick", hours=hours, *args, **kwargs)
 
             def is_night(self, *args, **kwargs):
                 return self.time < 6 or self.time > 18
@@ -1126,7 +1095,7 @@ class TriggerOverrideTest(unittest.TestCase):
         self.lightswitch_class = LightSwitch
 
     def test_override(self):
-        switch = self.lightswitch_class(time=0, initial="on")
+        switch = self.lightswitch_class(time=0, state="on")
         self.assertTrue(switch.is_night())
         switch.flick(hours=7)  # switch.time == 7
         self.assertTrue(switch.state == "off")
@@ -1140,7 +1109,7 @@ class TriggerOverrideTest(unittest.TestCase):
 class MultiStateTest(unittest.TestCase):
 
     def setUp(self):
-        class Colored(MultiStateObject):
+        class Colored(StatefulObject):
             color = state_machine(
                 states=dict(
                     red={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
@@ -1181,20 +1150,24 @@ class MultiStateTest(unittest.TestCase):
             def count_calls(self):
                 self.counter += 1
 
+            def state(self):
+                return dict(mood=self.mood,
+                            color=self.color)
+
             def on_exit(self):
-                self.exit_history.append(self.state.copy())
+                self.exit_history.append(self.state())
 
             def on_entry(self):
-                self.entry_history.append(self.state.copy())
+                self.entry_history.append(self.state())
 
             def on_transfer(self):
-                self.transfer_history.append(self.state.copy())
+                self.transfer_history.append(self.state())
 
         self.state_class = MoodyColor
 
     def test_inheritance(self):
         mc = self.state_class()
-        assert len(mc.machines) == 2
+        assert len(mc._state_machines) == 2
 
     def test_combines(self):
         moodycolor = self.state_class()
@@ -1202,7 +1175,6 @@ class MultiStateTest(unittest.TestCase):
         assert moodycolor.counter == 2
         assert moodycolor.color == 'blue'
         assert moodycolor.mood == 'bad'
-        assert moodycolor.state == {'color': 'blue', 'mood': 'bad'}
         n = 3
         for _ in range(n):
             moodycolor.next()
@@ -1252,9 +1224,7 @@ class TransitioningTest(unittest.TestCase):
 
     def setUp(self):
         """called before any individual test method"""
-        self.machine = state_machine(
-            name="washer",
-            initial="off",
+        self.config = dict(
             states={
                 "off": {},
                 "on": {},
@@ -1267,7 +1237,7 @@ class TransitioningTest(unittest.TestCase):
 
         class Radio(StatefulObject):
             """object class fo which the state is managed"""
-            machine = self.machine
+            state = state_machine(**self.config)
 
             def __init__(self, testcase):
                 super(Radio, self).__init__()
@@ -1294,7 +1264,7 @@ class TransitioningTest(unittest.TestCase):
 
 class MultiStateMachineTest(unittest.TestCase):
 
-    class MultiSome(MultiStateObject):
+    class MultiSome(StatefulObject):
 
         color = state_machine(
             states=dict(
