@@ -1,14 +1,13 @@
+__author__ = "lars van gemerden"
+
 import json
 from copy import deepcopy
 from collections import defaultdict
 from functools import partial
-from operator import attrgetter
 from typing import Mapping
 
-from states.tools import MachineError, TransitionError, lazy_property, dummy_context
+from states.tools import MachineError, TransitionError, lazy_property
 from states.tools import Path, listify, callbackify, nameify
-
-__author__ = "lars van gemerden"
 
 from states.transition import Transition
 
@@ -52,7 +51,7 @@ class BaseState(object):
 
     @lazy_property
     def default_path(self):
-        return self.first_leaf_state.full_path
+        return self.first_leaf_state.full_path.tail(self.full_path)
 
     @property
     def full_path(self):
@@ -96,7 +95,7 @@ class ChildState(BaseState):
         self.condition = callbackify(condition)
 
     def _get_transitions(self, old_path, trigger):
-        raise TransitionError(f"trigger '{trigger}' does not exist for this state '{old_path}'")
+        raise TransitionError(f"trigger '{trigger}' does not exist for this state '{self.name}'")
 
     def __str__(self):
         return str(self.full_path)
@@ -107,7 +106,7 @@ class ParentState(BaseState):
 
     def __init__(self, states=(), transitions=(),
                  before_any_exit=(), after_any_entry=(),
-                 context_manager=dummy_context, *args, **kwargs):
+                 context_manager=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.sub_states = self._create_states(states)
         self.triggering = self._create_triggering(transitions)
@@ -117,7 +116,7 @@ class ParentState(BaseState):
 
     @lazy_property
     def first_state(self):
-        return self.sub_states[list(self.sub_states.keys())[0]]  # top state
+        return self.sub_states[list(self.sub_states.keys())[0]]
 
     @lazy_property
     def triggers(self):
@@ -129,6 +128,8 @@ class ParentState(BaseState):
         return triggers
 
     def _get_context_manager(self, context_manager):
+        if context_manager is None:
+            return None
         if isinstance(context_manager, str):
             def new_context_manager(obj, *args, **kwargs):
                 return getattr(obj, context_manager)(*args, **kwargs)
@@ -379,24 +380,6 @@ class StateMachine(ParentState):
     def __set_name__(self, cls, name):
         self.name = self._check_name(name)
         self.dkey = '_' + self.name
-
-        if not hasattr(cls, '_state_machines'):
-            cls._state_machines = {}
-        cls._state_machines[self.name] = self
-
-        if not hasattr(cls, '_trigger_func_dict'):
-            cls._trigger_func_dict = defaultdict(list)
-
-        for trigger_name in self.triggers:
-            func_list = cls._trigger_func_dict[trigger_name]
-            func_list.append(partial(self.trigger, trigger_name=trigger_name))
-
-            def trigger_func(*args, _func_list=func_list, **kwargs):
-                obj = None
-                for func in _func_list:
-                    obj = func(*args, **kwargs)  # same 'obj' every time
-                return obj
-            setattr(cls, trigger_name, trigger_func)
 
     def __get__(self, obj, cls=None):
         if obj is None:

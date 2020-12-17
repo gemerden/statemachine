@@ -1,9 +1,6 @@
-from contextlib import contextmanager
-from typing import Sequence, Mapping, MutableMapping
-
-
 __author__ = "lars van gemerden"
 
+from typing import Sequence, Mapping, MutableMapping
 
 _marker = object()
 

@@ -534,6 +534,7 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
     def test_on(self):
         light_switch = self.object_class(state="on")
         light_switch.smash()
+        self.assertEqual(light_switch.state, "broken")
         light_switch.fix()
         self.assertEqual(light_switch.state, "on")
 
@@ -861,7 +862,7 @@ class NestedStateMachineTest(unittest.TestCase):
         self.assert_counters(1, 1, 1)
 
     def test_machine_errors(self):  # TODO
-        assert "dry" in self.object_class._trigger_func_dict
+        assert "dry" in self.object_class.__dict__
 
 
 class SwitchedTransitionTest(unittest.TestCase):
@@ -871,7 +872,6 @@ class SwitchedTransitionTest(unittest.TestCase):
         # create a machine config based on phase changes of matter (solid, liquid, gas)
         self.machine_config = dict(
             states=dict(
-                broken={},
                 off={},
                 on=dict(
                     states={
@@ -884,13 +884,14 @@ class SwitchedTransitionTest(unittest.TestCase):
                         {"old_state": "washing", "new_state": "drying", "trigger": ["dry"]},
                         {"old_state": "drying", "new_state": "none", "trigger": ["stop"]},
                     ]
-                )
+                ),
+                broken={},
             ),
             transitions=[
                 {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
                 {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
                 {"old_state": "*", "new_state": "broken", "trigger": "smash"},
-                {"old_state": "broken", "new_state": {"off": {"condition": lambda obj: random.random() > 0},
+                {"old_state": "broken", "new_state": {"off": {"condition": lambda obj: random.random() > 0.5},
                                                       "on": {}},
                  "trigger": "fix"},
             ]
@@ -913,7 +914,7 @@ class SwitchedTransitionTest(unittest.TestCase):
             self.assertEqual(washer.state, "broken")
 
             washer.fix()
-            self.assertIn(washer.state, ("on", "off"))
+            self.assertIn(washer.state, ("on.none", "off"))
 
     def test_machine_errors(self):
         config = deepcopy(self.machine_config)
@@ -996,10 +997,13 @@ class ContextManagerTest(unittest.TestCase):
             state = state_machine(**self.config)
 
         matter = NewMatter(testcase=self)
+        assert matter.state == "solid"
         self.assertEqual(matter.managed, False)
         matter.heat()
+        assert matter.state == "liquid"
         self.assertEqual(matter.managed, False)
         matter.heat()
+        assert matter.state == "gas"
         self.assertEqual(matter.managed, False)
         matter.cool()
         self.assertEqual(matter.managed, False)
@@ -1063,7 +1067,7 @@ class CallbackTest(unittest.TestCase):
         self.radio.switch(a=1, b=2, c=3, d=4, e=5, f=6, g=7, h=None)
 
 
-class TriggerOverrideTest(unittest.TestCase):
+class PrepareTest(unittest.TestCase):
 
     def setUp(self):
         """called before any individual test method"""
@@ -1079,15 +1083,15 @@ class TriggerOverrideTest(unittest.TestCase):
                     # switch only turns on at night
                     {"old_state": "on", "new_state": "off", "trigger": "flick"},
                 ],
+                prepare = "prepare"
             )
 
             def __init__(self, time=0, *args, **kwargs):
                 super(LightSwitch, self).__init__(*args, **kwargs)
                 self.time = time
 
-            def flick(self, hours, *args, **kwargs):
+            def prepare(self, hours, *args, **kwargs):
                 self.time = (self.time + hours) % 24  # increment time with hours and start from 0 if >24 (midnight)
-                self.trigger(self, "flick", hours=hours, *args, **kwargs)
 
             def is_night(self, *args, **kwargs):
                 return self.time < 6 or self.time > 18
@@ -1098,10 +1102,13 @@ class TriggerOverrideTest(unittest.TestCase):
         switch = self.lightswitch_class(time=0, state="on")
         self.assertTrue(switch.is_night())
         switch.flick(hours=7)  # switch.time == 7
+        assert switch.time == 7
         self.assertTrue(switch.state == "off")
         switch.flick(hours=7)  # switch.time == 14
+        assert switch.time == 14
         self.assertTrue(switch.state == "off")
         switch.flick(hours=7)  # switch.time == 21
+        assert switch.time == 21
         self.assertTrue(switch.time == 21)
         self.assertTrue(switch.state == "on")
 

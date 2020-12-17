@@ -1,3 +1,5 @@
+__author__ = "lars van gemerden"
+
 from states.tools import MachineError
 from states.tools import Path, callbackify
 
@@ -39,26 +41,27 @@ class Transition(object):
         setattr(obj, self.machine.root.dkey, str(self.new_obj_path))
 
     def _execute(self, obj, *args, **kwargs):
-        self.machine.do_prepare(obj, *args, **kwargs)
-        with self.machine.context_manager(obj, *args, **kwargs):
-            if self.condition(obj, *args, **kwargs) and self.new_state.condition(obj, *args, **kwargs):
-                if self.same_state:
-                    self.before_transfer(obj, *args, **kwargs)
-                    self.old_state.on_stay(obj, *args, **kwargs)
-                    self.after_transfer(obj, *args, **kwargs)
-                else:
-                    self.machine.do_exit(obj, *args, **kwargs)
-                    self.before_transfer(obj, *args, **kwargs)
-                    self.update_state(obj)
-                    self.after_transfer(obj, *args, **kwargs)
-                    self.machine.do_enter(obj, *args, **kwargs)
-                return True
-            return False
+        if self.condition(obj, *args, **kwargs) and self.new_state.condition(obj, *args, **kwargs):
+            if self.same_state:
+                self.before_transfer(obj, *args, **kwargs)
+                self.old_state.on_stay(obj, *args, **kwargs)
+                self.after_transfer(obj, *args, **kwargs)
+            else:
+                self.machine.do_exit(obj, *args, **kwargs)
+                self.before_transfer(obj, *args, **kwargs)
+                self.update_state(obj)
+                self.after_transfer(obj, *args, **kwargs)
+                self.machine.do_enter(obj, *args, **kwargs)
+            return True
+        return False
 
     def execute(self, obj, *args, **kwargs):
         self.machine.do_prepare(obj, *args, **kwargs)
-        with self.machine.context_manager(obj, *args, **kwargs) as context:
-            self._execute(obj, *args, **kwargs)
+        if self.machine.context_manager:
+            with self.machine.context_manager(obj, *args, **kwargs) as context:
+                return self._execute(obj, *args, context=context, **kwargs)
+        else:
+            return self._execute(obj, *args, **kwargs)
 
 
     def __str__(self):
