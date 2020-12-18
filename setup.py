@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='states3',
-    version='0.4.1',
+    version='0.5.0',
     description='state machine for python classes',
     long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on PyPI
     author='Lars van Gemerden',
@@ -28,7 +28,8 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ],
     python_requires='>=3.6',
-    keywords='statemachine states transitions nested multi-state callbacks condition contextmanager performance easy-to-use low-memory',
+    keywords='statemachine states transitions object-oriented nested multi-state callbacks condition contextmanager performance easy-to-use low-memory',
 )
