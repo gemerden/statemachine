@@ -3,7 +3,7 @@ import os, random
 import pygame
 from pygame.locals import *
 
-from states.machine import state_machine
+from states import state_machine
 from states import StatefulObject
 
 
