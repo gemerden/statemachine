@@ -1,11 +1,11 @@
-import random
 import unittest
 
-from states.tools import Path, replace_in_list, has_doubles
+from states.tools import Path, replace_in_list, has_doubles, state, transition, switch
 
-__author__  = "lars van gemerden"
+__author__ = "lars van gemerden"
 
-class PathTest(unittest.TestCase):
+
+class TestPath(unittest.TestCase):
 
     def setUp(self):
         self.mapping = dict(
@@ -67,12 +67,48 @@ class PathTest(unittest.TestCase):
         self.assertEqual(str(Path("1")), "1")
         self.assertEqual(Path("1")[0], 1)
         self.assertEqual(str(Path((1,))), "1")
-        self.assertEqual(str(Path("a")+1), "a.1")
-        self.assertEqual((Path("a")+1)[1], 1)
+        self.assertEqual(str(Path("a") + 1), "a.1")
+        self.assertEqual((Path("a") + 1)[1], 1)
 
     def test_iter_all(self):
         self.assertDictEqual(dict(Path.iter_all(self.mapping, key_cast=str)),
                              {"a": 1, "b.c": 2, "b.d.e": 3, "f.0": 4, "f.1": 5})
 
+
+class TestDictClasses(unittest.TestCase):
+
+    def test_basics(self):
+        def dummy_state_machine(*args, **kwargs):
+            return args, kwargs
+
+        args, kwargs = dummy_state_machine(a=state(), b=state(),
+                                           *(transition("a", "b", trigger="t1"),
+                                             transition("a", "b", trigger="t2"),
+                                             transition("a", switch(a={"condition": "x"}, b={}), trigger="t3")))
+
+        assert len(args) == 3
+        assert len(kwargs) == 2
+
+    def test_basics2(self):
+        def dummy_state_machine(*args, **kwargs):
+            return args, kwargs
+
+        args, kwargs = dummy_state_machine(transition("a", "b", trigger="t1"),
+                                           transition("b", "a", trigger="t2"),
+                                           transition("a", switch(a={"condition": "x"}, b={}), trigger="t3"),
+                                           a=state(), b=state())
+
+        assert len(args) == 3
+        assert len(kwargs) == 2
+
+
+class TestFunctions(unittest.TestCase):
+
+    def test_replace_in_list(self):
+        self.assertEqual(replace_in_list([1, 2, 3], 2, [4, 5]), [1, 4, 5, 3])
+
+    def test_has_doubles(self):
+        self.assertTrue(has_doubles([1, 2, 3, 2]))
+        self.assertFalse(has_doubles([1, 2, 3, 4]))
 
 

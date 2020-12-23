@@ -6,7 +6,7 @@ from copy import deepcopy
 
 from states import state_machine, StatefulObject, TransitionError, MachineError
 
-from states.tools import Path, replace_in_list, has_doubles
+from states.tools import Path, states, transition, state
 
 __author__ = "lars van gemerden"
 
@@ -15,17 +15,7 @@ def count_transitions(state):
     return sum(map(len, state.triggering.values()))
 
 
-class TestTools(unittest.TestCase):
-
-    def test_replace_in_list(self):
-        self.assertEqual(replace_in_list([1, 2, 3], 2, [4, 5]), [1, 4, 5, 3])
-
-    def test_has_doubles(self):
-        self.assertTrue(has_doubles([1, 2, 3, 2]))
-        self.assertFalse(has_doubles([1, 2, 3, 4]))
-
-
-class SimplestStateMachineTest(unittest.TestCase):
+class TestSimplestStateMachine(unittest.TestCase):
 
     def setUp(self):
         self.config = dict(
@@ -70,7 +60,7 @@ class SimplestStateMachineTest(unittest.TestCase):
         self.assertEqual(machine_config, self.config_copy)
 
 
-class StateMachineTest(unittest.TestCase):
+class TestStateMachine(unittest.TestCase):
 
     def setUp(self):
         """called before any individual test method"""
@@ -304,7 +294,7 @@ class StateMachineTest(unittest.TestCase):
             a.state = "liquid"
 
 
-class WildcardStateMachineTest(unittest.TestCase):
+class TestWildcardStateMachine(unittest.TestCase):
     """test the case where transition configuration contains wildcards '*' """
 
     def setUp(self):
@@ -429,7 +419,7 @@ class WildcardStateMachineTest(unittest.TestCase):
 
 
 
-class ListedTransitionStateMachineTest(unittest.TestCase):
+class TestListedTransitionStateMachine(unittest.TestCase):
 
     def setUp(self):
         self.callback_counter = 0  # rest for every tests; used to count number of callbacks from machine
@@ -493,7 +483,7 @@ class ListedTransitionStateMachineTest(unittest.TestCase):
             block.zap()
 
 
-class SwitchedTransitionStateMachineTest(unittest.TestCase):
+class TestSwitchedTransitionStateMachine(unittest.TestCase):
 
     def setUp(self):
         class LightSwitch(StatefulObject):
@@ -556,7 +546,7 @@ class SwitchedTransitionStateMachineTest(unittest.TestCase):
             )
 
 
-class SwitchedDoubleTransitionStateMachineTest(unittest.TestCase):
+class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
     good_machine_dict = dict(
         states={
             "on": {},
@@ -616,7 +606,7 @@ class SwitchedDoubleTransitionStateMachineTest(unittest.TestCase):
         self.assertEqual(lamp.state, "broken")
 
 
-class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condition fails but no self transition
+class TestStateConditionStateMachine(unittest.TestCase):  # TODO, what if condition fails but no self transition
 
     machine_dict = dict(
         states={
@@ -685,7 +675,7 @@ class StateConditionStateMachineTest(unittest.TestCase):  # TODO, what if condit
         self.assertTrue(lamp.after_transfer)
 
 
-class NestedStateMachineTest(unittest.TestCase):
+class TestNestedStateMachine(unittest.TestCase):
     """test the case where transition configuration contains wildcards '*' """
 
     def setUp(self):
@@ -865,7 +855,7 @@ class NestedStateMachineTest(unittest.TestCase):
         assert "dry" in self.object_class.__dict__
 
 
-class SwitchedTransitionTest(unittest.TestCase):
+class TestSwitchedTransition(unittest.TestCase):
     """test the case where transition configuration contains wildcards '*' """
 
     def setUp(self):
@@ -928,7 +918,7 @@ class SwitchedTransitionTest(unittest.TestCase):
             state_machine(**config)
 
 
-class ContextManagerTest(unittest.TestCase):
+class TestContextManager(unittest.TestCase):
 
     def setUp(self):
         """called before any individual test method"""
@@ -1011,7 +1001,7 @@ class ContextManagerTest(unittest.TestCase):
         self.assertEqual(matter.managed, False)
 
 
-class CallbackTest(unittest.TestCase):
+class TestCallback(unittest.TestCase):
 
     def setUp(self):
         """called before any individual test method"""
@@ -1067,7 +1057,7 @@ class CallbackTest(unittest.TestCase):
         self.radio.switch(a=1, b=2, c=3, d=4, e=5, f=6, g=7, h=None)
 
 
-class PrepareTest(unittest.TestCase):
+class TestPrepare(unittest.TestCase):
 
     def setUp(self):
         """called before any individual test method"""
@@ -1113,7 +1103,7 @@ class PrepareTest(unittest.TestCase):
         self.assertTrue(switch.state == "on")
 
 
-class MultiStateTest(unittest.TestCase):
+class TestMultiState(unittest.TestCase):
 
     def setUp(self):
         class Colored(StatefulObject):
@@ -1227,7 +1217,7 @@ class MultiStateTest(unittest.TestCase):
                                                {'color': 'blue', 'mood': 'good'}]
 
 
-class TransitioningTest(unittest.TestCase):
+class TestTransitioning(unittest.TestCase):
 
     def setUp(self):
         """called before any individual test method"""
@@ -1269,7 +1259,7 @@ class TransitioningTest(unittest.TestCase):
         self.assertEqual(self.radio.state, "off")
 
 
-class MultiStateMachineTest(unittest.TestCase):
+class TestMultiStateMachine(unittest.TestCase):
 
     class MultiSome(StatefulObject):
 
@@ -1295,6 +1285,54 @@ class MultiStateMachineTest(unittest.TestCase):
                 dict(old_state='good', new_state='bad', trigger='next'),
                 dict(old_state='bad', new_state='ugly', trigger='next'),
                 dict(old_state='ugly', new_state='good', trigger='next'),
+            ],
+        )
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.history = dict(color=[], mood=[])
+
+        def color_callback(self):
+            self.history['color'].append(self.color)
+
+        def mood_callback(self):
+            self.history['mood'].append(self.mood)
+
+    def test_transitions(self):
+        some = self.MultiSome()
+        for _ in range(6):
+            some.next()
+
+        assert some.history['color'] == ['red', 'blue', 'green', 'red', 'blue', 'green']
+        assert some.history['mood'] == ['good', 'bad', 'ugly', 'good', 'bad', 'ugly']
+
+
+class TestMultiStateMachineNewConstructors(unittest.TestCase):
+
+    class MultiSome(StatefulObject):
+
+        color = state_machine(
+            states=states(
+                red=state(on_exit='color_callback'),
+                blue=state(on_exit='color_callback'),
+                green=state(on_exit='color_callback'),
+            ),
+            transitions=[
+                transition('red', 'blue', trigger='next'),
+                transition('blue', 'green', trigger='next'),
+                transition('green', 'red', trigger='next'),
+            ],
+        )
+        mood = state_machine(
+            states=states(
+                good=state(on_exit='mood_callback'),
+                bad=state(on_exit='mood_callback'),
+                ugly=state(on_exit='mood_callback')
+            ),
+            transitions=[
+                transition('good', 'bad', trigger='next'),
+                transition('bad', 'ugly', trigger='next'),
+                transition('ugly', 'good', trigger='next'),
             ],
         )
 

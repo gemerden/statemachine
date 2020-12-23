@@ -249,7 +249,8 @@ class ParentState(BaseState):
             for transition in transitions:
                 key = (old_state, transition.new_state, trigger)
                 if key in seen:
-                    raise MachineError(f"transition {old_state}, {transition.new_state} and trigger {trigger} already exists")
+                    raise MachineError(
+                        f"transition '{old_state}', '{transition.new_state}' and trigger '{trigger}' already exists")
                 seen.add(key)
         return trigger_dict
 
@@ -330,6 +331,7 @@ class LeafState(ChildState):
 
 class NestedMachine(ParentState, ChildState):
     pass
+
 
 class StateMachine(ParentState):
     """

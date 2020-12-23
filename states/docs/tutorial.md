@@ -1,7 +1,7 @@
 ## Statemachine Tutorial
 
 ---
-_This tutorial covers basic and advanced use of the `statemachine` module. Most code examples can be found in the "\examples" folder._
+_This tutorial covers basic and advanced use of the `states3` module. Most code examples can be found in the "\examples" folder._
 
 ---
 
@@ -23,7 +23,7 @@ On entering, exiting or transitioning between states, actions can be executed th
 The following functions and classes are part of the public API of the statemachine.
 
 * `state_machine(**config)`: the function returning instances of the correct state machine class,
-* `StatefulObject(object)/MultiStateObject(object)`: the class that can be subclassed to make (almost) any python object stateful,
+* `StatefulObject(object)`: the class that can be subclassed to make (almost) any python object stateful,
 * exception classes:
     * `MachineError(Exception)`: raised in case of a misconfiguration of the state machine,
     * `TransitionError(Exception)`: raised when a state transition fails,
@@ -32,12 +32,12 @@ The following functions and classes are part of the public API of the statemachi
 
 We will show the simplest example of state machine. It defines states and transitions. 
 ```python
-from states.machine import state_machine
+from states import state_machine
 from states import StatefulObject
 
 
 class LightSwitch(StatefulObject):  # inherit from "StatefulObject" to get stateful behaviour
-    machine = state_machine(
+    state =state_machine(
         states={
             "on": {},
             "off": {},
@@ -50,7 +50,7 @@ class LightSwitch(StatefulObject):  # inherit from "StatefulObject" to get state
 
 
 if __name__ == "__main__":
-    lightswitch = LightSwitch()         # argument "initial" can be use to set the initial state
+    lightswitch = LightSwitch()         
     assert lightswitch.state == "off"   # the lightswitch is now in the "off" state
 
     lightswitch.flick()
@@ -65,10 +65,8 @@ if __name__ == "__main__":
 Notes:
 * The state machine itself is stateless; it does not keep any information about the stateful objects,
 * The only attribute used by the state machine on the objects instances is the 'state',
-* If no `initial` argument to the constructor is given, the first state in the state machine is taken as initial state,
-* You can also define the statemachine outside the class and add it in the class definition as class attribute or in the constructor as normal attribute (it is called internally through `self.machine`),
-* One of the main differences between this python3 state machine and the previous version, is that the state cannot be explicitly set ('obj.state = 'some_state'). This lead to a logic inconsistency and was not used in real world cases, 
-* Triggers, although they are called as methods, are not actually defined as methods on the class. See `__getattr__` in  `StatefulObject` for details,
+* If no <state machine name> (e.g. state in the example above) argument to the constructor is given, the first state in the state machine is taken as initial state,
+* Triggers are auto-generated during class creation,
 * If you need multiple triggers for a transition, you can use a list of trigger names `"trigger": ["turn_on", "flick"]`.
 
 ### Basics: Adding Callbacks
@@ -77,11 +75,12 @@ The example above does little more than guard against illegal state transitions.
 Apart from controling state, the statemachine allows you to call functions (callbacks) before during and after state transitions:    
 * `on_exit`: these function(s) or method(s) will be called when the stateful object exits a specific state,
 * `on_entry`: called when the object enters a specific specific state,
+* `on_stay`: called when a trigger is called but the object does not change state as a result,
 * `on_transfer`: to be called during a specific transition,
 * `before_any_exit`: called first, before all transitions within a specific state machine,
 * `after_any_entry`: called last, after all transitions within a specific state machine.
 
-If present, these will be called in this order.
+If present, these will be called in this order (`on_stay` is called when there is no actual state change, so when the `*_exit` and `*_entry` are not called).
 
 If the value of the callback parameter is a string, the callback will be looked up on the stateful class, otherwise the parameter must be a function defined elsewhere. These parameters can also be list of strings or functions, which will then be called in order.
 
@@ -97,7 +96,7 @@ def entry_printer(obj):
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state =state_machine(
         states={
             "on": {"on_exit": "exit_printer", "on_entry": entry_printer, "on_stay": "stay_printer"},  # string or function
             "off": {"on_exit": "exit_printer", "on_entry": entry_printer},
@@ -127,7 +126,7 @@ class LightSwitch(StatefulObject):
 
 if __name__ == "__main__":
 
-    lightswitch = LightSwitch(initial="off")  # setting the initial state does not call any callback functions
+    lightswitch = LightSwitch(state="off")  # setting the initial state does not call any callback functions
     lightswitch.flick()                       # another trigger to change state
     lightswitch.noflick()                     # switch stays in state 'on'
     lightswitch.flick()                       # flick() works both ways
@@ -156,7 +155,7 @@ from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state =state_machine(
         states={
             "on": {"on_entry": "time_printer"},
             "off": {"on_entry": "time_printer"},
@@ -177,7 +176,7 @@ if __name__ == "__main__":
 
     from datetime import datetime
 
-    lightswitch = LightSwitch(initial="off")
+    lightswitch = LightSwitch(state="off")
     lightswitch.flick(name="bob", time=datetime(1999, 12, 31, 23, 59))
     lightswitch.flick(time=datetime(2000, 1, 1, 0, 0))
     
@@ -205,7 +204,7 @@ from states.machine import state_machine
 from states import StatefulObject
 
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    state = state_machine(
         states={
             "on": {"condition": "is_nighttime"},
             "off": {},
@@ -225,7 +224,7 @@ class LightSwitch(StatefulObject):
 
 
 if __name__ == "__main__":
-    switch = LightSwitch(initial="off")
+    switch = LightSwitch(state="off")
     assert switch.is_nighttime()
     switch.flick()
     assert switch.state == "on"
@@ -251,7 +250,7 @@ from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state =state_machine(
         states={
             "on": {},
             "off": {},
@@ -303,7 +302,7 @@ from states.machine import state_machine
 from states import StatefulObject
 
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    state =state_machine(
         states={
             "on": {},
             "off": {},
@@ -327,7 +326,7 @@ class LightSwitch(StatefulObject):
 
 
 if __name__ == "__main__":
-    switch = LightSwitch(time=0, initial="on")
+    switch = LightSwitch(time=0, state="on")
     assert switch.is_night()
     switch.flick(hours_later=7)  # switch.time == 7
     assert switch.state == "off"
@@ -350,7 +349,7 @@ from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state =state_machine(
         states={
             "on": {"on_entry": "printer"},
             "off": {"on_entry": "printer"},
@@ -371,7 +370,7 @@ class LightSwitch(StatefulObject):
 
 if __name__ == "__main__":
 
-    lightswitch = LightSwitch(initial="off")
+    lightswitch = LightSwitch(state="off")
     lightswitch.flick()
     lightswitch.smash()
     lightswitch.fix()
@@ -397,8 +396,7 @@ from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
-        name="matter machine",
+    state =state_machine(
         states={
             "on": {},
             "off": {},
@@ -414,8 +412,8 @@ class LightSwitch(StatefulObject):
         before_any_exit="store_state"  # this callback method is used to store the old state before transitioning
     )
 
-    def __init__(self, initial=None):
-        super(LightSwitch, self).__init__(initial=initial)
+    def __init__(self, state):
+        super(LightSwitch, self).__init__(state=state)
         self.old_state = None
 
     def store_state(self):
@@ -425,12 +423,12 @@ class LightSwitch(StatefulObject):
         return self.old_state == "on"
 
 if __name__ == "__main__":
-    switch = LightSwitch(initial="off")
+    switch = LightSwitch(state="off")
     switch.smash()
     switch.fix()
     assert switch.state == "off"
 
-    switch = LightSwitch(initial="on")
+    switch = LightSwitch(state="on")
     switch.smash()
     switch.fix()
     assert switch.state == "on"
@@ -453,9 +451,9 @@ To model this the object (person) can have multiple state machines, as shown in 
 
  
 ```python
-from states.machine import state_machine, MultiStateObject
+from states import state_machine, StatefulObject
 
-class MoodyColor(MultiStateObject):
+class MoodyColor(StatefulObject):
     color = state_machine(
         states=dict(
             red={'on_entry': 'on_entry'},
@@ -488,19 +486,17 @@ class MoodyColor(MultiStateObject):
 
 if __name__ == "__main__":
 
-    moodycolor = MoodyColor()
-    moodycolor.next('next')
-    assert moodycolor.state == {'color': 'blue', 'mood': 'bad'}
+    moodycolor = MoodyColor(color="red", mood="good")
+    moodycolor.next(call_name='next')
     assert moodycolor.color == 'blue'
     assert moodycolor.mood == 'bad'
     assert moodycolor.last_call == 'next'
     assert moodycolor.counter == 2
 ```
 Notes:
-* As you can see above, calling 'next' will make transition in both state machines occur, because both transitions define 'next' as trigger,
+* As you can see above, calling 'next' will make transitions in both state machines occur, because transitions in both state machines define 'next' as trigger,
 * Getting an attribute with a state machine name (like 'moodycolor.mood') will return the state with respect to that state machine ('bad'),
-* Callbacks defined with a string are still looked up on the object; ofcourse different callbacks can be defined for each state machine,
-* Setting a custom initial state (top state of machine.states is default initial state), requires a dictionary like '{'color': 'blue', 'mood': 'bad'}'.
+* Callbacks defined with a string are still looked up on the object; of course different callbacks can be defined for each state machine,
 
 ### Advanced: Nested States
 
@@ -521,7 +517,7 @@ from states import StatefulObject
 
 
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    state =state_machine(
         states={"normal": {
                     "states": {
                         "off": {},
@@ -571,7 +567,7 @@ from states import StatefulObject
 
 class LightSwitch(StatefulObject):
 
-    machine = state_machine(
+    state =state_machine(
         states={
             "on": {},
             "off": {},

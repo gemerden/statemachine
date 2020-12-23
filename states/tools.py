@@ -5,6 +5,74 @@ from typing import Sequence, Mapping, MutableMapping
 _marker = object()
 
 
+class states(dict):
+    """ can be used in state_machine constructor instead of dicts """
+    def __init__(self, **states):
+        super().__init__(**states)
+
+
+class state(dict):
+    """ can be used in state_machine constructor instead of dicts """
+    def __init__(self, info="", condition=(), on_entry=(), on_exit=(), on_stay=()):
+        super().__init__(info=info, condition=condition, on_entry=on_entry, on_exit=on_exit, on_stay=on_stay )
+
+
+class transition(dict):
+    """ can be used in state_machine constructor instead of dicts """
+    def __init__(self, old_state, new_state, trigger, on_transfer=()):
+        super().__init__(old_state=old_state, new_state=new_state, trigger=trigger, on_transfer=on_transfer)
+
+
+class switch(dict):
+    """ can be used in state_machine constructor instead of dicts """
+    def __init__(self, **state_conditions):
+        super().__init__(**state_conditions)
+
+
+class condition(dict):
+    """ can be used in state_machine constructor instead of dicts """
+    def __init__(self, condition=(), on_transfer=(), info=""):
+        super().__init__(condition=condition, on_transfer=on_transfer, info=info)
+
+
+def listify(list_or_item):
+    """utitity function to ensure an argument becomes a list if it is not one yet"""
+    if isinstance(list_or_item, (list, tuple, set)):
+        return list(list_or_item)
+    else:
+        return [list_or_item]
+
+
+def callbackify(callbacks):
+    """
+    Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
+    first argument (obj) of the actual call to the callback.
+
+    :param callbacks: single or list of functions or method names, all with the same signature
+    :return: new function that performs all the callbacks when called
+    """
+    if not callbacks:
+        return nocondition
+
+    callbacks = listify(callbacks)
+
+    def result_callback(obj, *args, **kwargs):
+        result = []  # introduced to be able to use this method for "condition" callback to return a value
+        for callback in callbacks:
+            if isinstance(callback, str):
+                result.append(getattr(obj, callback)(*args, **kwargs))
+            else:
+                result.append(callback(obj, *args, **kwargs))
+        return all(result)
+
+    return result_callback
+
+
+def nameify(f, cast=lambda v: v):
+    """ tries to give a name to an item"""
+    return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
+
+
 class Path(tuple):
     '''
     tuple sub-class representing a path from one object to another. There are two types of items in a path:
@@ -181,44 +249,6 @@ class DummyFunction(object):
 
 
 nocondition = DummyFunction(True)
-
-
-def listify(list_or_item):
-    """utitity function to ensure an argument becomes a list if it is not one yet"""
-    if isinstance(list_or_item, (list, tuple, set)):
-        return list(list_or_item)
-    else:
-        return [list_or_item]
-
-
-def callbackify(callbacks):
-    """
-    Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
-    first argument (obj) of the actual call to the callback.
-
-    :param callbacks: single or list of functions or method names, all with the same signature
-    :return: new function that performs all the callbacks when called
-    """
-    if not callbacks:
-        return nocondition
-
-    callbacks = listify(callbacks)
-
-    def result_callback(obj, *args, **kwargs):
-        result = []  # introduced to be able to use this method for "condition" callback to return a value
-        for callback in callbacks:
-            if isinstance(callback, str):
-                result.append(getattr(obj, callback)(*args, **kwargs))
-            else:
-                result.append(callback(obj, *args, **kwargs))
-        return all(result)
-
-    return result_callback
-
-
-def nameify(f, cast=lambda v: v):
-    """ tries to give a name to an item"""
-    return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
 
 
 def replace_in_list(lst, old_item, new_items):
