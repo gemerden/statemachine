@@ -1,12 +1,9 @@
-from functools import partial
-from operator import attrgetter
-
 from states.tools import listify
 
 
 class Callbacks(object):
     name_prefix = '_'
-    func_prefix = 'do_'
+    func_prefix = ''
 
     def __init__(self, **callbacks):
         for name, callback_s in callbacks.items():
@@ -14,6 +11,9 @@ class Callbacks(object):
             func_name = self.func_prefix + name
             setattr(self, attr_name, listify(callback_s))
             setattr(self, func_name, self._get_func(attr_name))
+
+    def register(self, name, *callback_s):
+        getattr(self, self.name_prefix + name).extend(callback_s)
 
     def _get_func(self, name):
         callbacks = getattr(self, name)
@@ -30,21 +30,11 @@ class Callbacks(object):
         call.__name__ = name
         return call
 
-    def _register(self, name, *callbacks):
-        getattr(self, self.name_prefix + name).extend(callbacks)
+
+
+
+
 
 
 if __name__ == '__main__':
-    class Some(object):
-        def do_it(self, *args, **kwargs):
-            print('done')
-
-
-    def fly_it(*args, **kwargs):
-        print('flone')
-
-
-    cb = Callbacks(on_entry=('do_it', fly_it))
-    cb._on_entry.append('do_it')
-
-    cb.do_on_entry(Some())
+    pass

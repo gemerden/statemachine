@@ -11,7 +11,7 @@ def validate_new_state(state_name_s):
     return state_name_s
 
 
-def get_expanded_paths(*state_names, state_getter):
+def get_expanded_paths(*state_names, getter):
     """
        turns '.' separated state names in Paths and expands '*' wildcards
 
@@ -26,14 +26,14 @@ def get_expanded_paths(*state_names, state_getter):
         if head == path:  # no more '*' in path
             expanded.append(path)
         else:  # essentially replace '*' with all substates of the state pointed to by head
-            for sub_state_name in state_getter(head):
+            for sub_state_name in getter(head):
                 queue.append(head + sub_state_name + tail)
     return expanded
 
 
 def get_expanded_state_names(*state_names, state_getter):
     """ '.' separated names version of get_expanded_paths (turns paths into strings) """
-    return [str(e) for e in get_expanded_paths(*state_names, state_getter=state_getter)]
+    return [str(e) for e in get_expanded_paths(*state_names, getter=state_getter)]
 
 
 def get_spliced_path(old_path, new_path):
@@ -53,8 +53,8 @@ def get_spliced_names(old_state_name, new_state_name):
 def get_spliced_paths(old_state_name, new_state_name, state_getter):
     """ splits of common states from the 2 state_names """
     spliced_paths = []
-    for old_path in get_expanded_paths(old_state_name, state_getter=state_getter):
-        for new_path in get_expanded_paths(new_state_name, state_getter=state_getter):
+    for old_path in get_expanded_paths(old_state_name, getter=state_getter):
+        for new_path in get_expanded_paths(new_state_name, getter=state_getter):
             spliced_paths.append(get_spliced_path(old_path, new_path))
     return spliced_paths
 

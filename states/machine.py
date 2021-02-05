@@ -3,7 +3,6 @@ __author__ = "lars van gemerden"
 import json
 from copy import deepcopy
 from collections import defaultdict
-from functools import partial
 
 from states.callbacks import Callbacks
 from states.standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config
@@ -15,7 +14,7 @@ from states.transition import Transition
 _marker = object()
 
 
-class BaseState(Callbacks):
+class BaseState(object):
     """Base class for the both ChildState and ParentState"""
 
     @classmethod
@@ -26,13 +25,13 @@ class BaseState(Callbacks):
             raise MachineError(f"state or machine name '{name}' cannot contain characters %s" % exclude)
         return name
 
-    def __init__(self, info="", **kwargs):
+    def __init__(self, info="", **callbacks):
         """
         Constructor of BaseState:
 
         :param info: (str), description of the state for auto docs
         """
-        super().__init__(**kwargs)
+        self.callbacks = Callbacks(**callbacks)
         self.info = info
 
     @lazy_property
@@ -93,7 +92,7 @@ class ChildState(BaseState):
         self.parent = parent
 
     def _get_transitions(self, old_path, trigger):
-        raise TransitionError(f"trigger '{trigger}' does not exist for this state '{self.name}'")
+        raise TransitionError(f"transition '{str(old_path)}' with trigger '{trigger}' does not exist for state '{self.name}'")
 
     def __str__(self):
         return str(self.full_path)
@@ -259,29 +258,32 @@ class StateMachine(ParentState):
 
     def __set__(self, obj, state_name):
         if self.dict_key in obj.__dict__:
-            raise AttributeError(f"{self.name} of {type(obj).__name__} cannot be changed directly; use triggers instead")
+            raise AttributeError(f"state {self.name} of {type(obj).__name__} cannot be changed directly; use triggers instead")
         setattr(obj, self.dict_key, state_name)
 
-    def _register_callback(self, on_key, state_names):
+    def _get_states(self, *state_names):
         state_paths = get_expanded_paths(*state_names,
-                                         state_getter=lambda p: self[p])
-        states = [self[path] for path in state_paths] or [self]
+                                         getter=lambda p: self[p])
+        return [self[path] for path in state_paths] or [self]
+
+    def _register_callback(self, on_key, *state_names):
+        states = self._get_states(*state_names)
 
         def register(func):
             for state in states:
-                state._register(on_key, func)
+                state.callbacks.register(on_key, func)
             return func
 
         return register
 
     def on_entry(self, state_name, *state_names):
-        return self._register_callback('on_entry', (state_name,) + state_names)
+        return self._register_callback('on_entry', state_name, *state_names)
 
     def on_exit(self, state_name, *state_names):
-        return self._register_callback('on_exit', (state_name,) + state_names)
+        return self._register_callback('on_exit', state_name, *state_names)
 
     def on_stay(self, state_name, *state_names):
-        return self._register_callback('on_stay', (state_name,) + state_names)
+        return self._register_callback('on_stay', state_name, *state_names)
 
     def on_transfer(self, old_state_name, new_state_name):
         spliced_paths = get_spliced_paths(old_state_name, new_state_name,
@@ -292,7 +294,7 @@ class StateMachine(ParentState):
             for common, old_tail, new_tail in spliced_paths:
                 for transition in self[common]._trans_dict.get((old_tail, new_tail), ()):
                     if transition is not None:
-                        transition._on_transfer.append(func)
+                        transition.callbacks.register('on_transfer', func)
                         success = True
             if not success:
                 raise MachineError(f"'on_transfer' decorator has no effect: no transitions found to add callback to")
@@ -301,26 +303,26 @@ class StateMachine(ParentState):
         return register
 
     def initial_entry(self, obj, *args, **kwargs):
-        self.do_prepare(obj, *args, **kwargs)
+        self.callbacks.prepare(obj, *args, **kwargs)
         for state in self.get_path(obj).iter_in(self):
             state.do_on_entry(obj, *args, **kwargs)
 
     def trigger(self, obj, trigger, *args, **kwargs):
         """ Executes the transition when called through a trigger """
-        self.do_prepare(obj, *args, **kwargs)
+        self.callbacks.prepare(obj, *args, **kwargs)
         for transition in self._get_transitions(self.get_path(obj), trigger):
             if transition.execute(obj, *args, **kwargs):
                 break
         return obj
 
-    def _config(self, **kwargs):
+    def config(self, **kwargs):
         """ deepcopy can be a problem with non-toplevel callbacks """
         kwargs = deepcopy(kwargs)
 
         def convert(item):
             if isinstance(item, str):
                 return item
-            if isinstance(item, tuple):
+            if isinstance(item, (list, tuple)):
                 return list(map(convert, item))
             return nameify(item)
 

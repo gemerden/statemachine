@@ -4,7 +4,7 @@ from states.callbacks import Callbacks
 from states.tools import MachineError, lazy_property, Path
 
 
-class Transition(Callbacks):
+class Transition(object):
     """class for the internal representation of transitions in the state machine"""
 
     @classmethod
@@ -18,7 +18,7 @@ class Transition(Callbacks):
     def __init__(self, machine, old_state, new_state, trigger,
                  on_transfer=(), condition=(), info=""):
         """ after_transfer is from switched transition on_transfer specific for the new state """
-        super().__init__(on_transfer=on_transfer, condition=condition)
+        self.callbacks = Callbacks(on_transfer=on_transfer, condition=condition)
         self._validate(old_state, new_state)
         self.machine = machine
         self.trigger = trigger
@@ -26,8 +26,6 @@ class Transition(Callbacks):
         self.new_path = Path(new_state)
         self.old_state = self.old_path.get_in(machine)
         self.new_state = self.new_path.get_in(machine)
-        self.exit_states = tuple(self.old_path.iter_out(self.machine))
-        self.entry_states = tuple(self.new_path.iter_in(self.machine))
         self.new_state_name = str(self.machine.full_path + self.new_path)  # + self.new_path.get_in(self.machine).default_path
         self.info = info
 
@@ -35,18 +33,38 @@ class Transition(Callbacks):
     def obj_key(self):
         return self.machine.root.dict_key
 
+    @lazy_property
+    def on_exits(self):
+        return [s.callbacks.on_exit for s in self.old_path.iter_out(self.machine)]
+
+    @lazy_property
+    def on_entries(self):
+        return [s.callbacks.on_entry for s in self.new_path.iter_in(self.machine)]
+
+    @lazy_property
+    def on_stay(self):
+        return self.old_state.callbacks.on_stay
+
+    @lazy_property
+    def on_transfer(self):
+        return self.callbacks.on_transfer
+
+    @lazy_property
+    def condition(self):
+        return self.callbacks.condition
+
     def execute(self, obj, *args, **kwargs):
-        if self.do_condition(obj, *args, **kwargs):
+        if self.condition(obj, *args, **kwargs):
             if self.old_state is self.new_state:
-                self.old_state.do_on_stay(obj, *args, **kwargs)
-                self.do_on_transfer(obj, *args, **kwargs)
+                self.on_stay(obj, *args, **kwargs)
+                self.on_transfer(obj, *args, **kwargs)
             else:
-                for state in self.exit_states:
-                    state.do_on_exit(obj, *args, **kwargs)
+                for on_exit in self.on_exits:
+                    on_exit(obj, *args, **kwargs)
                 setattr(obj, self.obj_key, self.new_state_name)
-                self.do_on_transfer(obj, *args, **kwargs)
-                for state in self.entry_states:
-                    state.do_on_entry(obj, *args, **kwargs)
+                self.on_transfer(obj, *args, **kwargs)
+                for on_entry in self.on_entries:
+                    on_entry(obj, *args, **kwargs)
             return True
         return False
 
