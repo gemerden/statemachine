@@ -1,5 +1,5 @@
-from states.machine import state_machine
+from states.machine import StateMachine
 from states.stateful import StatefulObject
-from states.tools import MachineError, TransitionError, states, state, transition, switch, condition
+from states.tools import MachineError, TransitionError, states, state, transition, switch, case
 
-# __all__ = ("state_machine",)
+# __all__ = ("StateMachine",)

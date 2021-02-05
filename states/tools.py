@@ -1,38 +1,74 @@
 __author__ = "lars van gemerden"
 
-from typing import Sequence, Mapping, MutableMapping
+from itertools import zip_longest
+from typing import Sequence, Mapping, MutableMapping, Set
 
-_marker = object()
-
-
-class states(dict):
-    """ can be used in state_machine constructor instead of dicts """
-    def __init__(self, **states):
-        super().__init__(**states)
+"""
+These are functions to make the state machine config more readable and to to validate it
+"""
 
 
-class state(dict):
-    """ can be used in state_machine constructor instead of dicts """
-    def __init__(self, info="", condition=(), on_entry=(), on_exit=(), on_stay=()):
-        super().__init__(info=info, condition=condition, on_entry=on_entry, on_exit=on_exit, on_stay=on_stay )
+def states(**state_configs):
+    if not all(isinstance(s, dict) for s in state_configs.values()):
+        raise MachineError(f"all states in 'states' should be of type 'dict'")
+    return state_configs
 
 
-class transition(dict):
-    """ can be used in state_machine constructor instead of dicts """
-    def __init__(self, old_state, new_state, trigger, on_transfer=()):
-        super().__init__(old_state=old_state, new_state=new_state, trigger=trigger, on_transfer=on_transfer)
+def state(states=None, transitions=(), on_entry=(), on_exit=(), on_stay=(), info=""):
+    if states:
+        if on_stay:
+            raise MachineError(f"states with nested states cannot have 'on_stay' callbacks")
+        return dict(states=states, transitions=transitions,
+                    on_entry=on_entry, on_exit=on_exit, info=info)
+    else:
+        if transitions:
+            raise MachineError(f"states with no nested states cannot have transitions")
+        return dict(on_entry=on_entry, on_exit=on_exit, on_stay=on_stay, info=info)
 
 
-class switch(dict):
-    """ can be used in state_machine constructor instead of dicts """
-    def __init__(self, **state_conditions):
-        super().__init__(**state_conditions)
+def transitions(*transitions_):
+    if not all(isinstance(t, dict) for t in transitions_):
+        raise MachineError(f"all transitions in 'transitions' should be of type 'dict'")
+    return list(transitions_)
 
 
-class condition(dict):
-    """ can be used in state_machine constructor instead of dicts """
-    def __init__(self, condition=(), on_transfer=(), info=""):
-        super().__init__(condition=condition, on_transfer=on_transfer, info=info)
+def transition(old_state, new_state, trigger, on_transfer=(), condition=(), info=""):
+    if isinstance(new_state, Mapping) and case:
+        raise MachineError(f"transitions with multiple (switched) end-states cannot have a single condition")
+    return dict(old_state=old_state, new_state=new_state, trigger=trigger,
+                on_transfer=on_transfer, condition=condition, info=info)
+
+
+def switch(*state_conditions):
+    if not all(isinstance(c, dict) for c in state_conditions):
+        raise MachineError(f"all values in 'switch' must be 'dict'")
+    return list(state_conditions)
+
+
+def case(state, condition, on_transfer=(), info=""):
+    return dict(state=state, condition=condition, on_transfer=on_transfer, info=info)
+
+
+def default(state, on_transfer=(), info=""):
+    return dict(state=state, condition=(), on_transfer=on_transfer, info=info)
+
+
+""" ----------------------------------------------------------------------------------------- """
+
+
+def copy_struct(value_or_mapping_or_sequence):
+    vms = value_or_mapping_or_sequence
+    try:
+        if isinstance(vms, str):
+            return vms
+        if isinstance(vms, (Set, Sequence)):
+            return type(vms)(copy_struct(v) for v in vms)
+        elif isinstance(vms, Mapping):
+            return type(vms)(**{k: copy_struct(v) for k, v in vms.items()})
+        else:
+            return type(vms)(vms)
+    except TypeError:
+        return vms
 
 
 def listify(list_or_item):
@@ -43,34 +79,12 @@ def listify(list_or_item):
         return [list_or_item]
 
 
-def callbackify(callbacks):
-    """
-    Turns one or multiple callback functions or their names into one callback functions. Names will be looked up on the
-    first argument (obj) of the actual call to the callback.
-
-    :param callbacks: single or list of functions or method names, all with the same signature
-    :return: new function that performs all the callbacks when called
-    """
-    if not callbacks:
-        return nocondition
-
-    callbacks = listify(callbacks)
-
-    def result_callback(obj, *args, **kwargs):
-        result = []  # introduced to be able to use this method for "condition" callback to return a value
-        for callback in callbacks:
-            if isinstance(callback, str):
-                result.append(getattr(obj, callback)(*args, **kwargs))
-            else:
-                result.append(callback(obj, *args, **kwargs))
-        return all(result)
-
-    return result_callback
-
-
 def nameify(f, cast=lambda v: v):
     """ tries to give a name to an item"""
-    return ".".join([f.__module__, f.__name__]) if callable(f) else getattr(f, "name", cast(f))
+    return ".".join([f.__module__, f.__name__]) if (callable(f) or isinstance(f, type)) else getattr(f, "name", cast(f))
+
+
+_marker = object()
 
 
 class Path(tuple):
@@ -102,30 +116,29 @@ class Path(tuple):
         path = path or Path()
         if isinstance(map, Mapping):
             for k, m in map.items():
-                for path_value in cls.iter_all(m, key_cast, path+k):
-                    yield path_value
+                yield from cls.iter_all(m, key_cast, path + k)
         elif isinstance(map, Sequence) and not isinstance(map, str):
             for i, m in enumerate(map):
-                for path_value in cls.iter_all(m, key_cast, path+i):
-                    yield path_value
+                yield from cls.iter_all(m, key_cast, path + i)
         else:
             yield key_cast(path), map
 
     @classmethod
-    def apply_all(cls, map, func):  # can be optimized
+    def apply_all(cls, mapping, func):  # can be optimized
         """
         Applies func to all elements without sub elements and replaces the original with the return value of func
         """
-        if isinstance(map, MutableMapping):
-            for k, m in map.items():
-                map[k] = cls.apply_all(m, func)
-            return map
-        elif isinstance(map, Sequence) and not isinstance(map, str):
-            for i, m in enumerate(map):
-                map[i] = cls.apply_all(m, func)
-            return map
+        if isinstance(mapping, MutableMapping):
+            for k, m in mapping.items():
+                mapping[k] = cls.apply_all(m, func)
+            return mapping
+        elif isinstance(mapping, Sequence) and not isinstance(mapping, str):
+            mapping = list(mapping)
+            for i, m in enumerate(mapping):
+                mapping[i] = cls.apply_all(m, func)
+            return mapping
         else:
-            return func(map)
+            return func(mapping)
 
     @classmethod
     def validate(cls, v):
@@ -139,54 +152,54 @@ class Path(tuple):
         if isinstance(string_s, str):
             validate = cls.validate
             string_s = (validate(s) for s in string_s.split(cls.separator) if len(s))
-        return super(Path, cls).__new__(cls, string_s)
+        return super().__new__(cls, string_s)
 
     def __getitem__(self, key):
-        """ makes sure the slicing returns a Path object, not a tuple"""
+        """ makes sure the slicing returns a Path object, not a tuple """
         if isinstance(key, slice):
             return self.__class__(tuple.__getitem__(self, key))
         return tuple.__getitem__(self, key)
 
-    def has_in(self, map):
+    def has_in(self, target):
         """
-        checks whether the path is present in the map argument, which can be mapping or list
+        checks whether the path is present in the target argument, which can be mapping or list
          (or mapping of lists, etc)
         """
         try:
-            self.get_in(map)
+            self.get_in(target)
             return True
         except KeyError:
             return False
 
-    def get_in(self, map, default=_marker):
-        """ gets an item from the map argument, which can be mapping or list (or mapping of lists, etc)"""
+    def get_in(self, target, default=_marker):
+        """ gets an item from the target argument, which can be mapping or list (or mapping of lists, etc)"""
         try:
             for k in self:
                 try:
-                    map = map[k]
+                    target = target[k]
                 except KeyError:
-                    map = map[str(k)]
-            return map
+                    target = target[str(k)]
+            return target
         except (KeyError, IndexError, TypeError):
             if default is not _marker:
                 return default
             raise
 
-    def set_in(self, map, item):
-        """ adds the item to the map argument, which can be mapping or list (or mapping of lists, etc)"""
-        map = self[:-1].get_in(map)
+    def set_in(self, target, item):
+        """ adds the item to the target argument, which can be mapping or list (or mapping of lists, etc)"""
+        target = self[:-1].get_in(target)
         try:
-            map[self[-1]] = item
+            target[self[-1]] = item
         except KeyError:
-            map[str(self[-1])] = item
+            target[str(self[-1])] = item
 
-    def del_in(self, map):
-        """ deletes an item from the map argument, which can be mapping or list (or mapping of lists, etc)"""
-        map = self[:-1].get_in(map)
+    def del_in(self, target):
+        """ deletes an item from the target argument, which can be mapping or list (or mapping of lists, etc)"""
+        target = self[:-1].get_in(target)
         try:
-            del map[self[-1]]
+            del target[self[-1]]
         except KeyError:
-            del map[str(self[-1])]
+            del target[str(self[-1])]
 
     def __add__(self, p):
         """ adds 2 paths together or adds string element(s) to the path, returning a new Path object"""
@@ -196,21 +209,21 @@ class Path(tuple):
             p = (p,)
         return Path(super(Path, self).__add__(p))
 
-    def iter_in(self, map, include=False):
-        """ iterates into the map, e.g. Path("a.b").iter_in({"a":{"b":1}}) yields {"b":1} and 1"""
+    def iter_in(self, target, include=False):
+        """ iterates into the target, e.g. Path("a.b").iter_in({"a":{"b":1}}) yields {"b":1} and 1"""
         if include:
-            yield map
+            yield target
         for key in self:
-            map = map[key]
-            yield map
+            target = target[key]
+            yield target
 
-    def iter_out(self, map, include=False):
+    def iter_out(self, target, include=False):
         """ same as iter_in, but in reversed order"""
-        return reversed(list(self.iter_in(map, include)))
+        return reversed(list(self.iter_in(target, include)))
 
     def iter_paths(self, cast=None):
         """ iterates over sub-paths, e.g. Path("a.b.c").iter_paths() yields Path("a"), Path("a.b"), Path("a.b.c")"""
-        for i in range(1, len(self)+1):
+        for i in range(1, len(self) + 1):
             yield cast(self[:i]) if cast else self[:i]
 
     def tail(self, path):
@@ -227,28 +240,31 @@ class Path(tuple):
         returns the first keys in the path, removing the keys in argument path, e.g. Path("a.b.c").head(Path("b.c")) ->
             Path("a")
         """
-        if any(k != self[-len(path)+i] for i, k in enumerate(path)):
+        if any(k != self[-len(path) + i] for i, k in enumerate(path)):
             raise KeyError("cannot right strip Path, key not found")
         return self[:-len(path)]
+
+    def splice(self, other):
+        self, other = Path(self), Path(other)
+        common = []
+        for i, (s, o) in enumerate(zip_longest(self, other)):
+            if s == o:
+                common.append(s)
+            else:
+                return Path(common), self[i:], other[i:]
+        return self, Path(), Path()
+
+    def partition(self, key):
+        if not len(self):
+            return Path(), key, Path()
+        for i, k in enumerate(self):
+            if k == key:
+                return self[:i], key, self[i + 1:]
+        return self[:], key, Path()
 
     def __repr__(self):
         """ returns the string representation:  Path("a.b.c") -> "a.b.c" """
         return self.separator.join([str(s) for s in self])
-
-
-class DummyFunction(object):
-
-    def __init__(self, returns):
-        self.returns = returns
-
-    def __call__(self, *args, **kwargs):
-        return self.returns
-
-    def __bool__(self):
-        return False
-
-
-nocondition = DummyFunction(True)
 
 
 def replace_in_list(lst, old_item, new_items):
@@ -278,6 +294,7 @@ class lazy_property(object):
             return self
         obj.__dict__[self.name] = result = self.getter(obj)
         return result
+
 
 class MachineError(ValueError):
     """Exception indicating an error in the construction of the state machine"""

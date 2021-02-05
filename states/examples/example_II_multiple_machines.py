@@ -1,9 +1,9 @@
-from states import state_machine, StatefulObject
+from states import StateMachine, StatefulObject
 from states.tools import states, state, transition, switch, condition
 
 
 class Room(StatefulObject):
-    state = state_machine(
+    state = StateMachine(
         states=states(
             empty=state(on_entry=["turn_off_lights", "write_empty"]),
             occupied=state(on_entry=["turn_on_lights", "write_occupied"],
@@ -46,7 +46,7 @@ class Room(StatefulObject):
 
 
 class Person(StatefulObject):
-    state = state_machine(
+    state = StateMachine(
         states=states(
             outside=state(on_entry="leave_room"),
             inside=state(on_entry="enter_room"),
@@ -72,7 +72,7 @@ class Person(StatefulObject):
 
 
 class Light(StatefulObject):
-    state = state_machine(
+    state = StateMachine(
         states=states(
             off=state(on_entry="write"),
             on=state(on_entry="write"),

@@ -45,10 +45,10 @@ This is a new section of the readme, starting with version 0.4.0.
 
 Here is a simple statemachine to give some idea of what the configuration looks like.
 ```python
-from states import state_machine, StatefulObject
+from states import StateMachine, StatefulObject
 
 class LightSwitch(StatefulObject):
-    machine = state_machine(
+    machine = StateMachine(
         states={
             "on": {"info": "see the light"},
             "off": {"info": "stay in dark"},

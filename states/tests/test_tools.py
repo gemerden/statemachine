@@ -1,6 +1,6 @@
 import unittest
 
-from states.tools import Path, replace_in_list, has_doubles, state, transition, switch
+from states.tools import Path, replace_in_list, has_doubles, state, transition, switch, copy_struct
 
 __author__ = "lars van gemerden"
 
@@ -74,6 +74,61 @@ class TestPath(unittest.TestCase):
         self.assertDictEqual(dict(Path.iter_all(self.mapping, key_cast=str)),
                              {"a": 1, "b.c": 2, "b.d.e": 3, "f.0": 4, "f.1": 5})
 
+    def test_add(self):
+        assert Path('a') + 'b' + Path('c') == Path('a.b.c')
+
+    def test_splice(self):
+        x = 'a.b.c'
+        y = 'a.b.d.e'
+        common, tail_x, tail_y = Path.splice(x, y)
+        assert str(common) == 'a.b'
+        assert str(tail_x) == 'c'
+        assert str(tail_y) == 'd.e'
+
+        x = 'a.b.c'
+        y = 'a.b.c.d'
+        common, tail_x, tail_y = Path.splice(x, y)
+        assert str(common) == 'a.b.c'
+        assert str(tail_x) == ''
+        assert str(tail_y) == 'd'
+
+        x = 'a.b.c'
+        y = 'a.b.c'
+        common, tail_x, tail_y = Path.splice(x, y)
+        assert str(common) == 'a.b.c'
+        assert str(tail_x) == ''
+        assert str(tail_y) == ''
+
+        x = ''
+        y = ''
+        common, tail_x, tail_y = Path.splice(x, y)
+        assert str(common) == ''
+        assert str(tail_x) == ''
+        assert str(tail_y) == ''
+
+        x = 'a'
+        y = 'b'
+        common, tail_x, tail_y = Path.splice(x, y)
+        assert str(common) == ''
+        assert str(tail_x) == 'a'
+        assert str(tail_y) == 'b'
+
+    def test_partition(self):
+        l, k, r = Path('a.b.c').partition(key='a')
+        assert (l, k, r) == (Path(), 'a', Path('b.c'))
+
+        l, k, r = Path('a.b.c').partition(key='b')
+        assert (l, k, r) == (Path('a'), 'b', Path('c'))
+
+        l, k, r = Path('a.b.c').partition(key='c')
+        assert (l, k, r) == (Path('a.b'), 'c', Path())
+
+        l, k, r = Path('').partition(key='x')
+        assert (l, k, r) == (Path(), 'x', Path())
+
+        l, k, r = Path('a.b.c').partition(key='d')
+        assert (l, k, r) == (Path('a.b.c'), 'd', Path())
+
 
 class TestDictClasses(unittest.TestCase):
 
@@ -110,5 +165,19 @@ class TestFunctions(unittest.TestCase):
     def test_has_doubles(self):
         self.assertTrue(has_doubles([1, 2, 3, 2]))
         self.assertFalse(has_doubles([1, 2, 3, 4]))
+
+    def test_copy_struct(self):
+        struct = {'a': [1,2,3],
+                  'b': (4,5),
+                  'c': 'c',
+                  'd': {'a': [1,2], 'b': 'skjdfh'}}
+        copy = copy_struct(struct)
+        assert struct == copy
+        assert id(struct['a']) != id(copy['a'])
+        assert id(struct['d']) != id(copy['d'])
+        assert id(struct['d']['a']) != id(copy['d']['a'])
+
+        def f():
+            pass
 
 

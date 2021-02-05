@@ -1,10 +1,10 @@
-from states import state_machine
+from states import StateMachine
 from states import StatefulObject
 
 
 class Room(StatefulObject):
 
-    state = state_machine(
+    state = StateMachine(
         states={
             "empty": {"on_entry": ["turn_off_lights", "write_empty"]},
             "occupied": {"on_entry": ["turn_on_lights", "write_occupied"],
@@ -48,7 +48,7 @@ class Room(StatefulObject):
 
 class Person(StatefulObject):
 
-    state = state_machine(
+    state = StateMachine(
         states={
             "outside": {"on_entry": "leave_room"},
             "inside": {"on_entry": "enter_room"},
@@ -75,7 +75,7 @@ class Person(StatefulObject):
 
 class Light(StatefulObject):
 
-    state = state_machine(
+    state = StateMachine(
         states={
             "off": {"on_entry": "write"},
             "on": {"on_entry": "write"},
