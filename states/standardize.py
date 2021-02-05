@@ -1,4 +1,4 @@
-from typing import Mapping, Set, Union, Dict, Any, Sequence
+from typing import Mapping, Set
 from collections import deque, defaultdict
 
 from .tools import listify, Path, MachineError, transition, copy_struct
@@ -11,7 +11,7 @@ def validate_new_state(state_name_s):
     return state_name_s
 
 
-def get_expanded_paths(*state_names, getter):
+def get_expanded_paths(*state_names, getter, extend=False):
     """
        turns '.' separated state names in Paths and expands '*' wildcards
 
@@ -24,16 +24,27 @@ def get_expanded_paths(*state_names, getter):
         path = queue.popleft()  # pick the next
         head, _, tail = path.partition('*')  # split around '*' starting left
         if head == path:  # no more '*' in path
-            expanded.append(path)
+            if not extend:
+                expanded.append(path)
+            else:
+                extend_queue = deque([path])
+                while len(extend_queue):
+                    head_path = extend_queue.popleft()
+                    tail_paths = getter(head_path)
+                    if len(tail_paths):
+                        for tail_path in tail_paths:
+                            extend_queue.append(head_path + tail_path)
+                    else:
+                        expanded.append(head_path)
         else:  # essentially replace '*' with all substates of the state pointed to by head
             for sub_state_name in getter(head):
                 queue.append(head + sub_state_name + tail)
     return expanded
 
 
-def get_expanded_state_names(*state_names, state_getter):
+def get_expanded_state_names(*state_names, state_getter, extend=False):
     """ '.' separated names version of get_expanded_paths (turns paths into strings) """
-    return [str(e) for e in get_expanded_paths(*state_names, getter=state_getter)]
+    return [str(e) for e in get_expanded_paths(*state_names, getter=state_getter, extend=extend)]
 
 
 def get_spliced_path(old_path, new_path):
@@ -50,18 +61,18 @@ def get_spliced_names(old_state_name, new_state_name):
     return tuple(map(str, get_spliced_path(old_path, new_path)))
 
 
-def get_spliced_paths(old_state_name, new_state_name, state_getter):
+def get_spliced_paths(old_state_name, new_state_name, getter, extend=True):
     """ splits of common states from the 2 state_names """
     spliced_paths = []
-    for old_path in get_expanded_paths(old_state_name, getter=state_getter):
-        for new_path in get_expanded_paths(new_state_name, getter=state_getter):
+    for old_path in get_expanded_paths(old_state_name, getter=getter, extend=extend):
+        for new_path in get_expanded_paths(new_state_name, getter=getter, extend=extend):
             spliced_paths.append(get_spliced_path(old_path, new_path))
     return spliced_paths
 
 
-def get_spliced_state_names(old_state_name, new_state_name, state_getter):
+def get_spliced_state_names(old_state_name, new_state_name, getter, extend=True):
     """ '.' separated names version of get_spliced_paths (turns paths into strings) """
-    return [tuple(map(str, e)) for e in get_spliced_paths(old_state_name, new_state_name, state_getter=state_getter)]
+    return [tuple(map(str, e)) for e in get_spliced_paths(old_state_name, new_state_name, getter=getter, extend=extend)]
 
 
 _marker = object()

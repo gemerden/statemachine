@@ -3,9 +3,10 @@ __author__ = "lars van gemerden"
 import json
 from copy import deepcopy
 from collections import defaultdict
+from typing import Mapping
 
 from states.callbacks import Callbacks
-from states.standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config
+from states.standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config, get_spliced_path
 from states.tools import MachineError, TransitionError, lazy_property
 from states.tools import Path, nameify
 
@@ -198,12 +199,15 @@ class LeafState(ChildState):
     def __init__(self, on_stay=(), **kwargs):
         super().__init__(on_stay=on_stay, **kwargs)
 
+    def __len__(self):
+        return 0
+
 
 class NestedMachine(ParentState, ChildState):
     pass
 
 
-class StateMachine(ParentState):
+class StateMachine(ParentState, Mapping):
     """
     This class represents each state with substates in the state machine, as well as the state machine itself (basically
     saying that each state can be a state machine, and vice versa). Of course the root machine will never be entered or
@@ -261,13 +265,20 @@ class StateMachine(ParentState):
             raise AttributeError(f"state {self.name} of {type(obj).__name__} cannot be changed directly; use triggers instead")
         setattr(obj, self.dict_key, state_name)
 
-    def _get_states(self, *state_names):
+    def _iter_states(self, *state_names):
         state_paths = get_expanded_paths(*state_names,
                                          getter=lambda p: self[p])
-        return [self[path] for path in state_paths] or [self]
+        for path in state_paths:
+            yield path.get_in(self)
+
+    def _iter_transitions(self, old_state_name, new_state_name):
+        spliced_paths = get_spliced_paths(old_state_name, new_state_name,
+                                          getter=lambda p: self[p])
+        for common, old_tail, new_tail in spliced_paths:
+            yield from common.get_in(self)._trans_dict.get((old_tail, new_tail), ())
 
     def _register_callback(self, on_key, *state_names):
-        states = self._get_states(*state_names)
+        states = list(self._iter_states(*state_names))
 
         def register(func):
             for state in states:
@@ -286,18 +297,13 @@ class StateMachine(ParentState):
         return self._register_callback('on_stay', state_name, *state_names)
 
     def on_transfer(self, old_state_name, new_state_name):
-        spliced_paths = get_spliced_paths(old_state_name, new_state_name,
-                                          state_getter=lambda p: self[p])
+        transitions = list(self._iter_transitions(old_state_name, new_state_name))
+        if not len(transitions):
+            raise MachineError(f"'on_transfer' decorator has no effect: no transitions found to add callback to")
 
         def register(func):
-            success = False
-            for common, old_tail, new_tail in spliced_paths:
-                for transition in self[common]._trans_dict.get((old_tail, new_tail), ()):
-                    if transition is not None:
-                        transition.callbacks.register('on_transfer', func)
-                        success = True
-            if not success:
-                raise MachineError(f"'on_transfer' decorator has no effect: no transitions found to add callback to")
+            for transition in transitions:
+                transition.callbacks.register('on_transfer', func)
             return func
 
         return register
@@ -342,6 +348,7 @@ def state_machine(states, transitions, **config):
                                              transitions=transitions,
                                              **config)
     return StateMachine(**config)
+
 
 if __name__ == '__main__':
     pass

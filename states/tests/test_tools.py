@@ -71,7 +71,7 @@ class TestPath(unittest.TestCase):
         self.assertEqual((Path("a") + 1)[1], 1)
 
     def test_iter_all(self):
-        self.assertDictEqual(dict(Path.iter_all(self.mapping, key_cast=str)),
+        self.assertDictEqual(dict(Path.items(self.mapping, key_cast=str)),
                              {"a": 1, "b.c": 2, "b.d.e": 3, "f.0": 4, "f.1": 5})
 
     def test_add(self):

@@ -104,41 +104,51 @@ class Path(tuple):
     separator = "."
 
     @classmethod
-    def iter_all(cls, map, key_cast=lambda v: v, path=None):  # can be optimized
+    def items(cls, target, key_cast=lambda v: v, path=None):  # can be optimized
         """
         Iterates recursively over all values in the map and yields the path in the map and the nested value.
 
-        :param map: input sequence (e.g. list) or mapping (e.g. dict)
+        :param target: input sequence (e.g. list) or mapping (e.g. dict)
         :param key_cast: determines how the path will be yielded; default is Path, str is a useful alternative
         :param path: path to the current element, for internally passing the path until now
         :yield: path, value pairs
         """
         path = path or Path()
-        if isinstance(map, Mapping):
-            for k, m in map.items():
-                yield from cls.iter_all(m, key_cast, path + k)
-        elif isinstance(map, Sequence) and not isinstance(map, str):
-            for i, m in enumerate(map):
-                yield from cls.iter_all(m, key_cast, path + i)
+        if isinstance(target, Mapping):
+            for k, m in target.items():
+                yield from cls.items(m, key_cast, path + k)
+        elif isinstance(target, Sequence) and not isinstance(target, str):
+            for i, m in enumerate(target):
+                yield from cls.items(m, key_cast, path + i)
         else:
-            yield key_cast(path), map
+            yield key_cast(path), target
 
     @classmethod
-    def apply_all(cls, mapping, func):  # can be optimized
+    def keys(cls, target, key_cast=lambda v: v, path=None):
+        for key, value in cls.items(target, key_cast, path):
+            yield key
+
+    @classmethod
+    def values(cls, target, key_cast=lambda v: v, path=None):
+        for key, value in cls.items(target, key_cast, path):
+            yield value
+
+    @classmethod
+    def apply_all(cls, target, func):  # can be optimized
         """
         Applies func to all elements without sub elements and replaces the original with the return value of func
         """
-        if isinstance(mapping, MutableMapping):
-            for k, m in mapping.items():
-                mapping[k] = cls.apply_all(m, func)
-            return mapping
-        elif isinstance(mapping, Sequence) and not isinstance(mapping, str):
-            mapping = list(mapping)
-            for i, m in enumerate(mapping):
-                mapping[i] = cls.apply_all(m, func)
-            return mapping
+        if isinstance(target, MutableMapping):
+            for k, m in target.items():
+                target[k] = cls.apply_all(m, func)
+            return target
+        elif isinstance(target, Sequence) and not isinstance(target, str):
+            target = list(target)
+            for i, m in enumerate(target):
+                target[i] = cls.apply_all(m, func)
+            return target
         else:
-            return func(mapping)
+            return func(target)
 
     @classmethod
     def validate(cls, v):

@@ -572,6 +572,7 @@ class TestNestedStateMachine(unittest.TestCase):
                 self.exit_counter = 0  # reset for every tests; used to count number of callbacks from machine
                 self.entry_counter = 0  # reset for every tests; used to count number of callbacks from machine
                 self.before_counter = 0  # reset for every tests; used to count number of callbacks from machine
+                self.transfer_counter = 0
 
             @state.on_exit('off.*', 'on.*')
             def on_exit(self, **kwargs):
@@ -588,12 +589,18 @@ class TestNestedStateMachine(unittest.TestCase):
                 """ will be used to check whether this method will be looked up in super states """
                 self.before_counter += 1
 
+            @state.on_transfer('off', 'on')
+            def on_transfer(self, **kwargs):
+                self.transfer_counter += 1
+
+
         self.object_class = WashingMachine
 
-    def assert_counters(self, washer, exit_counter, entry_counter, before_counter):
+    def assert_counters(self, washer, exit_counter, entry_counter, before_counter, transfer_counter):
         self.assertEqual(washer.exit_counter, exit_counter)
         self.assertEqual(washer.entry_counter, entry_counter)
         self.assertEqual(washer.before_counter, before_counter)
+        self.assertEqual(washer.transfer_counter, transfer_counter)
 
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
@@ -636,27 +643,27 @@ class TestNestedStateMachine(unittest.TestCase):
     def test_triggering(self):
         washer = self.object_class()
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(washer, 0, 0, 0)
+        self.assert_counters(washer, 0, 0, 0, 0)
 
         washer.flip()
         self.assertEqual(washer.state, "on.waiting")
-        self.assert_counters(washer, 1, 1, 1)
+        self.assert_counters(washer, 1, 1, 1, 1)
 
         washer.wash()
         self.assertEqual(washer.state, "on.washing")
-        self.assert_counters(washer, 2, 2, 1)
+        self.assert_counters(washer, 2, 2, 1, 1)
 
         washer.dry()
         self.assertEqual(washer.state, "on.drying")
-        self.assert_counters(washer, 3, 3, 1)
+        self.assert_counters(washer, 3, 3, 1, 1)
 
         washer.flip()
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(washer, 4, 4, 2)
+        self.assert_counters(washer, 4, 4, 2, 1)
 
         washer.just_dry_already()
         self.assertEqual(washer.state, "on.drying")
-        self.assert_counters(washer, 5, 5, 3)
+        self.assert_counters(washer, 5, 5, 3, 2)
 
     def test_state_string(self):
         self.assertEqual(str(self.object_class.state["on"]), "on")
@@ -664,22 +671,22 @@ class TestNestedStateMachine(unittest.TestCase):
 
     def test_transition_errors(self):
         washer = self.object_class()
-        self.assert_counters(washer, 0, 0, 0)
+        self.assert_counters(washer, 0, 0, 0, 0)
         self.assertEqual(washer.state, "off.working")
 
         with self.assertRaises(TransitionError):
             washer.dry()
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(washer, 0, 0, 0)
+        self.assert_counters(washer, 0, 0, 0, 0)
 
         with self.assertRaises(TransitionError):
             washer.fix()
         self.assertEqual(washer.state, "off.working")
-        self.assert_counters(washer, 0, 0, 0)
+        self.assert_counters(washer, 0, 0, 0, 0)
 
         washer.smash()
         self.assertEqual(washer.state, "off.broken")
-        self.assert_counters(washer, 1, 1, 0)
+        self.assert_counters(washer, 1, 1, 0, 0)
 
     def test_machine_errors(self):  # TODO
         assert "dry" in self.object_class.__dict__
