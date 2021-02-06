@@ -254,6 +254,23 @@ class Path(tuple):
             raise KeyError("cannot right strip Path, key not found")
         return self[:-len(path)]
 
+    def trace_in(self, target, first=True, last=True):
+        head, tail = Path(), self
+        if first:
+            yield head, target, tail
+        for key in self:
+            head = head + key
+            target = target[key]
+            tail = tail[1:]
+            if not tail:
+                break
+            yield head, target, tail
+        if last:
+            yield head, target, tail
+
+    def trace_out(self, target, first=True, last=True):
+        return reversed(list(self.trace_in(target, last, first)))
+
     def splice(self, other):
         self, other = Path(self), Path(other)
         common = []

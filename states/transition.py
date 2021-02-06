@@ -26,7 +26,7 @@ class Transition(object):
         self.new_path = Path(new_state)
         self.old_state = self.old_path.get_in(machine)
         self.new_state = self.new_path.get_in(machine)
-        self.new_state_name = str(self.machine.full_path + self.new_path)  # + self.new_path.get_in(self.machine).default_path
+        self.new_state_name = str(self.machine.path + self.new_path)  # + self.new_path.get_in(self.machine).default_path
         self.info = info
 
     @lazy_property
@@ -42,10 +42,6 @@ class Transition(object):
         return [s.callbacks.on_entry for s in self.new_path.iter_in(self.machine)]
 
     @lazy_property
-    def on_stay(self):
-        return self.old_state.callbacks.on_stay
-
-    @lazy_property
     def on_transfer(self):
         return self.callbacks.on_transfer
 
@@ -53,11 +49,15 @@ class Transition(object):
     def condition(self):
         return self.callbacks.condition
 
+    @lazy_property
+    def on_stay(self):
+        return self.old_state.callbacks.on_stay
+
     def execute(self, obj, *args, **kwargs):
         if self.condition(obj, *args, **kwargs):
             if self.old_state is self.new_state:
-                self.on_stay(obj, *args, **kwargs)
                 self.on_transfer(obj, *args, **kwargs)
+                self.on_stay(obj, *args, **kwargs)
             else:
                 for on_exit in self.on_exits:
                     on_exit(obj, *args, **kwargs)
@@ -66,7 +66,8 @@ class Transition(object):
                 for on_entry in self.on_entries:
                     on_entry(obj, *args, **kwargs)
             return True
-        return False
+        else:
+            return False
 
     def __str__(self):
         """ string representing the transition """

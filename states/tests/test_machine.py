@@ -12,7 +12,7 @@ __author__ = "lars van gemerden"
 
 
 def count_transitions(state):
-    return sum(map(len, state._triggering.values()))
+    return sum(map(len, state.triggering.values()))
 
 
 class TestSimplestStateMachine(unittest.TestCase):
@@ -39,7 +39,7 @@ class TestSimplestStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(type(self.light).state), 2)
         self.assertEqual(count_transitions(type(self.light).state), 2)
-        self.assertEqual(len(type(self.light).state._triggering), 2)
+        self.assertEqual(len(type(self.light).state.triggering), 2)
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -52,8 +52,8 @@ class TestSimplestStateMachine(unittest.TestCase):
         self.assertEqual(self.light.state, "off")
 
     def test_info(self):
-        self.assertEqual(type(self.light).state._sub_states["on"].info, "not turned off")
-        self.assertEqual(type(self.light).state._triggering[Path("off"), "switch"][0].info, "turn the light on")
+        self.assertEqual(type(self.light).state.sub_states["on"].info, "not turned off")
+        self.assertEqual(type(self.light).state.triggering[Path("off"), "switch"][0].info, "turn the light on")
 
 
 class TestStateMachine(unittest.TestCase):
@@ -136,7 +136,7 @@ class TestStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine), 3)
         self.assertEqual(count_transitions(self.machine), 9)
-        self.assertEqual(len(self.machine._triggering), 9)
+        self.assertEqual(len(self.machine.triggering), 9)
 
     def test_states_property(self):
         self.assertEqual(self.machine.states,
@@ -341,7 +341,7 @@ class TestWildcardStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine), 4)
         self.assertEqual(count_transitions(self.machine), 2+2+2+2+4+1)
-        self.assertEqual(len(self.machine._triggering), 2 + 2 + 2 + 2 + 4 + 1)
+        self.assertEqual(len(self.machine.triggering), 2 + 2 + 2 + 2 + 4 + 1)
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -452,9 +452,9 @@ class TestListedTransitionStateMachine(unittest.TestCase):
 
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
-        self.assertEqual(len(self.machine._sub_states), 3)
-        self.assertEqual(len(self.machine._triggering), 4)
-        self.assertEqual(sum(map(len, self.machine._triggering.values())), 4)
+        self.assertEqual(len(self.machine.sub_states), 3)
+        self.assertEqual(len(self.machine.triggering), 4)
+        self.assertEqual(sum(map(len, self.machine.triggering.values())), 4)
 
     def test_transitions(self):
         """test whether transitions work in this case"""
@@ -710,13 +710,13 @@ class TestNestedStateMachine(unittest.TestCase):
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.object_class.state), 2)
-        self.assertEqual(len(self.object_class.state._triggering), 6)
+        self.assertEqual(len(self.object_class.state.triggering), 6)
         child_state = self.object_class.state["on"]
         self.assertEqual(len(child_state), 3)
-        self.assertEqual(len(child_state._triggering), 3)
+        self.assertEqual(len(child_state.triggering), 3)
         child_state = self.object_class.state["off"]
         self.assertEqual(len(child_state), 2)
-        self.assertEqual(len(child_state._triggering), 2)
+        self.assertEqual(len(child_state.triggering), 2)
 
     def test_len_in_getitem_iter_for_states(self):
         machine = self.object_class.state
