@@ -23,8 +23,9 @@ class StatefulObject(object):
 
         trigger_funcs = defaultdict(list)
         for name, machine in cls._state_machines.items():
-            for trigger in machine.triggers:
-                trigger_func = partial(machine.trigger, trigger=trigger)
+            for trigger in machine.triggers:  # the names
+                trigger_func = partial(machine.trigger,
+                                       trigger=trigger)
                 trigger_funcs[trigger].append(trigger_func)
 
         for trigger, funcs in trigger_funcs.items():
@@ -33,6 +34,7 @@ class StatefulObject(object):
                 for func in _funcs:
                     obj = func(*args, **kwargs)  # same 'obj' every time
                 return obj
+
             setattr(cls, trigger, composite_func)
 
     def __init__(self, *args, **kwargs):
@@ -40,13 +42,9 @@ class StatefulObject(object):
         Constructor for this base class. Initial state(s) can be given with the name of the state machine(s). If not given,
         the initial state will be the top state in param 'states' of the state machine(s).
         """
-        self._init_state(kwargs)
-        super().__init__(*args, **kwargs)
-
-    def _init_state(self, kwargs):
         for name, machine in self._state_machines.items():
-            init_path = Path(kwargs.pop(name, ""))
-            setattr(self, name, str(init_path + init_path.get_in(machine).default_path))
+            machine.set_state(self, kwargs.pop(name, ""))
+        super().__init__(*args, **kwargs)
 
     def trigger_initial(self, *args, **kwargs):
         """ optionally call the 'on_entry' callbacks of the nested initial states """
@@ -54,11 +52,5 @@ class StatefulObject(object):
             machine.initial_entry(self, *args, **kwargs)
 
     def trigger(self, name, *args, **kwargs):
-        obj = None
-        for machine in self._state_machines.values():
-            if name in machine.triggers:
-                obj = machine.trigger(self, name, *args, **kwargs)
-        if obj is None:
-            raise ValueError(f"'{self.__class__.__name__}' has no trigger '{name}'")
-        return obj
+        getattr(self, name)(*args, **kwargs)
 

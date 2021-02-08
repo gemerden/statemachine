@@ -43,20 +43,16 @@ class BaseState(object):
         return state
 
     @lazy_property
-    def first_leaf_state(self):
-        state = self
-        while isinstance(state, ParentState):
-            state = state.first_state
-        return state
-
-    @lazy_property
     def default_path(self):
         """ returns the path to the actual initial state the object will be in """
-        return self.first_leaf_state.path
+        state = self
+        while isinstance(state, ParentState):
+            state = state.default_state
+        return state.path
 
     def iter_up(self):
         state = self
-        while getattr(state, 'parent', None):
+        while isinstance(state, ChildState):
             yield state
             state = state.parent
         yield state
@@ -91,7 +87,7 @@ class ChildState(BaseState):
         return str(self.path)
 
 
-class ParentState(BaseState):
+class ParentState(BaseState, Mapping):
     """ class representing and handling the substates of a state """
 
     def __init__(self, states=(), transitions=(), **kwargs):
@@ -149,7 +145,7 @@ class ParentState(BaseState):
         return triggers
 
     @lazy_property
-    def first_state(self):
+    def default_state(self):
         return self.sub_states[list(self.sub_states)[0]]
 
     def __len__(self):
@@ -193,7 +189,7 @@ class NestedMachine(ParentState, ChildState):
     pass
 
 
-class StateMachine(ParentState, Mapping):
+class StateMachine(ParentState):
     """
     This class represents each state with substates in the state machine, as well as the state machine itself (basically
     saying that each state can be a state machine, and vice versa). Of course the root machine will never be entered or
@@ -249,6 +245,10 @@ class StateMachine(ParentState, Mapping):
         if self.dict_key in obj.__dict__:
             raise AttributeError(f"state {self.name} of {type(obj).__name__} cannot be changed directly; use triggers instead")
         setattr(obj, self.dict_key, state_name)
+
+    def set_state(self, obj, state):
+        path = Path(state)
+        setattr(obj, self.dict_key, str(path + path.get_in(self).default_path))
 
     def get_path(self, obj):
         return Path(self.__get__(obj))
@@ -323,7 +323,7 @@ class StateMachine(ParentState, Mapping):
         """ Executes the transition when called through a trigger """
         self.callbacks.prepare(obj, *args, **kwargs)
         full_path = self.get_path(obj)
-        for _, state, tail in reversed(list(full_path.trace_in(self, last=False))):
+        for _, state, tail in full_path.trace_in(self, last=False):
             transitions = state.triggering.get((tail, trigger))
             if transitions:
                 for transition in transitions:
