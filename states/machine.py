@@ -2,8 +2,6 @@ __author__ = "lars van gemerden"
 
 import json
 from copy import deepcopy
-from collections import defaultdict
-from functools import lru_cache
 from typing import Mapping
 
 from states.callbacks import Callbacks
@@ -101,7 +99,7 @@ class ParentState(BaseState):
         self.sub_states = self._create_states(states)
         self.trans_dict = {}
         self.triggering = {}
-        self._insert_transitions(transitions)
+        self._create_transitions(transitions)
 
     def _create_states(self, states):
         """creates a dictionary of state_name: BaseState key value pairs"""
@@ -114,16 +112,22 @@ class ParentState(BaseState):
                 state_dict[name] = LeafState(**config)
         return state_dict
 
-    def _insert_transitions(self, transition_dicts):
+    def _create_transitions(self, transition_dicts):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
-        trans_dict = defaultdict(list)
-        triggering = defaultdict(list)
-        for transition_dict in transition_dicts:
-            transition = Transition(machine=self, **transition_dict)
-            trans_dict[transition.old_path, transition.new_path].append(transition)
-            triggering[transition.old_path, transition.trigger].append(transition)
-        self.trans_dict.update(trans_dict)
-        self.triggering.update(triggering)
+        for trans_dict in transition_dicts:
+            self.append_transition(Transition(machine=self, **trans_dict))
+
+    def append_transition(self, transition):
+        trans_key = (transition.old_path, transition.new_path)
+        trigg_key = (transition.old_path, transition.trigger)
+        if trans_key in self.trans_dict:
+            self.trans_dict[trans_key].append(transition)
+        else:
+            self.trans_dict[trans_key] = [transition]
+        if trigg_key in self.triggering:
+            self.triggering[trigg_key].append(transition)
+        else:
+            self.triggering[trigg_key] = [transition]
 
     @lazy_property
     def states(self):
@@ -261,33 +265,51 @@ class StateMachine(ParentState, Mapping):
         for common, old_tail, new_tail in spliced_paths:
             yield from common.get_in(self).trans_dict.get((old_tail, new_tail), ())
 
-    def _register_callback(self, on_key, *state_names):
+    def _register_state_callback(self, key, *state_names):
         states = list(self._iter_states(*state_names))
 
         def register(func):
             for state in states:
-                state.callbacks.register(on_key, func)
+                state.callbacks.register(key, func)
             return func
 
         return register
 
-    def on_entry(self, state_name, *state_names):
-        return self._register_callback('on_entry', state_name, *state_names)
-
-    def on_exit(self, state_name, *state_names):
-        return self._register_callback('on_exit', state_name, *state_names)
-
-    def on_stay(self, state_name, *state_names):
-        return self._register_callback('on_stay', state_name, *state_names)
-
-    def on_transfer(self, old_state_name, new_state_name):
+    def _register_transition_callback(self, key,  old_state_name, new_state_name):
         transitions = list(self._iter_transitions(old_state_name, new_state_name))
         if not len(transitions):
-            raise MachineError(f"'on_transfer' decorator has no effect: no transitions found to add callback to")
+            raise MachineError(f"'{key}' decorator has no effect: no transitions found to add callback to")
 
         def register(func):
             for transition in transitions:
-                transition.callbacks.register('on_transfer', func)
+                transition.callbacks.register(key, func)
+            return func
+
+        return register
+
+    def prepare(self, func):
+        self.callbacks.register('prepare', func)
+
+    def on_entry(self, state_name, *state_names):
+        return self._register_state_callback('on_entry', state_name, *state_names)
+
+    def on_exit(self, state_name, *state_names):
+        return self._register_state_callback('on_exit', state_name, *state_names)
+
+    def on_transfer(self, old_state_name, new_state_name):
+        return self._register_transition_callback('on_transfer', old_state_name, new_state_name)
+
+    def on_stay(self, state_name, *state_names):
+        return self._register_state_callback('on_stay', state_name, *state_names)
+
+    def condition(self, old_state_name, new_state_name):
+        transitions = list(self._iter_transitions(old_state_name, new_state_name))
+        if not len(transitions):
+            raise MachineError(f"'condition' decorator has no effect: no transitions found to add callback to")
+
+        def register(func):
+            for transition in transitions:
+                transition.add_condition(func)
             return func
 
         return register
@@ -313,7 +335,7 @@ class StateMachine(ParentState, Mapping):
             raise TransitionError(f"transition '{str(full_path)}' with trigger '{trigger}' does not exist in '{self.name}'")
         return obj
 
-    def config(self, **kwargs):
+    def _config(self, **kwargs):
         """ deepcopy can be a problem with non-toplevel callbacks """
         kwargs = deepcopy(kwargs)
 

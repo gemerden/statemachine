@@ -1,6 +1,7 @@
 import json
 import random
 import unittest
+from collections import defaultdict
 
 from states import StatefulObject, TransitionError, MachineError
 from states.machine import state_machine
@@ -422,7 +423,6 @@ class TestWildcardStateMachine(unittest.TestCase):
             )
 
 
-
 class TestListedTransitionStateMachine(unittest.TestCase):
 
     def setUp(self):
@@ -489,7 +489,7 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
                 transitions=transitions(transition('off', 'on', trigger=["turn_on", "switch"]),
                                         transition('on', 'off', trigger=["turn_off", "switch"]),
                                         transition(["on", "off"], 'broken', trigger="smash"),
-                                        transition('broken', switch(case('on','was_on'),
+                                        transition('broken', switch(case('on', 'was_on'),
                                                                     default('off')),
                                                    trigger='fix')),
             )
@@ -593,7 +593,6 @@ class TestNestedStateMachine(unittest.TestCase):
             def on_transfer(self, **kwargs):
                 self.transfer_counter += 1
 
-
         self.object_class = WashingMachine
 
     def assert_counters(self, washer, exit_counter, entry_counter, before_counter, transfer_counter):
@@ -691,69 +690,126 @@ class TestNestedStateMachine(unittest.TestCase):
     def test_machine_errors(self):  # TODO
         assert "dry" in self.object_class.__dict__
 
-    # class TestSwitchedTransition(unittest.TestCase):
-    #     """test the case where transition configuration contains wildcards '*' """
-    #
-    #     def setUp(self):
-    #         # create a machine config based on phase changes of matter (solid, liquid, gas)
-    #         self.machine_config = dict(
-    #             states=dict(
-    #                 off={},
-    #                 on=dict(
-    #                     states={
-    #                         "waiting": {},
-    #                         "washing": {},
-    #                         "drying": {},
-    #                     },
-    #                     transitions=[
-    #                         {"old_state": "waiting", "new_state": "washing", "trigger": ["wash"]},
-    #                         {"old_state": "washing", "new_state": "drying", "trigger": ["dry"]},
-    #                         {"old_state": "drying", "new_state": "waiting", "trigger": ["stop"]},
-    #                     ]
-    #                 ),
-    #                 broken={},
-    #             ),
-    #             transitions=[
-    #                 {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
-    #                 {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
-    #                 {"old_state": "*", "new_state": "broken", "trigger": "smash"},
-    #                 {"old_state": "broken", "new_state": {"off": {"condition": lambda obj: random.random() > 0.5},
-    #                                                       "on": {}},
-    #                  "trigger": "fix"},
-    #             ]
-    #         )
-    #
-    #         class WashingMachine(StatefulObject):
-    #             state = StateMachine(**deepcopy(self.machine_config))
-    #
-    #         self.object_class = WashingMachine
-    #
-    #     def test_switch(self):
-    #         washer = self.object_class()
-    #         self.assertEqual(washer.state, "off")
-    #
-    #         washer.switch()
-    #         self.assertEqual(washer.state, "on.waiting")
-    #
-    #         for _ in range(10):
-    #             washer.smash()
-    #             self.assertEqual(washer.state, "broken")
-    #
-    #             washer.fix()
-    #             self.assertIn(washer.state, ("on.waiting", "off"))
-    #
-    #     def test_machine_errors(self):
-    #         config = deepcopy(self.machine_config)
-    #         Path("transitions.3.new_state.off.condition").set_in(config, ())
-    #         with self.assertRaises(MachineError):
-    #             StateMachine(**config)
-    #
-    #         config = deepcopy(self.machine_config)
-    #         Path("transitions.3.new_state.off").set_in(config, {})
-    #         with self.assertRaises(MachineError):
-    #             StateMachine(**config)
-    #
-    #
+
+class TestCallbackDecorators(unittest.TestCase):
+    """test the case where transition configuration contains wildcards '*' """
+
+    def setUp(self):
+        """called before any individual test method"""
+        # create a machine config based on phase changes of matter (solid, liquid, gas)
+        self.machine = state_machine(
+            states(off=state(states(working=state(),
+                                    broken=state()),
+                             transitions(transition('working', 'broken', trigger='smash'),
+                                         transition('broken', 'working', trigger='fix'))),
+                   on=state(states(waiting=state(),
+                                   washing=state(),
+                                   drying=state()),
+                            transitions(transition('waiting', 'washing', trigger='wash'),
+                                        transition('washing', 'drying', trigger='dry'),
+                                        transition('drying', 'waiting', trigger='stop')))),
+            transitions(transition('off.working', 'on', trigger="turn_on"),
+                        transition('on', 'off', trigger="turn_off"),
+                        transition(('on', 'off'), 'off.broken', trigger="smash"),
+                        transition('off.broken', 'off.working', trigger="fix"))
+        )
+
+        class WashingMachine(StatefulObject):
+            state = self.machine
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.fix_attempts = 0
+                self.prep_counter = 0
+                self.stay_counters = defaultdict(int)
+                self.exit_counters = defaultdict(int)
+                self.entry_counters = defaultdict(int)
+                self.trans_counters = defaultdict(int)
+
+            @property
+            def path(self):
+                return Path(self.state)
+
+            @state.prepare
+            def prepare(self, **kwargs):
+                self.prep_counter += 1
+
+            @state.condition('off.broken', 'off.working')
+            def second_try(self, **kwargs):
+                self.fix_attempts += 1
+                if self.fix_attempts >= 2:
+                    self.fix_attempts = 0
+                    return True
+                return False
+
+            @state.on_stay('off.broken')
+            def not_fixed(self, **kwargs):
+                self.stay_counters[self.state] += 1
+
+            @state.on_exit('off.*', 'on.*')
+            def on_exit(self, **kwargs):
+                """basic check + counts the number of times the object exits a state"""
+                self.exit_counters[self.state] += 1
+
+            @state.on_entry('off.*', 'on.*')
+            def on_entry(self, **kwargs):
+                """basic check + counts the number of times the object enters a state"""
+                self.entry_counters[self.state] += 1
+
+            @state.on_transfer('off', 'on')
+            @state.on_transfer('on', 'off')
+            def on_transfer(self, **kwargs):
+                self.trans_counters[self.state] += 1
+
+        self.object_class = WashingMachine
+
+    def test_cycle(self):
+        washer = self.object_class()
+        assert washer.state == "off.working"
+        washer.turn_on()
+        assert washer.prep_counter == 1
+        assert washer.exit_counters["off.working"] == 1
+        assert washer.entry_counters["on.waiting"] == 1
+        assert washer.trans_counters["on.waiting"] == 1
+        washer.wash()
+        assert washer.exit_counters["on.waiting"] == 1
+        assert washer.entry_counters["on.washing"] == 1
+        assert washer.trans_counters["on.washing"] == 0
+        washer.dry()
+        assert washer.exit_counters["on.washing"] == 1
+        assert washer.entry_counters["on.drying"] == 1
+        assert washer.trans_counters["on.drying"] == 0
+        washer.stop()
+        assert washer.exit_counters["on.drying"] == 1
+        assert washer.entry_counters["on.waiting"] == 2
+        assert washer.trans_counters["on.waiting"] == 1
+        washer.turn_off()
+        assert washer.exit_counters["on.waiting"] == 2
+        assert washer.entry_counters["off.working"] == 1
+        assert washer.trans_counters["off.working"] == 1
+
+    def test_condition_and_on_stay(self):
+        washer = self.object_class(state="on.waiting")
+        assert washer.state == "on.waiting"
+        washer.smash()
+        assert washer.exit_counters["on.waiting"] == 1
+        assert washer.entry_counters["off.broken"] == 1
+        assert washer.stay_counters["off.broken"] == 0
+        assert washer.state == "off.broken"
+        washer.fix()
+        assert washer.exit_counters["off.broken"] == 0
+        assert washer.entry_counters["off.broken"] == 1
+        assert washer.stay_counters["off.broken"] == 1
+        assert washer.state == "off.broken"
+        washer.fix()
+        assert washer.exit_counters["off.broken"] == 1
+        assert washer.entry_counters["off.working"] == 1
+        assert washer.stay_counters["off.broken"] == 1
+        assert washer.state == "off.working"
+
+
+
+
     # class TestContextManager(unittest.TestCase):
     #
     #     def setUp(self):

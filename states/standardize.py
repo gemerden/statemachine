@@ -176,10 +176,12 @@ def standardize_statemachine_config(**config):
                             append_transition(full_old_state, case.pop('state'), trigger, transition_dict, case)
                     else:
                         append_transition(full_old_state, new_states, trigger, transition_dict)
+
                     if transition_dicts[-1].get('condition'):
                         if transition_dicts[-1]['old_state'] == transition_dicts[-1]['new_state']:
                             raise MachineError(f"cannot generate default transition: condition on state state transition")
                         append_same_state_transition(full_old_state, trigger)
+
         return transition_dicts
 
     def pushdown_transitions(transition_dicts):

@@ -69,6 +69,28 @@ class Transition(object):
         else:
             return False
 
+    def add_condition(self, condition_func):
+        self.callbacks.register("condition", condition_func)
+        related = self.machine.triggering[self.old_path, self.trigger]
+        if related[-1].callbacks.has_any("condition"):
+            if any(t.old_state is t.new_state for t in related):
+                raise MachineError(f"cannot create default same state transition from '{self.old_state.name}' "
+                                   f"with trigger '{self.trigger}': same state transition already exists")
+            else:
+                self.machine.append_transition(self.clean_copy(new_state=str(self.old_path),
+                                                               on_transfer=(),
+                                                               info="default transition when conditions fail"))
+
+    def clean_copy(self, **overrides):
+        """ clean = no callbacks """
+        kwargs = dict(machine=self.machine,
+                      old_state=str(self.old_path),
+                      new_state=str(self.new_path),
+                      trigger=self.trigger,
+                      info=self.info)
+        kwargs.update(**overrides)
+        return Transition(**kwargs)
+
     def __str__(self):
         """ string representing the transition """
         return f"<{str(self.old_path)}, {str(self.new_path)}, trigger={self.trigger}>"
