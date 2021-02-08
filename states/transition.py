@@ -18,56 +18,49 @@ class Transition(object):
     def __init__(self, machine, old_state, new_state, trigger,
                  on_transfer=(), condition=(), info=""):
         """ after_transfer is from switched transition on_transfer specific for the new state """
-        self.callbacks = Callbacks(on_transfer=on_transfer, condition=condition)
         self._validate(old_state, new_state)
+        self.callbacks = Callbacks(on_transfer=on_transfer,
+                                   condition=condition)
         self.machine = machine
         self.trigger = trigger
         self.old_path = Path(old_state)
         self.new_path = Path(new_state)
         self.old_state = self.old_path.get_in(machine)
         self.new_state = self.new_path.get_in(machine)
-        self.new_state_name = str(self.machine.path + self.new_path)  # + self.new_path.get_in(self.machine).default_path
         self.info = info
+        self.execute = self.get_execute()
 
     @lazy_property
     def obj_key(self):
         return self.machine.root.dict_key
 
-    @lazy_property
-    def on_exits(self):
-        return [s.callbacks.on_exit for s in self.old_path.iter_out(self.machine)]
+    def get_execute(self):
+        new_state_name = str(self.machine.path + self.new_path)
+        on_exits = [s.callbacks.on_exit for s in self.old_path.iter_out(self.machine)]
+        on_entries = [s.callbacks.on_entry for s in self.new_path.iter_in(self.machine)]
+        on_transfer = self.callbacks.on_transfer
+        condition = self.callbacks.condition
+        on_stay = self.old_state.callbacks.on_stay
 
-    @lazy_property
-    def on_entries(self):
-        return [s.callbacks.on_entry for s in self.new_path.iter_in(self.machine)]
-
-    @lazy_property
-    def on_transfer(self):
-        return self.callbacks.on_transfer
-
-    @lazy_property
-    def condition(self):
-        return self.callbacks.condition
-
-    @lazy_property
-    def on_stay(self):
-        return self.old_state.callbacks.on_stay
-
-    def execute(self, obj, *args, **kwargs):
-        if self.condition(obj, *args, **kwargs):
-            if self.old_state is self.new_state:
-                self.on_transfer(obj, *args, **kwargs)
-                self.on_stay(obj, *args, **kwargs)
-            else:
-                for on_exit in self.on_exits:
-                    on_exit(obj, *args, **kwargs)
-                setattr(obj, self.obj_key, self.new_state_name)
-                self.on_transfer(obj, *args, **kwargs)
-                for on_entry in self.on_entries:
-                    on_entry(obj, *args, **kwargs)
-            return True
+        if self.old_state is self.new_state:
+            def execute(obj, *args, **kwargs):
+                do_transfer = condition(obj, *args, **kwargs)
+                if do_transfer:
+                    on_transfer(obj, *args, **kwargs)
+                    on_stay(obj, *args, **kwargs)
+                return do_transfer
         else:
-            return False
+            def execute(obj, *args, **kwargs):
+                do_transfer = condition(obj, *args, **kwargs)
+                if do_transfer:
+                    for on_exit in on_exits:
+                        on_exit(obj, *args, **kwargs)
+                    setattr(obj, self.obj_key, new_state_name)
+                    on_transfer(obj, *args, **kwargs)
+                    for on_entry in on_entries:
+                        on_entry(obj, *args, **kwargs)
+                return do_transfer
+        return execute
 
     def add_condition(self, condition_func):
         self.callbacks.register("condition", condition_func)
@@ -77,9 +70,7 @@ class Transition(object):
                 raise MachineError(f"cannot create default same state transition from '{self.old_state.name}' "
                                    f"with trigger '{self.trigger}': same state transition already exists")
             else:
-                self.machine.append_transition(self.clean_copy(new_state=str(self.old_path),
-                                                               on_transfer=(),
-                                                               info="default transition when conditions fail"))
+                self.machine.append_transition(self.default_copy())
 
     def clean_copy(self, **overrides):
         """ clean = no callbacks """
@@ -90,6 +81,9 @@ class Transition(object):
                       info=self.info)
         kwargs.update(**overrides)
         return Transition(**kwargs)
+
+    def default_copy(self):
+        return self.clean_copy(new_state=str(self.old_path), on_transfer=(), info="default transition when conditions fail")
 
     def __str__(self):
         """ string representing the transition """
