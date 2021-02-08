@@ -47,6 +47,7 @@ class BaseState(Mapping):
         self._init_states(states or {})
         self._init_transitions(transitions)
         self.info = info
+        self.verified = False
 
     def _init_parent(self, parent):
         self.parent = parent
@@ -72,6 +73,24 @@ class BaseState(Mapping):
         self.triggering = defaultdict(list)
         for trans_dict in transition_dicts:
             self.append_transition(Transition(machine=self, **trans_dict))
+
+    def _verify_transitions(self):
+        for transitions in self.triggering.values():
+            if transitions[-1].callbacks.has_any('condition'):
+                raise MachineError(f"no default transition for transitions from "
+                                   f"'{transitions[-1].old_state}' with trigger {transitions[-1].trigger}")
+            for transition in transitions[:-1]:
+                if not transition.callbacks.has_any('condition'):
+                    raise MachineError(f"missing condition for transitions from "
+                                       f"'{transitions[-1].old_state}' with trigger {transitions[-1].trigger}")
+        for state in self.sub_states.values():
+            state._verify_transitions()
+
+    def verify(self):
+        """ this method should only be executed once after all initialisation (including setting all callbacks) """
+        if not self.verified:
+            self._verify_transitions()
+        self.verified = True
 
     def append_transition(self, transition):
         self.trans_dict[(transition.old_path, transition.new_path)].append(transition)
@@ -297,10 +316,8 @@ class StateMachine(BaseState):
                     if transition.condition(obj, *args, **kwargs):
                         transition.execute(obj, *args, **kwargs)
                         break
-                break
-        else:
-            raise TransitionError(f"transition '{str(full_path)}' with trigger '{trigger}' does not exist in '{self.name}'")
-        return obj
+                return
+        raise TransitionError(f"transition from '{str(full_path)}' with trigger '{trigger}' does not exist in '{self.name}'")
 
     def as_json_dict(self):
         result = dict(name=self.name)

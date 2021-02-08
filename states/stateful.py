@@ -4,7 +4,6 @@ from collections import defaultdict
 from functools import partial
 
 from states.machine import StateMachine
-from states.tools import Path
 
 
 class StatefulObject(object):
@@ -21,19 +20,18 @@ class StatefulObject(object):
             if isinstance(cls_attr, StateMachine):
                 cls._state_machines[name] = cls_attr
 
-        trigger_funcs = defaultdict(list)
-        for name, machine in cls._state_machines.items():
+        trigger_functions = defaultdict(list)
+        for machine in cls._state_machines.values():
             for trigger in machine.triggers:  # the names
-                trigger_func = partial(machine.trigger,
-                                       trigger=trigger)
-                trigger_funcs[trigger].append(trigger_func)
+                function = partial(machine.trigger,
+                                   trigger=trigger)
+                trigger_functions[trigger].append(function)
 
-        for trigger, funcs in trigger_funcs.items():
-            def composite_func(*args, _funcs=funcs, **kwargs):
-                obj = None
-                for func in _funcs:
-                    obj = func(*args, **kwargs)  # same 'obj' every time
-                return obj
+        for trigger, functions in trigger_functions.items():
+            def composite_func(self, *args, _functions=functions, **kwargs):
+                for function in _functions:
+                    function(self, *args, **kwargs)  # same 'obj' every time
+                return self
 
             setattr(cls, trigger, composite_func)
 
@@ -53,4 +51,3 @@ class StatefulObject(object):
 
     def trigger(self, name, *args, **kwargs):
         getattr(self, name)(*args, **kwargs)
-

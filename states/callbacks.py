@@ -61,8 +61,5 @@ class Callbacks(object):
         return json.dumps(self.as_json_dict(), indent=4)
 
 
-
-
-
 if __name__ == '__main__':
     pass

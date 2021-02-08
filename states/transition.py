@@ -95,4 +95,3 @@ class Transition(object):
 
     def __repr__(self):
         return json.dumps(self.as_json_dict(), indent=4)
-
