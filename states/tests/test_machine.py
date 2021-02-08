@@ -138,17 +138,13 @@ class TestStateMachine(unittest.TestCase):
         self.assertEqual(count_transitions(self.machine), 9)
         self.assertEqual(len(self.machine.triggering), 9)
 
-    def test_states_property(self):
-        self.assertEqual(self.machine.states,
+    def test_state_names(self):
+        self.assertEqual(list(self.machine),
                          ['solid', 'liquid', 'gas'])
 
     def test_triggers_property(self):
         self.assertEqual(self.machine.triggers,
                          {'heat', 'melt', 'dont', 'cool', 'evaporate', 'freeze', 'condense'})
-
-    def test_transitions_property(self):
-        self.assertEqual(set(self.machine.transitions),
-                         {('gas', 'liquid'), ('liquid', 'gas'), ('liquid', 'solid'), ('solid', 'liquid'), ('solid', 'solid')})
 
     def test_initial(self):
         class Dummy(StatefulObject):

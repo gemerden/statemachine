@@ -154,18 +154,13 @@ class TestStateMachine(unittest.TestCase):
         self.assertEqual(count_transitions(self.machine), 16)
         self.assertEqual(len(self.machine.triggering), 8)
 
-    def test_states_property(self):
-        self.assertEqual(self.machine.states,
+    def test_state_names(self):
+        self.assertEqual(list(self.machine),
                          ['solid', 'liquid', 'gas'])
 
     def test_triggers_property(self):
         self.assertEqual(self.machine.triggers,
                          {'heat', 'melt', 'cool', 'evaporate', 'freeze', 'condense'})
-
-    def test_transitions_property(self):
-        self.assertEqual(set(self.machine.transitions),
-                         {('gas', 'liquid'), ('liquid', 'gas'), ('liquid', 'solid'),
-                          ('solid', 'liquid'), ('solid', 'solid'), ('liquid', 'liquid'), ('gas', 'gas')})
 
     def test_initial(self):
         class Dummy(StatefulObject):
@@ -571,26 +566,26 @@ class TestNestedStateMachine(unittest.TestCase):
                 super().__init__()
                 self.exit_counter = 0  # reset for every tests; used to count number of callbacks from machine
                 self.entry_counter = 0  # reset for every tests; used to count number of callbacks from machine
-                self.before_counter = 0  # reset for every tests; used to count number of callbacks from machine
+                self.any_counter = 0  # reset for every tests; used to count number of callbacks from machine
                 self.transfer_counter = 0
 
             @state.on_exit('off.*', 'on.*')
-            def on_exit(self, **kwargs):
+            def inc_exit_counter(self, **kwargs):
                 """basic check + counts the number of times the object exits a state"""
                 self.exit_counter += 1
 
             @state.on_entry('off.*', 'on.*')
-            def on_entry(self, **kwargs):
+            def inc_entry_counter(self, **kwargs):
                 """basic check + counts the number of times the object enters a state"""
                 self.entry_counter += 1
 
             @state.on_exit('*')
-            def on_any_exit(self, **kwargs):
+            def inc_any_counter(self, **kwargs):
                 """ will be used to check whether this method will be looked up in super states """
-                self.before_counter += 1
+                self.any_counter += 1
 
             @state.on_transfer('off', 'on')
-            def on_transfer(self, **kwargs):
+            def inc_transfer_counter(self, **kwargs):
                 self.transfer_counter += 1
 
         self.object_class = WashingMachine
@@ -598,19 +593,23 @@ class TestNestedStateMachine(unittest.TestCase):
     def assert_counters(self, washer, exit_counter, entry_counter, before_counter, transfer_counter):
         self.assertEqual(washer.exit_counter, exit_counter)
         self.assertEqual(washer.entry_counter, entry_counter)
-        self.assertEqual(washer.before_counter, before_counter)
+        self.assertEqual(washer.any_counter, before_counter)
         self.assertEqual(washer.transfer_counter, transfer_counter)
 
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.object_class.state), 2)
         self.assertEqual(len(self.object_class.state.triggering), 12)
+        assert self.object_class.state.default_path == Path("off.working")
         child_state = self.object_class.state["on"]
         self.assertEqual(len(child_state), 3)
         self.assertEqual(len(child_state.triggering), 3)
+        assert child_state.default_path == Path("waiting")
         child_state = self.object_class.state["off"]
         self.assertEqual(len(child_state), 2)
         self.assertEqual(len(child_state.triggering), 3)
+        assert child_state.default_path == Path("working")
+        assert child_state.root == self.object_class.state
 
     def test_len_in_getitem_iter_for_states(self):
         machine = self.object_class.state
@@ -687,8 +686,15 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertEqual(washer.state, "off.broken")
         self.assert_counters(washer, 1, 1, 0, 0)
 
-    def test_machine_errors(self):  # TODO
-        assert "dry" in self.object_class.__dict__
+    def test_as_json_dict_and_repr(self):
+        json_dict = self.object_class.state.as_json_dict()
+        assert 'states' in json_dict
+        assert 'transitions' in json_dict
+        assert set(json_dict['states']) == {'on', 'off'}
+        assert 'states' in json_dict['states']['on']
+
+        json_string = repr(self.object_class.state)
+        assert len(json_string)
 
 
 class TestCallbackDecorators(unittest.TestCase):
@@ -720,7 +726,6 @@ class TestCallbackDecorators(unittest.TestCase):
             def __init__(self, **kwargs):
                 super().__init__(**kwargs)
                 self.fix_attempts = 0
-                self.prep_counter = 0
                 self.stay_counters = defaultdict(int)
                 self.exit_counters = defaultdict(int)
                 self.entry_counters = defaultdict(int)
@@ -729,10 +734,6 @@ class TestCallbackDecorators(unittest.TestCase):
             @property
             def path(self):
                 return Path(self.state)
-
-            @state.prepare
-            def prepare(self, **kwargs):
-                self.prep_counter += 1
 
             @state.condition('off.broken', 'off.working')
             def second_try(self, **kwargs):
@@ -767,7 +768,6 @@ class TestCallbackDecorators(unittest.TestCase):
         washer = self.object_class()
         assert washer.state == "off.working"
         washer.turn_on()
-        assert washer.prep_counter == 1
         assert washer.exit_counters["off.working"] == 1
         assert washer.entry_counters["on.waiting"] == 1
         assert washer.trans_counters["on.waiting"] == 1
@@ -807,8 +807,9 @@ class TestCallbackDecorators(unittest.TestCase):
         assert washer.stay_counters["off.broken"] == 1
         assert washer.state == "off.working"
 
-
-
+    def test_as_json_dict(self):
+        json_dict = self.object_class.state.as_json_dict()
+        assert any(t.get('condition') for t in json_dict['states']['off']['transitions'])
 
     # class TestContextManager(unittest.TestCase):
     #
@@ -823,7 +824,7 @@ class TestCallbackDecorators(unittest.TestCase):
     #             yield
     #             obj.managed = False
     #
-    #         self.config = dict(
+    #         self.config = as_json_dict(
     #             states={
     #                 "solid": {"on_exit": "on_action", "on_entry": "on_action"},
     #                 "liquid": {"on_exit": "on_action", "on_entry": "on_action"},
@@ -897,7 +898,7 @@ class TestCallbackDecorators(unittest.TestCase):
     #
     #     def setUp(self):
     #         """called before any individual test method"""
-    #         self.config = dict(
+    #         self.config = as_json_dict(
     #             states={
     #                 "off": {"on_exit": "on_exit"},
     #                 "on": {"on_entry": "on_entry"},
@@ -1000,15 +1001,15 @@ class TestCallbackDecorators(unittest.TestCase):
     #     def setUp(self):
     #         class Colored(StatefulObject):
     #             color = StateMachine(
-    #                 states=dict(
+    #                 states=as_json_dict(
     #                     red={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
     #                     blue={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
     #                     green={'on_exit': 'on_exit', 'on_entry': 'on_entry'}
     #                 ),
     #                 transitions=[
-    #                     dict(old_state='red', new_state='blue', trigger=['next', 'change'], on_transfer='on_transfer'),
-    #                     dict(old_state='blue', new_state='green', trigger=['next', 'change'], on_transfer='on_transfer'),
-    #                     dict(old_state='green', new_state='red', trigger=['next', 'change'], on_transfer='on_transfer'),
+    #                     as_json_dict(old_state='red', new_state='blue', trigger=['next', 'change'], on_transfer='on_transfer'),
+    #                     as_json_dict(old_state='blue', new_state='green', trigger=['next', 'change'], on_transfer='on_transfer'),
+    #                     as_json_dict(old_state='green', new_state='red', trigger=['next', 'change'], on_transfer='on_transfer'),
     #                 ],
     #                 on_any_entry='count_calls'
     #             )
@@ -1016,15 +1017,15 @@ class TestCallbackDecorators(unittest.TestCase):
     #         class MoodyColor(Colored):
     #
     #             mood = StateMachine(
-    #                 states=dict(
+    #                 states=as_json_dict(
     #                     good={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
     #                     bad={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
     #                     ugly={'on_exit': 'on_exit', 'on_entry': 'on_entry'}
     #                 ),
     #                 transitions=[
-    #                     dict(old_state='good', new_state='bad', trigger='next', on_transfer='on_transfer'),
-    #                     dict(old_state='bad', new_state='ugly', trigger='next', on_transfer='on_transfer'),
-    #                     dict(old_state='ugly', new_state='good', trigger='next', on_transfer='on_transfer'),
+    #                     as_json_dict(old_state='good', new_state='bad', trigger='next', on_transfer='on_transfer'),
+    #                     as_json_dict(old_state='bad', new_state='ugly', trigger='next', on_transfer='on_transfer'),
+    #                     as_json_dict(old_state='ugly', new_state='good', trigger='next', on_transfer='on_transfer'),
     #                 ],
     #                 on_any_entry='count_calls'
     #             )
@@ -1040,7 +1041,7 @@ class TestCallbackDecorators(unittest.TestCase):
     #                 self.counter += 1
     #
     #             def state(self):
-    #                 return dict(mood=self.mood,
+    #                 return as_json_dict(mood=self.mood,
     #                             color=self.color)
     #
     #             def on_exit(self):
@@ -1113,7 +1114,7 @@ class TestCallbackDecorators(unittest.TestCase):
     #
     #     def setUp(self):
     #         """called before any individual test method"""
-    #         self.config = dict(
+    #         self.config = as_json_dict(
     #             states={
     #                 "off": {},
     #                 "on": {},
@@ -1156,33 +1157,33 @@ class TestCallbackDecorators(unittest.TestCase):
     #     class MultiSome(StatefulObject):
     #
     #         color = StateMachine(
-    #             states=dict(
+    #             states=as_json_dict(
     #                 red={'on_exit': 'color_callback'},
     #                 blue={'on_exit': 'color_callback'},
     #                 green={'on_exit': 'color_callback'}
     #             ),
     #             transitions=[
-    #                 dict(old_state='red', new_state='blue', trigger='next'),
-    #                 dict(old_state='blue', new_state='green', trigger='next'),
-    #                 dict(old_state='green', new_state='red', trigger='next'),
+    #                 as_json_dict(old_state='red', new_state='blue', trigger='next'),
+    #                 as_json_dict(old_state='blue', new_state='green', trigger='next'),
+    #                 as_json_dict(old_state='green', new_state='red', trigger='next'),
     #             ],
     #         )
     #         mood = StateMachine(
-    #             states=dict(
+    #             states=as_json_dict(
     #                 good={'on_exit': 'mood_callback'},
     #                 bad={'on_exit': 'mood_callback'},
     #                 ugly={'on_exit': 'mood_callback'}
     #             ),
     #             transitions=[
-    #                 dict(old_state='good', new_state='bad', trigger='next'),
-    #                 dict(old_state='bad', new_state='ugly', trigger='next'),
-    #                 dict(old_state='ugly', new_state='good', trigger='next'),
+    #                 as_json_dict(old_state='good', new_state='bad', trigger='next'),
+    #                 as_json_dict(old_state='bad', new_state='ugly', trigger='next'),
+    #                 as_json_dict(old_state='ugly', new_state='good', trigger='next'),
     #             ],
     #         )
     #
     #         def __init__(self, *args, **kwargs):
     #             super().__init__(*args, **kwargs)
-    #             self.history = dict(color=[], mood=[])
+    #             self.history = as_json_dict(color=[], mood=[])
     #
     #         def color_callback(self):
     #             self.history['color'].append(self.color)
@@ -1230,7 +1231,7 @@ class TestCallbackDecorators(unittest.TestCase):
     #
     #         def __init__(self, *args, **kwargs):
     #             super().__init__(*args, **kwargs)
-    #             self.history = dict(color=[], mood=[])
+    #             self.history = as_json_dict(color=[], mood=[])
     #
     #         def color_callback(self):
     #             self.history['color'].append(self.color)

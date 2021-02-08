@@ -1,152 +1,81 @@
 __author__ = "lars van gemerden"
 
 import json
-from copy import deepcopy
 from typing import Mapping
+from collections import defaultdict
 
 from states.callbacks import Callbacks
-from states.standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config, get_spliced_path
+from states.standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config
 from states.tools import MachineError, TransitionError, lazy_property
-from states.tools import Path, nameify
+from states.tools import Path
 
 from states.transition import Transition
 
-_marker = object()
+
+def none_check(check, res, alt):
+    return alt if check is None else res
 
 
-class BaseState(object):
-    """Base class for the both ChildState and ParentState"""
+class BaseState(Mapping):
+    """Base class for the both StateMachine and any states in the machine"""
 
     @classmethod
     def _validate_name(cls, name, exclude=(".", "*", "[", "]", "(", ")")):
+        if name is None:
+            return None
+        if not len(name.strip()):
+            raise MachineError(f"state or state machine must have a name")
         if name.startswith('_'):
             raise MachineError(f"state or machine name '{name}' cannot start with an '_'")
         if any(c in name for c in exclude):
             raise MachineError(f"state or machine name '{name}' cannot contain characters %s" % exclude)
         return name
 
-    def __init__(self, info="", on_stay=(), **callbacks):
+    def __init__(self, name=None, parent=None, states=None, transitions=(), on_entry=(), on_exit=(), on_stay=(), info="",
+                 **callbacks):
         """
         Constructor of BaseState:
-
-        :param info: (str), description of the state for auto docs
-        """
-        self.callbacks = Callbacks(on_stay=on_stay, **callbacks)
-        self.path = Path()
-        self.info = info
-
-    @lazy_property
-    def root(self):
-        state = self
-        while isinstance(state, ChildState):
-            state = state.parent
-        return state
-
-    @lazy_property
-    def default_path(self):
-        """ returns the path to the actual initial state the object will be in """
-        state = self
-        while isinstance(state, ParentState):
-            state = state.default_state
-        return state.path
-
-    def iter_up(self):
-        state = self
-        while isinstance(state, ChildState):
-            yield state
-            state = state.parent
-        yield state
-
-    @lazy_property
-    def on_stays(self):
-        return [s.callbacks.on_stay for s in self.iter_up()]
-
-    def do_on_stays(self, obj, *args, **kwargs):
-        for on_stay in self.on_stays:
-            on_stay(obj, *args, **kwargs)
-
-
-class ChildState(BaseState):
-    """ internal representation of a state without substates in the state machine"""
-
-    def __init__(self, name, parent=None, on_entry=(), on_exit=(), **kwargs):
-        """
-        Constructor of ChildState:
-
-        :param name: name and key in parent.sub_states of the child state
+        :param name: state name and key in parent.sub_states
         :param parent: state machine that contains this state
         :param on_entry: callback(s) that will be called, when an object enters this state
         :param on_exit: callback(s) that will be called, when an object exits this state
+        :param info: (str), description of the state for auto docs
         """
-        super(ChildState, self).__init__(on_entry=on_entry, on_exit=on_exit, **kwargs)
+        self.callbacks = Callbacks(on_entry=on_entry, on_exit=on_exit, on_stay=on_stay, **callbacks)
         self.name = self._validate_name(name)
-        self.path = parent.path + self.name
+        self._init_parent(parent)
+        self._init_states(states or {})
+        self._init_transitions(transitions)
+        self.info = info
+
+    def _init_parent(self, parent):
         self.parent = parent
+        if parent is None:
+            self.path = Path()
+            self.root = self
+            self.up = [self]
+        else:
+            self.path = parent.path + self.name
+            self.root = parent.root
+            self.up = [self] + parent.up
 
-    def __str__(self):
-        return str(self.path)
-
-
-class ParentState(BaseState, Mapping):
-    """ class representing and handling the substates of a state """
-
-    def __init__(self, states=(), transitions=(), **kwargs):
-        super().__init__(**kwargs)
-        self.sub_states = self._create_states(states)
-        self.trans_dict = {}
-        self.triggering = {}
-        self._create_transitions(transitions)
-
-    def _create_states(self, states):
+    def _init_states(self, states):
         """creates a dictionary of state_name: BaseState key value pairs"""
-        state_dict = {}
+        self.sub_states = {}
         for name, config in states.items():
             config.update(name=name, parent=self)
-            if config.get('states'):
-                state_dict[name] = NestedMachine(**config)
-            else:
-                state_dict[name] = LeafState(**config)
-        return state_dict
+            self.sub_states[name] = State(**config)
 
-    def _create_transitions(self, transition_dicts):
+    def _init_transitions(self, transition_dicts):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
+        self.trans_dict = defaultdict(list)
+        self.triggering = defaultdict(list)
         for trans_dict in transition_dicts:
             self.append_transition(Transition(machine=self, **trans_dict))
 
     def append_transition(self, transition):
-        trans_key = (transition.old_path, transition.new_path)
-        trigg_key = (transition.old_path, transition.trigger)
-        if trans_key in self.trans_dict:
-            self.trans_dict[trans_key].append(transition)
-        else:
-            self.trans_dict[trans_key] = [transition]
-        if trigg_key in self.triggering:
-            self.triggering[trigg_key].append(transition)
-        else:
-            self.triggering[trigg_key] = [transition]
-
-    @lazy_property
-    def states(self):
-        """ the names of the states """
-        return list(self.sub_states)
-
-    @lazy_property
-    def transitions(self):
-        """ 2-tuples of the old and new state names of all transitions """
-        return [(str(old_path), str(new_path)) for old_path, new_path in self.trans_dict]
-
-    @lazy_property
-    def triggers(self):
-        """ gets a set of all trigger names in the state machine and all sub states recursively """
-        triggers = set(t[1] for t in self.triggering)
-        for state in self.sub_states.values():
-            if isinstance(state, ParentState):
-                triggers.update(state.triggers)
-        return triggers
-
-    @lazy_property
-    def default_state(self):
-        return self.sub_states[list(self.sub_states)[0]]
+        self.trans_dict[(transition.old_path, transition.new_path)].append(transition)
+        self.triggering[(transition.old_path, transition.trigger)].append(transition)
 
     def __len__(self):
         """ number of sub-states """
@@ -157,39 +86,79 @@ class ParentState(BaseState, Mapping):
 
     def __contains__(self, key):
         """ return whether the key exists in states or transitions """
-        try:
-            self[key]
-        except KeyError:
-            return False
-        else:
-            return True
+        item = self.get(key)
+        return item is not None
 
     def __getitem__(self, key):
         """
         Gets sub states according to string key or transition according to the 2-tuple (e.g.
             key: ("on.washing", "off.broken"))
         """
-        if isinstance(key, str):
+        if isinstance(key, int):
+            return list(self.sub_states.values())[key]
+        elif isinstance(key, str):
             return self.sub_states[key]
         elif isinstance(key, Path):
             return key.get_in(self)
         elif isinstance(key, tuple) and len(key) == 2:
             return self.trans_dict[Path(key[0]), Path(key[1])]
-        raise KeyError(f"key '{key}' is not a string or 2-tuple")
+        raise KeyError(f"key '{key}' does not exist in state {self.name}")
+
+    @lazy_property
+    def triggers(self):
+        """ gets a set of all trigger names in the state machine and all sub states recursively """
+        triggers = set(t[1] for t in self.triggering)
+        for state in self.sub_states.values():
+            triggers.update(state.triggers)
+        return triggers
+
+    @lazy_property
+    def default_path(self):
+        """ returns the path to the default state the object will be in, when not specified """
+        state = self
+        path_list = []
+        while len(state):
+            state = state[0]
+            path_list.append(state.name)
+        return Path(path_list)
+
+    @lazy_property
+    def on_stays(self):
+        return [state.callbacks.on_stay for state in self.up]
+
+    def do_on_stays(self, obj, *args, **kwargs):
+        for on_stay in self.on_stays:
+            on_stay(obj, *args, **kwargs)
+
+    def as_json_dict(self):
+        result = {}
+        if len(self):
+            result['states'] = {}
+            for name, state in self.sub_states.items():
+                result['states'][name] = state.as_json_dict()
+
+            result['transitions'] = []
+            for transitions in self.trans_dict.values():
+                for transition in transitions:
+                    result['transitions'].append(transition.as_json_dict())
+
+        result.update(self.callbacks.as_json_dict())
+        if len(self.info):
+            result['info'] = self.info
+        return result
+
+    def __str__(self):
+        return str(self.path)
+
+    def __repr__(self):
+        return json.dumps(self.as_json_dict(), indent=4)
 
 
-class LeafState(ChildState):
-    default_path = Path()
-
-    def __len__(self):
-        return 0
-
-
-class NestedMachine(ParentState, ChildState):
+class State(BaseState):
     pass
 
 
-class StateMachine(ParentState):
+class StateMachine(BaseState):
     """
     This class represents each state with substates in the state machine, as well as the state machine itself (basically
     saying that each state can be a state machine, and vice versa). Of course the root machine will never be entered or
@@ -202,10 +171,10 @@ class StateMachine(ParentState):
     and nested state machines get both. See constructors for ChildState and ParentState for possible arguments.
     """
 
-    def __init__(self, *args, prepare=(), **kwargs):
+    def __init__(self, states=None, transitions=(), **kwargs):
         """
         Constructor of the state machine, used to define all properties of the machine.
-        :param states: a dict {name: {prop_name: property}} of state properties:
+        :param states: a as_json_dict {name: {prop_name: property}} of state properties:
         state_name: {
             "on_entry":[some_method, ..],  # callback function(s) called when an object enters the state (single or list)
             "on_exit":[some_method, ..]  # callback function(s) called when an object exits the state (single or list)
@@ -228,8 +197,7 @@ class StateMachine(ParentState):
         Note that all callback functions (including 'condition') have the signature:
             func(obj, **kwargs); trigger(s)can pass the args and kwargs
         """
-        super(StateMachine, self).__init__(*args, prepare=prepare, **kwargs)
-        self.name = None
+        super(StateMachine, self).__init__(states=states or {}, transitions=transitions, **kwargs)
         self.dict_key = None
 
     def __set_name__(self, cls, name):
@@ -253,20 +221,25 @@ class StateMachine(ParentState):
     def get_path(self, obj):
         return Path(self.__get__(obj))
 
-    def _iter_states(self, *state_names):
+    def _get_states(self, *state_names):
         state_paths = get_expanded_paths(*state_names,
                                          getter=lambda p: self[p])
-        for path in state_paths:
-            yield path.get_in(self)
+        return [path.get_in(self) for path in state_paths]
 
-    def _iter_transitions(self, old_state_name, new_state_name):
+    def _get_transitions(self, old_state_name, new_state_name, check_length=False):
         spliced_paths = get_spliced_paths(old_state_name, new_state_name,
                                           getter=lambda p: self[p])
+
+        transitions = []
         for common, old_tail, new_tail in spliced_paths:
-            yield from common.get_in(self).trans_dict.get((old_tail, new_tail), ())
+            transitions.extend(common.get_in(self).trans_dict.get((old_tail, new_tail), ()))
+
+        if check_length and not len(transitions):
+            raise MachineError(f"no transitions found from '{old_state_name}' to '{new_state_name}'")
+        return transitions
 
     def _register_state_callback(self, key, *state_names):
-        states = list(self._iter_states(*state_names))
+        states = list(self._get_states(*state_names))
 
         def register(func):
             for state in states:
@@ -275,10 +248,8 @@ class StateMachine(ParentState):
 
         return register
 
-    def _register_transition_callback(self, key,  old_state_name, new_state_name):
-        transitions = list(self._iter_transitions(old_state_name, new_state_name))
-        if not len(transitions):
-            raise MachineError(f"'{key}' decorator has no effect: no transitions found to add callback to")
+    def _register_transition_callback(self, key, old_state_name, new_state_name):
+        transitions = self._get_transitions(old_state_name, new_state_name, check_length=True)
 
         def register(func):
             for transition in transitions:
@@ -296,16 +267,14 @@ class StateMachine(ParentState):
     def on_exit(self, state_name, *state_names):
         return self._register_state_callback('on_exit', state_name, *state_names)
 
+    def on_stay(self, *state_names):
+        return self._register_state_callback('on_stay', *state_names)
+
     def on_transfer(self, old_state_name, new_state_name):
         return self._register_transition_callback('on_transfer', old_state_name, new_state_name)
 
-    def on_stay(self, state_name, *state_names):
-        return self._register_state_callback('on_stay', state_name, *state_names)
-
     def condition(self, old_state_name, new_state_name):
-        transitions = list(self._iter_transitions(old_state_name, new_state_name))
-        if not len(transitions):
-            raise MachineError(f"'condition' decorator has no effect: no transitions found to add callback to")
+        transitions = self._get_transitions(old_state_name, new_state_name, check_length=True)
 
         def register(func):
             for transition in transitions:
@@ -315,49 +284,28 @@ class StateMachine(ParentState):
         return register
 
     def initial_entry(self, obj, *args, **kwargs):
-        self.callbacks.prepare(obj, *args, **kwargs)
         for state in self.get_path(obj).iter_in(self):
             state.do_on_entry(obj, *args, **kwargs)
 
     def trigger(self, obj, trigger, *args, **kwargs):
         """ Executes the transition when called through a trigger """
-        self.callbacks.prepare(obj, *args, **kwargs)
         full_path = self.get_path(obj)
         for _, state, tail in full_path.trace_in(self, last=False):
             transitions = state.triggering.get((tail, trigger))
             if transitions:
                 for transition in transitions:
-                    if transition.execute(obj, *args, **kwargs):
+                    if transition.condition(obj, *args, **kwargs):
+                        transition.execute(obj, *args, **kwargs)
                         break
-                state.do_on_stays(obj, *args, **kwargs)
                 break
         else:
             raise TransitionError(f"transition '{str(full_path)}' with trigger '{trigger}' does not exist in '{self.name}'")
         return obj
 
-    def _config(self, **kwargs):
-        """ deepcopy can be a problem with non-toplevel callbacks """
-        kwargs = deepcopy(kwargs)
-
-        def convert(item):
-            if isinstance(item, str):
-                return item
-            if isinstance(item, (list, tuple)):
-                return list(map(convert, item))
-            return nameify(item)
-
-        return Path.apply_all(kwargs, convert)
-
-    def __repr__(self):
-        """
-        :return: A JSON representation of the state machine, similar to the arguments of the state machine
-                 constructor, but the callback methods have been replaced by 'module.name' of the callback
-                 (so it cannot (yet) be used as constructor arguments).
-        """
-        return json.dumps(self.config, indent=4)
-    
-    def __str__(self):
-        return self.name
+    def as_json_dict(self):
+        result = dict(name=self.name)
+        result.update(super().as_json_dict())
+        return result
 
 
 def state_machine(states, transitions, **config):

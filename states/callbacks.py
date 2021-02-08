@@ -1,19 +1,31 @@
+import json
+
 from states.tools import listify
 
 
+def _nameify(f):
+    if callable(f) or isinstance(f, type):
+        name = f.__qualname__
+        if '.' in name:
+            return ".".join(name.split('.')[-2:])
+        return ".".join((f.__module__, name))
+    else:
+        return f  # string
+
+
 class Callbacks(object):
-    attr_prefix = '_'
-    func_prefix = ''
 
     def __init__(self, **callbacks):
+        self._callbacks = {}
+        self._functions = {}
         for name, callback_s in callbacks.items():
-            attr_name = self.attr_prefix + name
-            func_name = self.func_prefix + name
-            setattr(self, attr_name, listify(callback_s))
-            setattr(self, func_name, self._get_func(attr_name))
+            name = name.strip()
+            assert not hasattr(self, name)
+            self._callbacks[name] = listify(callback_s)
+            self._functions[name] = self._get_func(name)
 
     def _get_func(self, name):
-        callbacks = getattr(self, name)
+        callbacks = self._callbacks[name]
 
         def call(obj, *args, **kwargs):
             results = []
@@ -27,18 +39,26 @@ class Callbacks(object):
         call.__name__ = name
         return call
 
-    def has_any(self, name):
-        return bool(len(getattr(self, self.attr_prefix + name, ())))
+    def __getattr__(self, name):
+        try:
+            return self._functions[name]
+        except KeyError:
+            raise AttributeError(f"no callbacks '{name}' found")
 
     def register(self, name, *callback_s):
-        getattr(self, self.attr_prefix + name).extend(callback_s)
+        self._callbacks[name.strip()].extend(callback_s)
+
+    def has_any(self, name):
+        return bool(self._callbacks.get(name.strip(), None))
 
     def copy(self):
-        callbacks = {}
-        for name, value in self.__dict__.items():
-            if name.startswith(self.attr_prefix) and isinstance(value, list) :
-                callbacks[name.lstrip(self.attr_prefix)] = value[:]
-        return self.__class__(**callbacks)
+        return self.__class__(**{k: c[:] for k, c in self._callbacks.items()})
+
+    def as_json_dict(self):
+        return {k: list(map(_nameify, c)) for k, c in self._callbacks.items() if len(c)}
+
+    def __repr__(self):
+        return json.dumps(self.as_json_dict(), indent=4)
 
 
 
