@@ -1,3 +1,5 @@
+__author__ = "lars van gemerden"
+
 from typing import Mapping, Set
 from collections import deque, defaultdict
 

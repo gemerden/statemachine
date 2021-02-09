@@ -1,3 +1,5 @@
+__author__ = "lars van gemerden"
+
 import json
 
 from states.tools import listify

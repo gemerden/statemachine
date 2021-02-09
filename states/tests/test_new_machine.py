@@ -18,6 +18,61 @@ class TestSimplestStateMachine(unittest.TestCase):
 
     def setUp(self):
         class Lamp(StatefulObject):
+            state = state_machine(states("off", "on"))
+
+            def __init__(self):
+                super().__init__()
+                self.on_count = 0
+                self.off_count = 0
+                self.stays = defaultdict(list)
+
+            @state.on_entry('on')
+            def inc_on_count(self, *args, **kwargs):
+                self.on_count += 1
+
+            @state.on_entry('off')
+            def inc_on_count(self, *args, **kwargs):
+                self.off_count += 1
+
+            @state.on_stay('off')
+            @state.on_stay('on')
+            def do_on_stay(self, string="", *args, **kwargs):
+                self.stays[self.state].append(string)
+
+        self.lamp = Lamp()
+
+    def test_setup(self):
+        pass
+
+    def test_construction(self):
+        """test whether all states, transitions and trigger(s) are in place"""
+        self.assertEqual(len(type(self.lamp).state), 2)
+        self.assertEqual(count_transitions(type(self.lamp).state), 4)
+        self.assertEqual(len(type(self.lamp).state.triggering), 4)
+
+    def test_triggers(self):
+        """test the basio trigger functions and the resultig states"""
+        self.assertEqual(self.lamp.state, "off")
+        self.lamp.goto_on()
+        self.assertEqual(self.lamp.state, "on")
+        self.lamp.goto_off()
+        self.assertEqual(self.lamp.state, "off")
+        self.lamp\
+            .goto_on("a")\
+            .goto_on("b")\
+            .goto_off("c")\
+            .goto_off("d")
+        self.assertEqual(self.lamp.state, "off")
+        self.assertEqual(self.lamp.on_count, 2)
+        self.assertEqual(self.lamp.off_count, 2)
+        assert self.lamp.stays == dict(on=["b"], off=["d"])
+        print(repr(type(self.lamp).state))
+
+
+class TestSimpleStateMachine(unittest.TestCase):
+
+    def setUp(self):
+        class Lamp(StatefulObject):
             state = state_machine(states(off=state(info="not turned on"),
                                          on=state(info="not turned off")),
                                   transitions(transition("off", "on", trigger="flick", info="turn the light on"),

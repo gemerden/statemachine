@@ -29,11 +29,6 @@ def listify(list_or_item):
         return [list_or_item]
 
 
-def nameify(f, cast=lambda v: v):
-    """ tries to give a name to an item"""
-    return ".".join([f.__module__, f.__name__]) if (callable(f) or isinstance(f, type)) else getattr(f, "name", cast(f))
-
-
 _marker = object()
 
 
@@ -278,4 +273,4 @@ def stopwatch(timer=perf_counter):
     """ do not call lambda within context = with-block """
     t = timer()
     yield lambda: delta
-    delta = timer() - t  # fixed on context exit
+    delta = timer() - t  # assigned on context exit

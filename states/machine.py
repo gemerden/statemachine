@@ -319,7 +319,7 @@ class StateMachine(BaseState):
                     return transitions
             raise TransitionError(f"transition from '{str(path)}' with trigger '{trigger}' does not exist in '{self.name}'")
 
-    def trigger(self, obj, trigger, *args, **kwargs):
+    def trigger(self, trigger, obj, *args, **kwargs):
         """ Executes the transition when called through a trigger """
         for transition in self._get_trigger_transitions(self.get_path(obj), trigger):
             if transition.condition(obj, *args, **kwargs):
