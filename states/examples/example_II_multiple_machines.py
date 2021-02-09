@@ -1,5 +1,5 @@
-from states import StateMachine, StatefulObject
-from states.tools import states, state, transition, switch, condition
+from states import StateMachine, StatefulObject, states, state, transition, switch
+from states.tools import condition
 
 
 class Room(StatefulObject):

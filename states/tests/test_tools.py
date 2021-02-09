@@ -1,6 +1,7 @@
 import unittest
 
-from states.tools import Path, replace_in_list, has_doubles, state, transition, switch, copy_struct
+from states.tools import Path, replace_in_list, has_doubles, copy_struct
+from states import state, transition, switch
 
 __author__ = "lars van gemerden"
 

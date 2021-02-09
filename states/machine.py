@@ -4,12 +4,11 @@ import json
 from typing import Mapping
 from collections import defaultdict
 
-from states.callbacks import Callbacks
-from states.standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config
-from states.tools import MachineError, TransitionError, lazy_property
-from states.tools import Path
-
-from states.transition import Transition
+from .exception import MachineError, TransitionError
+from .callbacks import Callbacks
+from .standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config
+from .tools import lazy_property, Path
+from .transition import Transition
 
 
 def none_check(check, res, alt):
@@ -93,8 +92,8 @@ class BaseState(Mapping):
         self.verified = True
 
     def append_transition(self, transition):
-        self.trans_dict[(transition.old_path, transition.new_path)].append(transition)
-        self.triggering[(transition.old_path, transition.trigger)].append(transition)
+        self.trans_dict[transition.old_path, transition.new_path].append(transition)
+        self.triggering[transition.old_path, transition.trigger].append(transition)
 
     def __len__(self):
         """ number of sub-states """
@@ -145,23 +144,13 @@ class BaseState(Mapping):
     def on_stays(self):
         return [state.callbacks.on_stay for state in self.up]
 
-    def do_on_stays(self, obj, *args, **kwargs):
-        for on_stay in self.on_stays:
-            on_stay(obj, *args, **kwargs)
-
     def as_json_dict(self):
+        jd = lambda v: v.as_json_dict()
         result = {}
         if len(self):
-            result['states'] = {}
-            for name, state in self.sub_states.items():
-                result['states'][name] = state.as_json_dict()
-
-            result['transitions'] = []
-            for transitions in self.trans_dict.values():
-                for transition in transitions:
-                    result['transitions'].append(transition.as_json_dict())
-
-        result.update(self.callbacks.as_json_dict())
+            result['states'] = {n: jd(s) for n, s in self.sub_states.items()}
+            result['transitions'] = [jd(t) for ts in self.trans_dict.values() for t in ts]
+        result.update(jd(self.callbacks))
         if len(self.info):
             result['info'] = self.info
         return result
@@ -190,6 +179,18 @@ class StateMachine(BaseState):
     and nested state machines get both. See constructors for ChildState and ParentState for possible arguments.
     """
 
+    @classmethod
+    def from_config(cls, states, transitions=(), **config):
+        if not len(transitions):
+            transitions = []
+            for old_state in states:
+                for new_state in states:
+                    transitions.append(dict(old_state=old_state, new_state=new_state, trigger='goto_' + new_state))
+        config = standardize_statemachine_config(states=states,
+                                                 transitions=transitions,
+                                                 **config)
+        return cls(**config)
+
     def __init__(self, states=None, transitions=(), **kwargs):
         """
         Constructor of the state machine, used to define all properties of the machine.
@@ -217,6 +218,7 @@ class StateMachine(BaseState):
             func(obj, **kwargs); trigger(s)can pass the args and kwargs
         """
         super(StateMachine, self).__init__(states=states or {}, transitions=transitions, **kwargs)
+        self._trigger_transitions = {}  # cache for transition lookup when trigger is called
         self.dict_key = None
 
     def __set_name__(self, cls, name):
@@ -226,19 +228,19 @@ class StateMachine(BaseState):
     def __get__(self, obj, cls=None):
         if obj is None:
             return self
-        return obj.__dict__[self.dict_key]
+        return str(obj.__dict__[self.dict_key])
 
     def __set__(self, obj, state_name):
         if self.dict_key in obj.__dict__:
             raise AttributeError(f"state {self.name} of {type(obj).__name__} cannot be changed directly; use triggers instead")
-        setattr(obj, self.dict_key, state_name)
+        obj.__dict__[self.dict_key] = Path(state_name)
 
     def set_state(self, obj, state):
         path = Path(state)
-        setattr(obj, self.dict_key, str(path + path.get_in(self).default_path))
+        setattr(obj, self.dict_key, path + path.get_in(self).default_path)
 
     def get_path(self, obj):
-        return Path(self.__get__(obj))
+        return obj.__dict__[self.dict_key]
 
     def _get_states(self, *state_names):
         state_paths = get_expanded_paths(*state_names,
@@ -277,9 +279,9 @@ class StateMachine(BaseState):
 
         return register
 
-    def prepare(self, func):
-        self.callbacks.register('prepare', func)
-
+    # def prepare(self, func):
+    #     self.callbacks.register('prepare', func)
+    #
     def on_entry(self, state_name, *state_names):
         return self._register_state_callback('on_entry', state_name, *state_names)
 
@@ -304,20 +306,24 @@ class StateMachine(BaseState):
 
     def initial_entry(self, obj, *args, **kwargs):
         for state in self.get_path(obj).iter_in(self):
-            state.do_on_entry(obj, *args, **kwargs)
+            state.callbacks.on_entry(obj, *args, **kwargs)
+
+    def _get_trigger_transitions(self, path, trigger):
+        try:
+            return self._trigger_transitions[path, trigger]
+        except KeyError:
+            for _, state, tail in path.trace_in(self, last=False):
+                transitions = state.triggering.get((tail, trigger))
+                if transitions:
+                    self._trigger_transitions[path, trigger] = transitions
+                    return transitions
+            raise TransitionError(f"transition from '{str(path)}' with trigger '{trigger}' does not exist in '{self.name}'")
 
     def trigger(self, obj, trigger, *args, **kwargs):
         """ Executes the transition when called through a trigger """
-        full_path = self.get_path(obj)
-        for _, state, tail in full_path.trace_in(self, last=False):
-            transitions = state.triggering.get((tail, trigger))
-            if transitions:
-                for transition in transitions:
-                    if transition.condition(obj, *args, **kwargs):
-                        transition.execute(obj, *args, **kwargs)
-                        break
-                return
-        raise TransitionError(f"transition from '{str(full_path)}' with trigger '{trigger}' does not exist in '{self.name}'")
+        for transition in self._get_trigger_transitions(self.get_path(obj), trigger):
+            if transition.condition(obj, *args, **kwargs):
+                return transition.execute(obj, *args, **kwargs)
 
     def as_json_dict(self):
         result = dict(name=self.name)
@@ -325,12 +331,7 @@ class StateMachine(BaseState):
         return result
 
 
-def state_machine(states, transitions, **config):
-    config = standardize_statemachine_config(states=states,
-                                             transitions=transitions,
-                                             **config)
-    return StateMachine(**config)
-
+state_machine = StateMachine.from_config
 
 if __name__ == '__main__':
     pass

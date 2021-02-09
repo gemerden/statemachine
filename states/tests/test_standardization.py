@@ -1,8 +1,9 @@
 import unittest
 from itertools import product
 
-from states.tools import transitions, transition, state, states, switch, case, default, Path
-from states.standardize import standardize_statemachine_config
+from ..tools import Path
+from ..configuration import transitions, default, states, state, transition, switch, case
+from ..standardize import standardize_statemachine_config
 
 
 def count(it, key):

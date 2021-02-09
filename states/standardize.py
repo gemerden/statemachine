@@ -1,7 +1,9 @@
 from typing import Mapping, Set
 from collections import deque, defaultdict
 
-from .tools import listify, Path, MachineError, transition, copy_struct
+from .tools import listify, Path, copy_struct
+from .exception import MachineError
+from .configuration import transition
 
 
 def validate_new_state(state_name_s):

@@ -92,7 +92,7 @@ from states import StatefulObject
 
 
 def entry_printer(obj):
-    print(f"{str(obj)} entering state '{obj.state}'")
+    print(f"{str(obj)} entering state '{ states.configuration.state }'")
 
 class LightSwitch(StatefulObject):
 

@@ -2,8 +2,9 @@ __author__ = "lars van gemerden"
 
 import json
 
-from states.callbacks import Callbacks
-from states.tools import MachineError, lazy_property, Path
+from .callbacks import Callbacks
+from .exception import MachineError
+from .tools import Path
 
 
 class Transition(object):
@@ -38,23 +39,29 @@ class Transition(object):
         on_exits = [s.callbacks.on_exit for s in self.old_path.iter_out(self.machine)]
         on_entries = [s.callbacks.on_entry for s in self.new_path.iter_in(self.machine)]
         on_transfer = self.callbacks.on_transfer
-        inner_stays = self.old_state.do_on_stays
-        outer_stays = self.machine.do_on_stays
+        inner_stays = self.old_state.on_stays
+        outer_stays = self.machine.on_stays
         set_state = self.machine.root.set_state
 
         if self.old_state is self.new_state:
+            callbacks = [on_transfer] + inner_stays
+
             def execute(obj, *args, **kwargs):
-                on_transfer(obj, *args, **kwargs)
-                inner_stays(obj, *args, **kwargs)
+                for callback in callbacks:
+                    callback(obj, *args, **kwargs)
+                return obj
         else:
+            old_state_callbacks = on_exits
+            new_state_callbacks = [on_transfer] + on_entries + outer_stays
+
             def execute(obj, *args, **kwargs):
-                for on_exit in on_exits:
-                    on_exit(obj, *args, **kwargs)
+                for callback in old_state_callbacks:
+                    callback(obj, *args, **kwargs)
                 set_state(obj, new_state_name)
-                on_transfer(obj, *args, **kwargs)
-                for on_entry in on_entries:
-                    on_entry(obj, *args, **kwargs)
-                outer_stays(obj, *args, **kwargs)
+                for callback in new_state_callbacks:
+                    callback(obj, *args, **kwargs)
+                return obj
+
         return execute
 
     def add_condition(self, condition_func):
@@ -78,7 +85,8 @@ class Transition(object):
         return Transition(**kwargs)
 
     def default_copy(self):
-        return self.clean_copy(new_state=str(self.old_path), on_transfer=(), info="default transition when conditions fail")
+        return self.clean_copy(new_state=str(self.old_path), on_transfer=(),
+                               info="auto-generated default transition in case conditions fail")
 
     def as_json_dict(self):
         result = dict(old_state=str(self.old_state),

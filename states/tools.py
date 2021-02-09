@@ -1,59 +1,9 @@
 __author__ = "lars van gemerden"
 
+from contextlib import contextmanager
 from itertools import zip_longest
+from time import perf_counter
 from typing import Sequence, Mapping, MutableMapping, Set
-
-"""
-These are functions to make the state machine config more readable and to to validate it
-"""
-
-
-def states(**state_configs):
-    if not all(isinstance(s, dict) for s in state_configs.values()):
-        raise MachineError(f"all states in 'states' should be of type 'dict'")
-    return state_configs
-
-
-def state(states=None, transitions=(), on_entry=(), on_exit=(), on_stay=(), info=""):
-    if states:
-        if on_stay:
-            raise MachineError(f"states with nested states cannot have 'on_stay' callbacks")
-        return dict(states=states, transitions=transitions,
-                    on_entry=on_entry, on_exit=on_exit, info=info)
-    else:
-        if transitions:
-            raise MachineError(f"states with no nested states cannot have transitions")
-        return dict(on_entry=on_entry, on_exit=on_exit, on_stay=on_stay, info=info)
-
-
-def transitions(*transitions_):
-    if not all(isinstance(t, dict) for t in transitions_):
-        raise MachineError(f"all transitions in 'transitions' should be of type 'dict'")
-    return list(transitions_)
-
-
-def transition(old_state, new_state, trigger, on_transfer=(), condition=(), info=""):
-    if isinstance(new_state, Mapping) and case:
-        raise MachineError(f"transitions with multiple (switched) end-states cannot have a single condition")
-    return dict(old_state=old_state, new_state=new_state, trigger=trigger,
-                on_transfer=on_transfer, condition=condition, info=info)
-
-
-def switch(*state_conditions):
-    if not all(isinstance(c, dict) for c in state_conditions):
-        raise MachineError(f"all values in 'switch' must be 'dict'")
-    return list(state_conditions)
-
-
-def case(state, condition, on_transfer=(), info=""):
-    return dict(state=state, condition=condition, on_transfer=on_transfer, info=info)
-
-
-def default(state, on_transfer=(), info=""):
-    return dict(state=state, condition=(), on_transfer=on_transfer, info=info)
-
-
-""" ----------------------------------------------------------------------------------------- """
 
 
 def copy_struct(value_or_mapping_or_sequence):
@@ -323,11 +273,9 @@ class lazy_property(object):
         return result
 
 
-class MachineError(ValueError):
-    """Exception indicating an error in the construction of the state machine"""
-    pass
-
-
-class TransitionError(ValueError):
-    """Exception indicating an error in the in a state transition of an object"""
-    pass
+@contextmanager
+def stopwatch(timer=perf_counter):
+    """ do not call lambda within context = with-block """
+    t = timer()
+    yield lambda: delta
+    delta = timer() - t  # fixed on context exit

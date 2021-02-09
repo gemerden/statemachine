@@ -4,9 +4,10 @@ import unittest
 from contextlib import contextmanager
 from copy import deepcopy
 
-from states import StateMachine, StatefulObject, TransitionError, MachineError
+import states.configuration
+from states import StateMachine, StatefulObject, TransitionError, MachineError, states, state, transition
 
-from states.tools import Path, states, transition, state
+from states.tools import Path
 
 __author__ = "lars van gemerden"
 
@@ -48,7 +49,7 @@ class TestSimplestStateMachine(unittest.TestCase):
         self.assertEqual(self.light.state, "on")
         self.light.switch()
         self.assertEqual(self.light.state, "off")
-        self.light.switch().switch()
+        states.configuration.switch()
         self.assertEqual(self.light.state, "off")
 
     def test_info(self):
@@ -202,19 +203,19 @@ class TestStateMachine(unittest.TestCase):
         block = self.object_class("block", temperature=-10)
 
         block = block.heat_by(5)
-        self.assertEqual(block.state, "solid")
+        self.assertEqual(states.configuration.state, "solid")
         self.assertEqual(self.callback_counter, 0)
 
         block = block.heat_by(10)
-        self.assertEqual(block.state, "liquid")
+        self.assertEqual(states.configuration.state, "liquid")
         self.assertEqual(self.callback_counter, 3)
 
         block = block.heat_by(10)
-        self.assertEqual(block.state, "liquid")
+        self.assertEqual(states.configuration.state, "liquid")
         self.assertEqual(self.callback_counter, 3)
 
         block = block.heat_by(100)
-        self.assertEqual(block.state, "gas")
+        self.assertEqual(states.configuration.state, "gas")
         self.assertEqual(self.callback_counter, 6)
 
     def test_on_stay(self):

@@ -1,12 +1,11 @@
-import json
-import random
 import unittest
 from collections import defaultdict
 
-from states import StatefulObject, TransitionError, MachineError
-from states.machine import state_machine
-
-from states.tools import Path, states, transition, state, switch, transitions, case, default
+from ..exception import TransitionError, MachineError
+from ..machine import state_machine
+from ..stateful import StatefulObject
+from ..configuration import transitions, default, states, state, transition, switch, case
+from ..tools import Path, stopwatch
 
 __author__ = "lars van gemerden"
 
@@ -21,8 +20,8 @@ class TestSimplestStateMachine(unittest.TestCase):
         class Lamp(StatefulObject):
             state = state_machine(states(off=state(info="not turned on"),
                                          on=state(info="not turned off")),
-                                  transitions(transition("off", "on", trigger="flip", info="turn the light on"),
-                                              transition("on", "off", trigger="flip", info="turn the light off")))
+                                  transitions(transition("off", "on", trigger="flick", info="turn the light on"),
+                                              transition("on", "off", trigger="flick", info="turn the light off")))
 
             def __init__(self):
                 super().__init__()
@@ -51,18 +50,18 @@ class TestSimplestStateMachine(unittest.TestCase):
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
         self.assertEqual(self.lamp.state, "off")
-        self.lamp.flip()
+        self.lamp.flick()
         self.assertEqual(self.lamp.state, "on")
-        self.lamp.flip()
+        self.lamp.flick()
         self.assertEqual(self.lamp.state, "off")
-        self.lamp.flip().flip()
+        self.lamp.flick().flick()
         self.assertEqual(self.lamp.state, "off")
         self.assertEqual(self.lamp.on_count, 2)
         self.assertEqual(self.lamp.off_count, 2)
 
     def test_info(self):
         self.assertEqual(type(self.lamp).state.sub_states["on"].info, "not turned off")
-        self.assertEqual(type(self.lamp).state.triggering[Path("off"), "flip"][0].info, "turn the light on")
+        self.assertEqual(type(self.lamp).state.triggering[Path("off"), "flick"][0].info, "turn the light on")
 
 
 class TestStateMachine(unittest.TestCase):
@@ -553,8 +552,8 @@ class TestNestedStateMachine(unittest.TestCase):
                             transitions(transition('waiting', 'washing', trigger='wash'),
                                         transition('washing', 'drying', trigger='dry'),
                                         transition('drying', 'waiting', trigger='stop')))),
-            transitions(transition('off.working', 'on', trigger=["turn_on", "flip"]),
-                        transition('on', 'off', trigger=["turn_off", "flip"]),
+            transitions(transition('off.working', 'on', trigger=["turn_on", "flick"]),
+                        transition('on', 'off', trigger=["turn_off", "flick"]),
                         transition(('on.*', 'off'), 'off.broken', trigger=["smash"]),
                         transition('off.working', 'on.drying', trigger=["just_dry_already"]))
         )
@@ -643,7 +642,7 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertEqual(washer.state, "off.working")
         self.assert_counters(washer, 0, 0, 0, 0)
 
-        washer.flip()
+        washer.flick()
         self.assertEqual(washer.state, "on.waiting")
         self.assert_counters(washer, 1, 1, 1, 1)
 
@@ -655,7 +654,7 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertEqual(washer.state, "on.drying")
         self.assert_counters(washer, 3, 3, 1, 1)
 
-        washer.flip()
+        washer.flick()
         self.assertEqual(washer.state, "off.working")
         self.assert_counters(washer, 4, 4, 2, 1)
 
@@ -811,6 +810,163 @@ class TestCallbackDecorators(unittest.TestCase):
         json_dict = self.object_class.state.as_json_dict()
         assert any(t.get('condition') for t in json_dict['states']['off']['transitions'])
 
+
+class TestPerformance(unittest.TestCase):
+
+    def setUp(self):
+        class Lamp(StatefulObject):
+            state = state_machine(states(off=state(),
+                                         on=state()),
+                                  transitions(transition("off", "on", trigger="flick"),
+                                              transition("on", "off", trigger="flick")))
+
+            def __init__(self):
+                super().__init__()
+                self.on_count = 0
+                self.off_count = 0
+
+            @state.on_entry('on')
+            def inc_on_count(self, **kwargs):
+                self.on_count += 1
+
+            @state.on_entry('off')
+            def inc_on_count(self, **kwargs):
+                self.off_count += 1
+
+        self.lamp = Lamp()
+
+    def test_performance(self):
+        lamp = self.lamp
+        lamp.flick().flick().flick()  # fill caches
+
+        N = 1_000
+        with stopwatch() as stop_time:
+            for _ in range(N):
+                lamp.flick()
+        assert stop_time() / N < 1e-5
+
+
+class TestMultiState(unittest.TestCase):
+
+    def setUp(self):
+        class MoodyColor(StatefulObject):
+            color = state_machine(
+                states=states(
+                    red=state(),
+                    blue=state(),
+                    green=state(),
+                ),
+                transitions=[
+                    transition('red', 'blue', trigger=['next', 'change']),
+                    transition('blue', 'green', trigger=['next', 'change']),
+                    transition('green', 'red', trigger=['next', 'change']),
+                ],
+                on_any_entry='count_calls'
+            )
+
+            mood = state_machine(
+                states=dict(
+                    good=state(),
+                    bad=state(),
+                    ugly=state(),
+                ),
+                transitions=[
+                    transition('good', 'bad', trigger='next'),
+                    transition('bad', 'ugly', trigger='next'),
+                    transition('ugly', 'good', trigger='next'),
+                ],
+                on_any_entry='count_calls'
+            )
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.counter = 0
+                self.exit_history = []
+                self.entry_history = []
+                self.transfer_history = []
+
+            def state(self):
+                return dict(mood=self.mood,
+                            color=self.color)
+
+            @mood.on_entry('*')
+            @color.on_entry('*')
+            def count_calls(self):
+                self.counter += 1
+
+            @mood.on_exit('*')
+            @color.on_exit('*')
+            def on_exit(self):
+                self.exit_history.append(self.state())
+
+            @mood.on_entry('*')
+            @color.on_entry('*')
+            def on_entry(self):
+                self.entry_history.append(self.state())
+
+            @mood.on_transfer('*', '*')
+            @color.on_transfer('*', '*')
+            def on_transfer(self):
+                self.transfer_history.append(self.state())
+
+        self.state_class = MoodyColor
+
+    def test_init_sub_state(self):
+        mc = self.state_class()
+        assert len(mc._state_machines) == 2
+
+    def test_combines(self):
+        moodycolor = self.state_class()
+        moodycolor.next()
+        assert moodycolor.counter == 2
+        assert moodycolor.color == 'blue'
+        assert moodycolor.mood == 'bad'
+        n = 3
+        for _ in range(n):
+            moodycolor.next()
+        assert moodycolor.counter == 2 + n * 2
+
+    def test_only_color(self):
+        moodycolor = self.state_class()
+        moodycolor.change()
+        assert moodycolor.counter == 1
+        assert moodycolor.color == 'blue'
+        assert moodycolor.mood == 'good'
+
+    def test_initial(self):
+        moodycolor = self.state_class(color='green', mood='ugly')
+        assert moodycolor.color == 'green'
+        assert moodycolor.mood == 'ugly'
+        moodycolor.next()
+        assert moodycolor.counter == 2
+        assert moodycolor.color == 'red'
+        assert moodycolor.mood == 'good'
+
+    def test_trigger_initial(self):
+        moodycolor = self.state_class()
+        assert moodycolor.color == 'red'
+        assert moodycolor.mood == 'good'
+        moodycolor.trigger_initial()
+        assert moodycolor.entry_history == [{'color': 'red', 'mood': 'good'},
+                                            {'color': 'red', 'mood': 'good'}]
+        assert moodycolor.counter == 2
+        moodycolor.next()
+        assert moodycolor.counter == 4
+        assert moodycolor.color == 'blue'
+        assert moodycolor.mood == 'bad'
+
+    def test_callbacks(self):
+        moodycolor = self.state_class()
+        moodycolor.next()
+        assert moodycolor.exit_history == [{'color': 'red', 'mood': 'good'},
+                                           {'color': 'blue', 'mood': 'good'}]  # color already changed
+        assert moodycolor.entry_history == [{'color': 'blue', 'mood': 'good'},  # mood did not change yet
+                                            {'color': 'blue', 'mood': 'bad'}]
+        assert moodycolor.transfer_history == [{'color': 'blue', 'mood': 'good'},
+                                               {'color': 'blue', 'mood': 'bad'}]
+
+    #
+
     # class TestContextManager(unittest.TestCase):
     #
     #     def setUp(self):
@@ -824,7 +980,7 @@ class TestCallbackDecorators(unittest.TestCase):
     #             yield
     #             obj.managed = False
     #
-    #         self.config = as_json_dict(
+    #         self.config = dict(
     #             states={
     #                 "solid": {"on_exit": "on_action", "on_entry": "on_action"},
     #                 "liquid": {"on_exit": "on_action", "on_entry": "on_action"},
@@ -894,62 +1050,58 @@ class TestCallbackDecorators(unittest.TestCase):
     #         self.assertEqual(matter.managed, False)
     #
     #
-    # class TestCallback(unittest.TestCase):
-    #
-    #     def setUp(self):
-    #         """called before any individual test method"""
-    #         self.config = as_json_dict(
-    #             states={
-    #                 "off": {"on_exit": "on_exit"},
-    #                 "on": {"on_entry": "on_entry"},
-    #             },
-    #             transitions=[
-    #                 {"old_state": "off", "new_state": "on", "trigger": "switch", "on_transfer": "on_transfer",
-    #                  "condition": "condition"},
-    #             ],
-    #             on_any_exit="on_any_exit",
-    #             on_any_entry="on_any_entry",
-    #             context_manager="context_manager"
-    #         )
-    #
-    #         class Radio(StatefulObject):
-    #             """object class fo which the state is managed"""
-    #             state = StateMachine(**self.config)
-    #
-    #             def __init__(self, testcase):
-    #                 super(Radio, self).__init__()
-    #                 self.testcase = testcase
-    #
-    #             def condition(self, a, **kwargs):
-    #                 self.testcase.assertEqual(a, 1)
-    #                 return True
-    #
-    #             def on_entry(self, b, **kwargs):
-    #                 self.testcase.assertEqual(b, 2)
-    #
-    #             def on_exit(self, c, **kwargs):
-    #                 self.testcase.assertEqual(c, 3)
-    #
-    #             def on_transfer(self, d, **kwargs):
-    #                 self.testcase.assertEqual(d, 4)
-    #
-    #             def on_any_exit(self, e, **kwargs):
-    #                 self.testcase.assertEqual(e, 5)
-    #
-    #             def on_any_entry(self, f, **kwargs):
-    #                 self.testcase.assertEqual(f, 6)
-    #
-    #             @contextmanager
-    #             def context_manager(self, g, **kwargs):
-    #                 self.testcase.assertEqual(g, 7)
-    #                 yield
-    #
-    #         self.radio = Radio(self)
-    #
-    #     def test_callbacks(self):
-    #         self.radio.switch(a=1, b=2, c=3, d=4, e=5, f=6, g=7, h=None)
-    #
-    #
+
+
+class TestCallbackArguments(unittest.TestCase):
+
+    def setUp(self):
+        class Radio(StatefulObject):
+            """object class fo which the state is managed"""
+            state = state_machine(
+                states=states(
+                    off=state(),
+                    on=state(),
+                ),
+                transitions=[
+                    transition("off", "on", trigger="flick"),
+                ],
+            )
+
+            def __init__(self, testcase):
+                super(Radio, self).__init__()
+                self.testcase = testcase
+
+            @state.condition('off', 'on')
+            def condition(self, a, **kwargs):
+                self.testcase.assertEqual(a, 1)
+                return True
+
+            @state.on_entry('on')
+            def on_entry(self, b, **kwargs):
+                self.testcase.assertEqual(b, 2)
+
+            @state.on_exit('off')
+            def on_exit(self, c, **kwargs):
+                self.testcase.assertEqual(c, 3)
+
+            @state.on_transfer('off', 'on')
+            def on_transfer(self, d, **kwargs):
+                self.testcase.assertEqual(d, 4)
+
+            @state.on_exit('*')
+            def on_any_exit(self, e, **kwargs):
+                self.testcase.assertEqual(e, 5)
+
+            @state.on_entry('*')
+            def on_any_entry(self, f, **kwargs):
+                self.testcase.assertEqual(f, 6)
+
+        self.object_class = Radio
+
+    def test_callbacks(self):
+        radio = self.object_class(self)
+        radio.flick(a=1, b=2, c=3, d=4, e=5, f=6, g=7)
+
     # class TestPrepare(unittest.TestCase):
     #
     #     def setUp(self):
@@ -996,125 +1148,11 @@ class TestCallbackDecorators(unittest.TestCase):
     #         self.assertTrue(switch.state == "on")
     #
     #
-    # class TestMultiState(unittest.TestCase):
-    #
-    #     def setUp(self):
-    #         class Colored(StatefulObject):
-    #             color = StateMachine(
-    #                 states=as_json_dict(
-    #                     red={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
-    #                     blue={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
-    #                     green={'on_exit': 'on_exit', 'on_entry': 'on_entry'}
-    #                 ),
-    #                 transitions=[
-    #                     as_json_dict(old_state='red', new_state='blue', trigger=['next', 'change'], on_transfer='on_transfer'),
-    #                     as_json_dict(old_state='blue', new_state='green', trigger=['next', 'change'], on_transfer='on_transfer'),
-    #                     as_json_dict(old_state='green', new_state='red', trigger=['next', 'change'], on_transfer='on_transfer'),
-    #                 ],
-    #                 on_any_entry='count_calls'
-    #             )
-    #
-    #         class MoodyColor(Colored):
-    #
-    #             mood = StateMachine(
-    #                 states=as_json_dict(
-    #                     good={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
-    #                     bad={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
-    #                     ugly={'on_exit': 'on_exit', 'on_entry': 'on_entry'}
-    #                 ),
-    #                 transitions=[
-    #                     as_json_dict(old_state='good', new_state='bad', trigger='next', on_transfer='on_transfer'),
-    #                     as_json_dict(old_state='bad', new_state='ugly', trigger='next', on_transfer='on_transfer'),
-    #                     as_json_dict(old_state='ugly', new_state='good', trigger='next', on_transfer='on_transfer'),
-    #                 ],
-    #                 on_any_entry='count_calls'
-    #             )
-    #
-    #             def __init__(self, *args, **kwargs):
-    #                 super().__init__(*args, **kwargs)
-    #                 self.counter = 0
-    #                 self.exit_history = []
-    #                 self.entry_history = []
-    #                 self.transfer_history = []
-    #
-    #             def count_calls(self):
-    #                 self.counter += 1
-    #
-    #             def state(self):
-    #                 return as_json_dict(mood=self.mood,
-    #                             color=self.color)
-    #
-    #             def on_exit(self):
-    #                 self.exit_history.append(self.state())
-    #
-    #             def on_entry(self):
-    #                 self.entry_history.append(self.state())
-    #
-    #             def on_transfer(self):
-    #                 self.transfer_history.append(self.state())
-    #
-    #         self.state_class = MoodyColor
-    #
-    #     def test_inheritance(self):
-    #         mc = self.state_class()
-    #         assert len(mc._state_machines) == 2
-    #
-    #     def test_combines(self):
-    #         moodycolor = self.state_class()
-    #         moodycolor.next()
-    #         assert moodycolor.counter == 2
-    #         assert moodycolor.color == 'blue'
-    #         assert moodycolor.mood == 'bad'
-    #         n = 3
-    #         for _ in range(n):
-    #             moodycolor.next()
-    #         assert moodycolor.counter == 2 + n*2
-    #
-    #     def test_only_color(self):
-    #         moodycolor = self.state_class()
-    #         moodycolor.change()
-    #         assert moodycolor.counter == 1
-    #         assert moodycolor.color == 'blue'
-    #         assert moodycolor.mood == 'good'
-    #
-    #     def test_initial(self):
-    #         moodycolor = self.state_class(color='green', mood='ugly')
-    #         assert moodycolor.color == 'green'
-    #         assert moodycolor.mood == 'ugly'
-    #         moodycolor.next()
-    #         assert moodycolor.counter == 2
-    #         assert moodycolor.color == 'red'
-    #         assert moodycolor.mood == 'good'
-    #
-    #     def test_trigger_initial(self):
-    #         moodycolor = self.state_class()
-    #         assert moodycolor.color == 'red'
-    #         assert moodycolor.mood == 'good'
-    #         moodycolor.trigger_initial()
-    #         assert moodycolor.entry_history == [{'color': 'red', 'mood': 'good'},
-    #                                             {'color': 'red', 'mood': 'good'}]
-    #         assert moodycolor.counter == 2
-    #         moodycolor.next()
-    #         assert moodycolor.counter == 4
-    #         assert moodycolor.color == 'blue'
-    #         assert moodycolor.mood == 'bad'
-    #
-    #     def test_callbacks(self):
-    #         moodycolor = self.state_class()
-    #         moodycolor.next()
-    #         assert moodycolor.exit_history == [{'color': 'red', 'mood': 'good'},
-    #                                            {'color': 'blue', 'mood': 'good'}]  # color already changed
-    #         assert moodycolor.entry_history == [{'color': 'blue', 'mood': 'good'},  # mood did not change yet
-    #                                             {'color': 'blue', 'mood': 'bad'}]
-    #         assert moodycolor.transfer_history == [{'color': 'red', 'mood': 'good'},
-    #                                                {'color': 'blue', 'mood': 'good'}]
-    #
-    #
     # class TestTransitioning(unittest.TestCase):
     #
     #     def setUp(self):
     #         """called before any individual test method"""
-    #         self.config = as_json_dict(
+    #         self.config = dict(
     #             states={
     #                 "off": {},
     #                 "on": {},
@@ -1157,33 +1195,33 @@ class TestCallbackDecorators(unittest.TestCase):
     #     class MultiSome(StatefulObject):
     #
     #         color = StateMachine(
-    #             states=as_json_dict(
+    #             states=dict(
     #                 red={'on_exit': 'color_callback'},
     #                 blue={'on_exit': 'color_callback'},
     #                 green={'on_exit': 'color_callback'}
     #             ),
     #             transitions=[
-    #                 as_json_dict(old_state='red', new_state='blue', trigger='next'),
-    #                 as_json_dict(old_state='blue', new_state='green', trigger='next'),
-    #                 as_json_dict(old_state='green', new_state='red', trigger='next'),
+    #                 dict(old_state='red', new_state='blue', trigger='next'),
+    #                 dict(old_state='blue', new_state='green', trigger='next'),
+    #                 dict(old_state='green', new_state='red', trigger='next'),
     #             ],
     #         )
     #         mood = StateMachine(
-    #             states=as_json_dict(
+    #             states=dict(
     #                 good={'on_exit': 'mood_callback'},
     #                 bad={'on_exit': 'mood_callback'},
     #                 ugly={'on_exit': 'mood_callback'}
     #             ),
     #             transitions=[
-    #                 as_json_dict(old_state='good', new_state='bad', trigger='next'),
-    #                 as_json_dict(old_state='bad', new_state='ugly', trigger='next'),
-    #                 as_json_dict(old_state='ugly', new_state='good', trigger='next'),
+    #                 dict(old_state='good', new_state='bad', trigger='next'),
+    #                 dict(old_state='bad', new_state='ugly', trigger='next'),
+    #                 dict(old_state='ugly', new_state='good', trigger='next'),
     #             ],
     #         )
     #
     #         def __init__(self, *args, **kwargs):
     #             super().__init__(*args, **kwargs)
-    #             self.history = as_json_dict(color=[], mood=[])
+    #             self.history = dict(color=[], mood=[])
     #
     #         def color_callback(self):
     #             self.history['color'].append(self.color)
@@ -1200,52 +1238,52 @@ class TestCallbackDecorators(unittest.TestCase):
     #         assert some.history['mood'] == ['good', 'bad', 'ugly', 'good', 'bad', 'ugly']
     #
     #
-    # class TestMultiStateMachineNewConstructors(unittest.TestCase):
-    #
-    #     class MultiSome(StatefulObject):
-    #
-    #         color = StateMachine(
-    #             states=states(
-    #                 red=state(on_exit='color_callback'),
-    #                 blue=state(on_exit='color_callback'),
-    #                 green=state(on_exit='color_callback'),
-    #             ),
-    #             transitions=[
-    #                 transition('red', 'blue', trigger='next'),
-    #                 transition('blue', 'green', trigger='next'),
-    #                 transition('green', 'red', trigger='next'),
-    #             ],
-    #         )
-    #         mood = StateMachine(
-    #             states=states(
-    #                 good=state(on_exit='mood_callback'),
-    #                 bad=state(on_exit='mood_callback'),
-    #                 ugly=state(on_exit='mood_callback')
-    #             ),
-    #             transitions=[
-    #                 transition('good', 'bad', trigger='next'),
-    #                 transition('bad', 'ugly', trigger='next'),
-    #                 transition('ugly', 'good', trigger='next'),
-    #             ],
-    #         )
-    #
-    #         def __init__(self, *args, **kwargs):
-    #             super().__init__(*args, **kwargs)
-    #             self.history = as_json_dict(color=[], mood=[])
-    #
-    #         def color_callback(self):
-    #             self.history['color'].append(self.color)
-    #
-    #         def mood_callback(self):
-    #             self.history['mood'].append(self.mood)
-    #
-    #     def test_transitions(self):
-    #         some = self.MultiSome()
-    #         for _ in range(6):
-    #             some.next()
-    #
-    #         assert some.history['color'] == ['red', 'blue', 'green', 'red', 'blue', 'green']
-    #         assert some.history['mood'] == ['good', 'bad', 'ugly', 'good', 'bad', 'ugly']
+
+
+class TestMultiStateMachineOldCallbacks(unittest.TestCase):
+    class MultiSome(StatefulObject):
+        color = state_machine(
+            states=states(
+                red=state(on_exit='color_callback'),
+                blue=state(on_exit='color_callback'),
+                green=state(on_exit='color_callback'),
+            ),
+            transitions=[
+                transition('red', 'blue', trigger='next'),
+                transition('blue', 'green', trigger='next'),
+                transition('green', 'red', trigger='next'),
+            ],
+        )
+        mood = state_machine(
+            states=states(
+                good=state(on_exit='mood_callback'),
+                bad=state(on_exit='mood_callback'),
+                ugly=state(on_exit='mood_callback')
+            ),
+            transitions=[
+                transition('good', 'bad', trigger='next'),
+                transition('bad', 'ugly', trigger='next'),
+                transition('ugly', 'good', trigger='next'),
+            ],
+        )
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.history = dict(color=[], mood=[])
+
+        def color_callback(self):
+            self.history['color'].append(self.color)
+
+        def mood_callback(self):
+            self.history['mood'].append(self.mood)
+
+    def test_transitions(self):
+        some = self.MultiSome()
+        for _ in range(6):
+            some.next()
+
+        assert some.history['color'] == ['red', 'blue', 'green', 'red', 'blue', 'green']
+        assert some.history['mood'] == ['good', 'bad', 'ugly', 'good', 'bad', 'ugly']
     #
     #
     #

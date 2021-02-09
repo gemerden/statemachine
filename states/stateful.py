@@ -8,7 +8,7 @@ from states.machine import StateMachine
 
 class StatefulObject(object):
     """
-    Base class for objects with a state machine managed state. State can change by calling triggers as defined in
+    Base class for objects with one or more state machine managed states. State can change by calling triggers as defined in
     transitions of the state machine.
     """
 
@@ -28,8 +28,8 @@ class StatefulObject(object):
                 trigger_functions[trigger].append(function)
 
         for trigger, functions in trigger_functions.items():
-            def composite_func(self, *args, _functions=functions, **kwargs):
-                for function in _functions:
+            def composite_func(self, *args, __functions=functions, **kwargs):
+                for function in __functions:
                     function(self, *args, **kwargs)  # same 'obj' every time
                 return self
 
@@ -40,14 +40,12 @@ class StatefulObject(object):
         Constructor for this base class. Initial state(s) can be given with the name of the state machine(s). If not given,
         the initial state will be the top state in param 'states' of the state machine(s).
         """
-        for name, machine in self._state_machines.items():
+        for name, machine in type(self)._state_machines.items():
             machine.set_state(self, kwargs.pop(name, ""))
         super().__init__(*args, **kwargs)
 
     def trigger_initial(self, *args, **kwargs):
-        """ optionally call the 'on_entry' callbacks of the nested initial states """
+        """ optionally call the 'on_entry' callbacks of the nested initial states (usually after sub-class construction)"""
         for machine in self._state_machines.values():
             machine.initial_entry(self, *args, **kwargs)
 
-    def trigger(self, name, *args, **kwargs):
-        getattr(self, name)(*args, **kwargs)
