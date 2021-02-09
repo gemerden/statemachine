@@ -243,12 +243,16 @@ class StateMachine(BaseState):
     def __get__(self, obj, cls=None):
         if obj is None:
             return self
-        return str(obj.__dict__[self.dict_key])
+        return getattr(obj, self.dict_key)
 
     def __set__(self, obj, state_name):
-        if self.dict_key in obj.__dict__:
+        """
+         - store string version instead of Path() due to e.g. use with sqlalchemy (though a bit slower)
+         - using setattr() instead of putting in __dict__ due to use with e.g. sqlalchemy (though a bit slower)
+        """
+        if hasattr(obj, self.dict_key):
             raise AttributeError(f"state {self.name} of {type(obj).__name__} cannot be changed directly; use triggers instead")
-        obj.__dict__[self.dict_key] = Path(state_name)
+        setattr(obj, self.dict_key, state_name)
 
     def set_state(self, obj, state):
         path = Path(state)
@@ -257,10 +261,10 @@ class StateMachine(BaseState):
         except KeyError:
             raise TransitionError(f"state machine does not have a state '{state}'")
         else:
-            setattr(obj, self.dict_key, path + target_state.default_path)
+            setattr(obj, self.dict_key, str(path + target_state.default_path))
 
     def get_path(self, obj):
-        return obj.__dict__[self.dict_key]
+        return Path(getattr(obj, self.dict_key))
 
     def _get_states(self, *state_names):
         state_paths = get_expanded_paths(*state_names,

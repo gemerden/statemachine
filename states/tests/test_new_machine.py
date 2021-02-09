@@ -898,7 +898,7 @@ class TestPerformance(unittest.TestCase):
         with stopwatch() as stop_time:
             for _ in range(N):
                 lamp.flick()
-        assert stop_time() / N < 1e-5
+        assert stop_time() / N < 1.5e-5
 
 
 class TestMultiState(unittest.TestCase):
