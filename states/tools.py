@@ -48,6 +48,7 @@ class Path(tuple):
 
     separator = "."
 
+
     @classmethod
     def items(cls, target, key_cast=lambda v: v, path=None):  # can be optimized
         """

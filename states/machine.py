@@ -6,7 +6,8 @@ from collections import defaultdict
 
 from .exception import MachineError, TransitionError
 from .callbacks import Callbacks
-from .standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config
+from .standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config, get_extended_paths, \
+    get_spliced_path
 from .tools import lazy_property, Path
 from .transition import Transition
 
@@ -104,8 +105,12 @@ class BaseState(Mapping):
 
     def __contains__(self, key):
         """ return whether the key exists in states or transitions """
-        item = self.get(key)
-        return item is not None
+        try:
+            self[key]
+        except KeyError:
+            return False
+        else:
+            return True
 
     def __getitem__(self, key):
         """
@@ -119,7 +124,17 @@ class BaseState(Mapping):
         elif isinstance(key, Path):
             return key.get_in(self)
         elif isinstance(key, tuple) and len(key) == 2:
-            return self.trans_dict[Path(key[0]), Path(key[1])]
+            getter = lambda p: p.get_in(self)
+            old_paths = get_extended_paths(key[0], getter=getter)
+            new_paths = get_extended_paths(key[1], getter=getter)
+            transitions = []
+            for old_path in old_paths:
+                for new_path in new_paths:
+                    common, old_tail, new_tail = get_spliced_path(old_path, new_path)
+                    transitions.extend(common.get_in(self).trans_dict[old_tail, new_tail])
+            if not len(transitions):
+                raise KeyError(f"key '{key}' does not exist in state {self.name}")
+            return transitions
         raise KeyError(f"key '{key}' does not exist in state {self.name}")
 
     @lazy_property
@@ -146,7 +161,7 @@ class BaseState(Mapping):
 
     def as_json_dict(self):
         jd = lambda v: v.as_json_dict()
-        result = {}
+        result = dict(name=self.name)
         if len(self):
             result['states'] = {n: jd(s) for n, s in self.sub_states.items()}
             result['transitions'] = [jd(t) for ts in self.trans_dict.values() for t in ts]
@@ -237,7 +252,12 @@ class StateMachine(BaseState):
 
     def set_state(self, obj, state):
         path = Path(state)
-        setattr(obj, self.dict_key, path + path.get_in(self).default_path)
+        try:
+            target_state = path.get_in(self)
+        except KeyError:
+            raise TransitionError(f"state machine does not have a state '{state}'")
+        else:
+            setattr(obj, self.dict_key, path + target_state.default_path)
 
     def get_path(self, obj):
         return obj.__dict__[self.dict_key]
@@ -279,9 +299,6 @@ class StateMachine(BaseState):
 
         return register
 
-    # def prepare(self, func):
-    #     self.callbacks.register('prepare', func)
-    #
     def on_entry(self, state_name, *state_names):
         return self._register_state_callback('on_entry', state_name, *state_names)
 
@@ -324,11 +341,8 @@ class StateMachine(BaseState):
         for transition in self._get_trigger_transitions(self.get_path(obj), trigger):
             if transition.condition(obj, *args, **kwargs):
                 return transition.execute(obj, *args, **kwargs)
+        raise TransitionError(f"error for transitions from '{obj.state}' with trigger '{trigger}': no default transition found")
 
-    def as_json_dict(self):
-        result = dict(name=self.name)
-        result.update(super().as_json_dict())
-        return result
 
 
 state_machine = StateMachine.from_config

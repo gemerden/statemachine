@@ -29,7 +29,7 @@ class Callbacks(object):
     def _get_func(self, name):
         callbacks = self._callbacks[name]
 
-        def call(obj, *args, **kwargs):
+        def call(obj, *args, __name=name, **kwargs):
             results = []
             for callback in callbacks:
                 if isinstance(callback, str):

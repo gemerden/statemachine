@@ -75,7 +75,7 @@ class Transition(object):
                 self.machine.append_transition(self.default_copy())
 
     def clean_copy(self, **overrides):
-        """ clean = no callbacks """
+        """ clean -> no callbacks """
         kwargs = dict(machine=self.machine,
                       old_state=str(self.old_path),
                       new_state=str(self.new_path),
@@ -85,8 +85,7 @@ class Transition(object):
         return Transition(**kwargs)
 
     def default_copy(self):
-        return self.clean_copy(new_state=str(self.old_path), on_transfer=(),
-                               info="auto-generated default transition in case conditions fail")
+        return self.clean_copy(new_state=str(self.old_path), info="auto-generated default transition in case conditions fail")
 
     def as_json_dict(self):
         result = dict(old_state=str(self.old_state),

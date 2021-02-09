@@ -297,7 +297,7 @@ class TestStateMachine(unittest.TestCase):
 
     def test_init_error(self):
         """tests whether a non-existing initial state is detected"""
-        with self.assertRaises(KeyError):
+        with self.assertRaises(TransitionError):
             self.object_class("block", state="plasma")
 
     def test_machine_errors(self):

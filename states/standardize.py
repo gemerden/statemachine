@@ -15,6 +15,20 @@ def validate_new_state(state_name_s):
     return state_name_s
 
 
+def get_extended_paths(*state_names, getter):
+    extended = []
+    extend_queue = deque([Path(s) for s in state_names])
+    while len(extend_queue):
+        head_path = extend_queue.popleft()
+        tail_paths = getter(head_path)
+        if len(tail_paths):
+            for tail_path in tail_paths:
+                extend_queue.append(head_path + tail_path)
+        else:
+            extended.append(head_path)
+    return extended
+
+
 def get_expanded_paths(*state_names, getter, extend=False):
     """
        turns '.' separated state names in Paths and expands '*' wildcards
@@ -28,18 +42,10 @@ def get_expanded_paths(*state_names, getter, extend=False):
         path = queue.popleft()  # pick the next
         head, _, tail = path.partition('*')  # split around '*' starting left
         if head == path:  # no more '*' in path
-            if not extend:
-                expanded.append(path)
+            if extend:
+                expanded.extend(get_extended_paths(path, getter=getter))
             else:
-                extend_queue = deque([path])
-                while len(extend_queue):
-                    head_path = extend_queue.popleft()
-                    tail_paths = getter(head_path)
-                    if len(tail_paths):
-                        for tail_path in tail_paths:
-                            extend_queue.append(head_path + tail_path)
-                    else:
-                        expanded.append(head_path)
+                expanded.append(path)
         else:  # essentially replace '*' with all substates of the state pointed to by head
             for sub_state_name in getter(head):
                 queue.append(head + sub_state_name + tail)
@@ -183,7 +189,7 @@ def standardize_statemachine_config(**config):
 
                     if transition_dicts[-1].get('condition'):
                         if transition_dicts[-1]['old_state'] == transition_dicts[-1]['new_state']:
-                            raise MachineError(f"cannot generate default transition: condition on state state transition")
+                            raise MachineError(f"cannot generate default transition: condition on same state transition")
                         append_same_state_transition(full_old_state, trigger)
 
         return transition_dicts
