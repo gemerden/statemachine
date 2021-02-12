@@ -72,21 +72,22 @@ class Transition(object):
                 raise MachineError(f"cannot create default same state transition from '{self.old_state.name}' "
                                    f"with trigger '{self.trigger}': same state transition already exists")
             else:
-                self.machine.append_transition(self.default_copy())
+                self.machine.create_transition(str(self.old_path), str(self.old_path), trigger=self.trigger,
+                                               info="auto-generated default transition in case conditions fails")
 
-    def clean_copy(self, **overrides):
-        """ clean -> no callbacks """
-        kwargs = dict(machine=self.machine,
-                      old_state=str(self.old_path),
-                      new_state=str(self.new_path),
-                      trigger=self.trigger,
-                      info=self.info)
-        kwargs.update(**overrides)
-        return Transition(**kwargs)
-
-    def default_copy(self):
-        return self.clean_copy(new_state=str(self.old_path), info="auto-generated default transition in case conditions fail")
-
+    # def clean_copy(self, **overrides):
+    #     """ clean -> no callbacks """
+    #     kwargs = dict(machine=self.machine,
+    #                   old_state=str(self.old_path),
+    #                   new_state=str(self.new_path),
+    #                   trigger=self.trigger,
+    #                   info=self.info)
+    #     kwargs.update(**overrides)
+    #     return self.machine.create_transition(**kwargs)
+    #
+    # def default_copy(self):
+    #     return self.clean_copy(new_state=str(self.old_path), info="auto-generated default transition in case conditions fail")
+    #
     def as_json_dict(self):
         result = dict(old_state=str(self.old_state),
                       new_state=str(self.new_state),

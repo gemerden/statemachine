@@ -70,7 +70,7 @@ class TestStateMachine(unittest.TestCase):
         def temp_checker(min, max):
             """some configurable condition function; only in effect when temperature_ignore==False (some tests)"""
 
-            def inner(obj, **kwrags):
+            def inner(obj, **kwargs):
                 return min < obj.temperature <= max or self.temperature_ignore
 
             return inner
@@ -152,7 +152,7 @@ class TestStateMachine(unittest.TestCase):
                 pass
 
         dummy = Dummy(state='gas')
-        self.assertEqual(dummy.state, "gas")
+        assert dummy.state == "gas"
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""

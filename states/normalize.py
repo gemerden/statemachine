@@ -88,7 +88,17 @@ def get_spliced_state_names(old_state_name, new_state_name, getter, extend=True)
 _marker = object()
 
 
-def standardize_statemachine_config(**config):
+def normalize_statemachine_config(**config):
+    """
+    normalizes the state-machine configuration:
+     - all transitions are placed under correct state,
+     - transition old_states and new_states are split into multiple transitions without wildcards and with full paths
+     - all single callbacks are turned into lists of callbacks
+     - extra validations
+
+    :param config: configuration written by user-developer
+    :return: normalized configuration
+    """
     config = copy_struct(config)
 
     state_listify_keys = ('on_entry', 'on_exit', 'on_stay')
@@ -141,13 +151,13 @@ def standardize_statemachine_config(**config):
                 raise MachineError(f"unknown state '{state_name}' in statemachine")
         return state_names
 
-    def standardize_states(states_dict):
+    def normalize_states(states_dict):
         states_dict = copy_struct(states_dict)
         for state_config in states_dict.values():
             listify_by_keys(state_config, *state_listify_keys)
         return states_dict
 
-    def standardize_transition(transition_dict):
+    def normalize_transition(transition_dict):
         transition_dicts = []
 
         def all_states(state_name):
@@ -155,15 +165,17 @@ def standardize_statemachine_config(**config):
             state_config = state_config_getter(state_name)
             return list(sub_paths(state_config, path=Path(state_name)))
 
-        def append_transition(old_state, new_state, trigger, *extras):
+        def append_transition(old_state, new_state, trigger, transition_dict, case=None):
             verify_states(old_state, new_state)
             new_state = initial_state(validate_new_state(new_state))
             new_transition = transition(old_state, new_state, trigger)
-            for extra in extras:
-                new_transition.update(copy_struct(extra))
+            new_transition.update(copy_struct(transition_dict))
+            on_transfer = (case or {}).pop('on_transfer', [])
+            new_transition['on_transfer'].extend(on_transfer)  # transition and case have on_transfer
+            new_transition.update(copy_struct(case or {}))
             transition_dicts.append(new_transition)
 
-        def append_same_state_transition(old_state, trigger):
+        def append_default_transition(old_state, trigger):
             new_transition = transition(old_state, old_state, trigger,
                                         info='default transition back to same state')
             transition_dicts.append(new_transition)
@@ -190,7 +202,7 @@ def standardize_statemachine_config(**config):
                     if transition_dicts[-1].get('condition'):
                         if transition_dicts[-1]['old_state'] == transition_dicts[-1]['new_state']:
                             raise MachineError(f"cannot generate default transition: condition on same state transition")
-                        append_same_state_transition(full_old_state, trigger)
+                        append_default_transition(full_old_state, trigger)
 
         return transition_dicts
 
@@ -221,27 +233,27 @@ def standardize_statemachine_config(**config):
             old_state = transition_dict.pop('old_state')
             new_state = transition_dict.pop('new_state')
             common, old_tail, new_tail = get_spliced_names(old_state, new_state)
-            if len(common):
+            if len(common):  # old_state and new_state have upper states in common
                 transition_dicts.remove(transition_dict)
                 state_config = state_config_getter(common)
                 transition_dict.update(old_state=old_tail,
                                        new_state=new_tail)
                 same_transition = get_equal(state_config['transitions'], transition_dict)
-                if same_transition:
+                if same_transition:  # case where the same transition is (implicitly) defined in different states
                     merge(same_transition, transition_dict)
                 else:
                     state_config['transitions'].append(transition_dict)
             else:
                 transition_dict.update(old_state=old_state, new_state=new_state)  # put back states
 
-    def standardize_transitions(transition_dicts):
+    def normalize_transitions(transition_dicts):
         new_transitions = []
 
         for transition_dict in transition_dicts:
             listify_by_keys(transition_dict, *trans_listify_keys)
 
         while len(transition_dicts):
-            new_transitions.extend(standardize_transition(transition_dicts.pop(0)))
+            new_transitions.extend(normalize_transition(transition_dicts.pop(0)))
 
         pushdown_transitions(new_transitions)
 
@@ -275,9 +287,9 @@ def standardize_statemachine_config(**config):
 
     config_states = config.get('states')
     if config_states:
-        states_dict = standardize_states(config['states'])
-        transitions = standardize_transitions(config['transitions'])
+        states_dict = normalize_states(config['states'])
+        transitions = normalize_transitions(config['transitions'])
         for state_name, state_config in config_states.items():
-            states_dict[state_name] = standardize_statemachine_config(**state_config)
+            states_dict[state_name] = normalize_statemachine_config(**state_config)
         config.update(states=states_dict, transitions=transitions)
     return config

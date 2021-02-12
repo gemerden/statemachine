@@ -1,6 +1,6 @@
 import unittest
 
-from states.configuration import default
+from states.configuration import default_case
 from states.tools import Path, replace_in_list, has_doubles, copy_struct
 from states import state, transition, switch, case
 
@@ -142,7 +142,7 @@ class TestDictClasses(unittest.TestCase):
                                            *(transition("a", "b", trigger="t1"),
                                              transition("a", "b", trigger="t2"),
                                              transition("a", switch(case("a", condition="x"),
-                                                                    default("b")),
+                                                                    default_case("b")),
                                                         trigger="t3")))
 
         assert len(args) == 3
@@ -155,7 +155,7 @@ class TestDictClasses(unittest.TestCase):
         args, kwargs = dummy_state_machine(transition("a", "b", trigger="t1"),
                                            transition("b", "a", trigger="t2"),
                                            transition("a", switch(case("a", condition="x"),
-                                                                  default("b")),
+                                                                  default_case("b")),
                                                       trigger="t3"),
                                            a=state(), b=state())
 

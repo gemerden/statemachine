@@ -24,7 +24,7 @@ def state(states=None, transitions=(), on_entry=(), on_exit=(), on_stay=(), info
                     on_entry=on_entry, on_exit=on_exit, info=info)
     else:
         if transitions:
-            raise MachineError(f"states with no internal sub_states cannot have transitions")
+            raise MachineError(f"only states with sub-states can have transitions")
         return dict(on_entry=on_entry, on_exit=on_exit, on_stay=on_stay, info=info)
 
 
@@ -34,11 +34,11 @@ def transitions(*transitions_):
     return list(transitions_)
 
 
-def transition(old_state, new_state, trigger, on_transfer=(), condition=(), info=""):
+def transition(old_state, new_state, trigger, on_transfer=None, condition=None, info=""):
     if isinstance(new_state, Mapping) and case:
         raise MachineError(f"transitions with multiple (switched) end-states cannot have a single condition")
     return dict(old_state=old_state, new_state=new_state, trigger=trigger,
-                on_transfer=on_transfer, condition=condition, info=info)
+                on_transfer=on_transfer or [], condition=condition or [], info=info)
 
 
 def switch(*state_conditions):
@@ -47,11 +47,9 @@ def switch(*state_conditions):
     return list(state_conditions)
 
 
-def case(state, condition, on_transfer=(), info=""):
-    return dict(state=state, condition=condition, on_transfer=on_transfer, info=info)
+def case(state, condition, on_transfer=None, info=""):
+    return dict(state=state, condition=condition, on_transfer=on_transfer or [], info=info)
 
 
-def default(state, on_transfer=(), info=""):
-    return dict(state=state, condition=(), on_transfer=on_transfer, info=info)
-
-
+def default_case(state, on_transfer=None, info=""):
+    return dict(state=state, condition=(), on_transfer=on_transfer or [], info=info)

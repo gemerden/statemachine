@@ -1,5 +1,6 @@
 __author__ = "lars van gemerden"
 
+import contextlib
 from contextlib import contextmanager
 from itertools import zip_longest
 from time import perf_counter
@@ -269,9 +270,17 @@ class lazy_property(object):
         return result
 
 
+def dummy_context_manager(yield_value):
+    def dummy(*args, **kwargs):
+        yield yield_value
+    return contextlib.contextmanager(dummy)
+
+
+
 @contextmanager
 def stopwatch(timer=perf_counter):
     """ do not call lambda within context = with-block """
     t = timer()
     yield lambda: delta
     delta = timer() - t  # assigned on context exit
+

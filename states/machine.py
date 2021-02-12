@@ -1,19 +1,20 @@
 __author__ = "lars van gemerden"
 
+import contextlib
 import json
+from functools import partial
 from typing import Mapping
 from collections import defaultdict
 
 from .exception import MachineError, TransitionError
 from .callbacks import Callbacks
-from .standardize import get_expanded_paths, get_spliced_paths, standardize_statemachine_config, get_extended_paths, \
+from .normalize import get_expanded_paths, get_spliced_paths, normalize_statemachine_config, get_extended_paths, \
     get_spliced_path
-from .tools import lazy_property, Path
+from .tools import lazy_property, Path, listify, dummy_context_manager
 from .transition import Transition
 
 
-def none_check(check, res, alt):
-    return alt if check is None else res
+_marker = object()
 
 
 class BaseState(Mapping):
@@ -72,7 +73,7 @@ class BaseState(Mapping):
         self.trans_dict = defaultdict(list)
         self.triggering = defaultdict(list)
         for trans_dict in transition_dicts:
-            self.append_transition(Transition(machine=self, **trans_dict))
+            self.create_transition(**trans_dict)
 
     def _verify_transitions(self):
         for transitions in self.triggering.values():
@@ -92,9 +93,14 @@ class BaseState(Mapping):
             self._verify_transitions()
         self.verified = True
 
-    def append_transition(self, transition):
-        self.trans_dict[transition.old_path, transition.new_path].append(transition)
-        self.triggering[transition.old_path, transition.trigger].append(transition)
+    def create_transition(self, old_state, new_state, **kwargs):
+        common, old_tail, new_tail = get_spliced_path(Path(old_state), Path(new_state))
+        if len(common):  # transition has common state: push down to sub-state
+            common.get_in(self).create_transition(str(old_tail), str(new_tail), **kwargs)
+        else:
+            transition = Transition(machine=self, old_state=old_state, new_state=new_state, **kwargs)
+            self.trans_dict[transition.old_path, transition.new_path].append(transition)
+            self.triggering[transition.old_path, transition.trigger].append(transition)
 
     def __len__(self):
         """ number of sub-states """
@@ -201,15 +207,15 @@ class StateMachine(BaseState):
             for old_state in states:
                 for new_state in states:
                     transitions.append(dict(old_state=old_state, new_state=new_state, trigger='goto_' + new_state))
-        config = standardize_statemachine_config(states=states,
-                                                 transitions=transitions,
-                                                 **config)
+        config = normalize_statemachine_config(states=states,
+                                               transitions=transitions,
+                                               **config)
         return cls(**config)
 
-    def __init__(self, states=None, transitions=(), **kwargs):
+    def __init__(self, states=None, transitions=(), on_stay=(), prepare=(), contextmanager=None, info=""):
         """
         Constructor of the state machine, used to define all properties of the machine.
-        :param states: a as_json_dict {name: {prop_name: property}} of state properties:
+        :param states: a dict {name: {prop_name: property}} of state properties:
         state_name: {
             "on_entry":[some_method, ..],  # callback function(s) called when an object enters the state (single or list)
             "on_exit":[some_method, ..]  # callback function(s) called when an object exits the state (single or list)
@@ -225,34 +231,53 @@ class StateMachine(BaseState):
                 True to cause state change)
         }
         :param initial: optional name of the initial state
-        :param on_any_exit: callback function called before an objects exits any state (single or list)
-        :param on_any_entry: callback function called after an objects enters any state (single or list)
-        :param context_manager: context manager callback that context for other callbacks to run in (e.g. open and close a file)
 
         Note that all callback functions (including 'condition') have the signature:
-            func(obj, **kwargs); trigger(s)can pass the args and kwargs
+            func(obj, *args, **kwargs); trigger(s)can pass the args and kwargs
         """
-        super(StateMachine, self).__init__(states=states or {}, transitions=transitions, **kwargs)
-        self._trigger_transitions = {}  # cache for transition lookup when trigger is called
-        self.dict_key = None
+        super(StateMachine, self).__init__(states=states or {}, transitions=transitions,
+                                           on_stay=on_stay, prepare=prepare, info=info)
+        self._contextmanager = contextmanager or dummy_context_manager(_marker)
+        self._trigger_transitions_cache = {}  # cache for transition lookup when trigger is called
+        self.attr_name = None
 
     def __set_name__(self, cls, name):
         self.name = self._validate_name(name)
-        self.dict_key = '_' + self.name
+        self.attr_name = '_' + self.name
+        if cls._state_machines is None:
+            cls._state_machines = {}
+        cls._state_machines[self.name] = self
+        self._install_triggers(cls)
+
+    def _install_triggers(self, cls):
+        trigger_functions = defaultdict(list)
+        for machine in cls._state_machines.values():
+            for trigger in machine.triggers:  # the names
+                function = partial(machine.trigger, trigger)
+                trigger_functions[trigger].append(function)
+
+        for trigger, functions in trigger_functions.items():
+
+            def trigger_function(self, *args, __functions=functions, **kwargs):
+                for f in __functions:
+                    f(self, *args, **kwargs)
+                return self
+
+            setattr(cls, trigger, trigger_function)
 
     def __get__(self, obj, cls=None):
         if obj is None:
             return self
-        return getattr(obj, self.dict_key)
+        return getattr(obj, self.attr_name)
 
     def __set__(self, obj, state_name):
         """
          - store string version instead of Path() due to e.g. use with sqlalchemy (though a bit slower)
          - using setattr() instead of putting in __dict__ due to use with e.g. sqlalchemy (though a bit slower)
         """
-        if hasattr(obj, self.dict_key):
+        if hasattr(obj, self.attr_name):
             raise AttributeError(f"state {self.name} of {type(obj).__name__} cannot be changed directly; use triggers instead")
-        setattr(obj, self.dict_key, state_name)
+        setattr(obj, self.attr_name, state_name)
 
     def set_state(self, obj, state):
         path = Path(state)
@@ -261,30 +286,34 @@ class StateMachine(BaseState):
         except KeyError:
             raise TransitionError(f"state machine does not have a state '{state}'")
         else:
-            setattr(obj, self.dict_key, str(path + target_state.default_path))
+            setattr(obj, self.attr_name, str(path + target_state.default_path))
 
     def get_path(self, obj):
-        return Path(getattr(obj, self.dict_key))
+        return Path(getattr(obj, self.attr_name))
 
-    def _get_states(self, *state_names):
+    def _lookup_states(self, *state_names):
         state_paths = get_expanded_paths(*state_names,
                                          getter=lambda p: self[p])
         return [path.get_in(self) for path in state_paths]
 
-    def _get_transitions(self, old_state_name, new_state_name, check_length=False):
-        spliced_paths = get_spliced_paths(old_state_name, new_state_name,
-                                          getter=lambda p: self[p])
+    def _lookup_transitions(self, old_state_name_s, new_state_name_s, check_length=False):
+        spliced_paths = []
+        for old_state_name in listify(old_state_name_s):
+            for new_state_name in listify(new_state_name_s):
+                spliced_paths.extend(get_spliced_paths(old_state_name,
+                                                       new_state_name,
+                                                       getter=lambda p: self[p]))
 
         transitions = []
         for common, old_tail, new_tail in spliced_paths:
             transitions.extend(common.get_in(self).trans_dict.get((old_tail, new_tail), ()))
 
         if check_length and not len(transitions):
-            raise MachineError(f"no transitions found from '{old_state_name}' to '{new_state_name}'")
+            raise MachineError(f"no transitions found from '{old_state_name_s}' to '{new_state_name_s}'")
         return transitions
 
     def _register_state_callback(self, key, *state_names):
-        states = list(self._get_states(*state_names))
+        states = self._lookup_states(*state_names)
 
         def register(func):
             for state in states:
@@ -293,8 +322,10 @@ class StateMachine(BaseState):
 
         return register
 
-    def _register_transition_callback(self, key, old_state_name, new_state_name):
-        transitions = self._get_transitions(old_state_name, new_state_name, check_length=True)
+    def _register_transition_callback(self, key, old_state_name_s, new_state_name_s):
+        transitions = self._lookup_transitions(old_state_name_s,
+                                               new_state_name_s,
+                                               check_length=True)
 
         def register(func):
             for transition in transitions:
@@ -312,11 +343,12 @@ class StateMachine(BaseState):
     def on_stay(self, *state_names):
         return self._register_state_callback('on_stay', *state_names)
 
-    def on_transfer(self, old_state_name, new_state_name):
-        return self._register_transition_callback('on_transfer', old_state_name, new_state_name)
+    def on_transfer(self, old_state_name_s, new_state_name_s):
+        return self._register_transition_callback('on_transfer', old_state_name_s, new_state_name_s)
 
-    def condition(self, old_state_name, new_state_name):
-        transitions = self._get_transitions(old_state_name, new_state_name, check_length=True)
+    def condition(self, old_state_name_s, new_state_name_s):
+        transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, check_length=True)
+        self._trigger_transitions_cache.clear()  # a condition can result in a new default transition being created
 
         def register(func):
             for transition in transitions:
@@ -325,28 +357,40 @@ class StateMachine(BaseState):
 
         return register
 
-    def initial_entry(self, obj, *args, **kwargs):
+    def prepare(self, func):
+        self.callbacks.register('prepare', func)
+
+    def contextmanager(self, func):
+        self._contextmanager = contextlib.contextmanager(func)
+
+    def init_entry(self, obj, *args, **kwargs):
         for state in self.get_path(obj).iter_in(self):
             state.callbacks.on_entry(obj, *args, **kwargs)
 
-    def _get_trigger_transitions(self, path, trigger):
+    def _get_trigger_transitions(self, state_name, trigger):
         try:
-            return self._trigger_transitions[path, trigger]
+            return self._trigger_transitions_cache[state_name, trigger]
         except KeyError:
+            path = Path(state_name)
             for _, state, tail in path.trace_in(self, last=False):
                 transitions = state.triggering.get((tail, trigger))
                 if transitions:
-                    self._trigger_transitions[path, trigger] = transitions
+                    self._trigger_transitions_cache[state_name, trigger] = transitions
                     return transitions
-            raise TransitionError(f"transition from '{str(path)}' with trigger '{trigger}' does not exist in '{self.name}'")
+            raise TransitionError(f"transition from '{state_name}' with trigger '{trigger}' does not exist in '{self.name}'")
 
     def trigger(self, trigger, obj, *args, **kwargs):
         """ Executes the transition when called through a trigger """
-        for transition in self._get_trigger_transitions(self.get_path(obj), trigger):
-            if transition.condition(obj, *args, **kwargs):
-                return transition.execute(obj, *args, **kwargs)
-        raise TransitionError(f"error for transitions from '{obj.state}' with trigger '{trigger}': no default transition found")
-
+        self.callbacks.prepare(obj, *args, **kwargs)
+        with self._contextmanager(obj, *args, **kwargs) as context:
+            if context is not _marker:
+                if 'context' in kwargs:
+                    raise ValueError(f"cannot apply context from contextmanager: trigger called with parameter 'context'")
+                kwargs['context'] = context
+            for transition in self._get_trigger_transitions(getattr(obj, self.attr_name), trigger):
+                if transition.condition(obj, *args, **kwargs):
+                    return transition.execute(obj, *args, **kwargs)
+            raise TransitionError(f"error for transitions from '{obj.state}' with trigger '{trigger}': no default transition found")
 
 
 state_machine = StateMachine.from_config

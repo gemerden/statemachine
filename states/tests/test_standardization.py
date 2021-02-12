@@ -2,8 +2,8 @@ import unittest
 from itertools import product
 
 from ..tools import Path
-from ..configuration import transitions, default, states, state, transition, switch, case
-from ..standardize import standardize_statemachine_config
+from ..configuration import transitions, default_case, states, state, transition, switch, case
+from ..normalize import normalize_statemachine_config
 
 
 def count(it, key):
@@ -45,7 +45,7 @@ class TestStatemachineStandardizarion(unittest.TestCase):
                                               transition("on", "off", trigger="turn_off", info="turn the light off"),
                                               transition("off", "off", trigger="leave", info="do nothing")))
 
-        standard_config = standardize_statemachine_config(**config)
+        standard_config = normalize_statemachine_config(**config)
 
         self.assert_standard_config(standard_config)
 
@@ -55,7 +55,7 @@ class TestStatemachineStandardizarion(unittest.TestCase):
                       transitions=transitions(transition("*", "on", trigger="turn_on", info="turn the light on"),
                                               transition("*", "off", trigger="turn_off", info="turn the light off")))
 
-        standard_config = standardize_statemachine_config(**config)
+        standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
         assert len(standard_config['transitions']) == 4
@@ -68,7 +68,7 @@ class TestStatemachineStandardizarion(unittest.TestCase):
                       transitions=transitions(transition(('on', 'off'), "on", trigger="turn_on", info="turn the light on"),
                                               transition(('on', 'off'), "off", trigger="turn_off", info="turn the light off")))
 
-        standard_config = standardize_statemachine_config(**config)
+        standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
         assert len(standard_config['transitions']) == 4
@@ -82,7 +82,7 @@ class TestStatemachineStandardizarion(unittest.TestCase):
                       transitions=transitions(transition("off", "on", trigger="turn_on", info="turn the light on"),
                                               transition("on", "off", trigger="turn_off", info="turn the light off")))
 
-        standard_config = standardize_statemachine_config(**config)
+        standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
         assert callable(standard_config['states']['off']['on_entry'])
@@ -96,10 +96,10 @@ class TestStatemachineStandardizarion(unittest.TestCase):
                                     transition('on', 'off', trigger="flip"),
                                     transition(["on", "off"], 'broken', trigger="smash"),
                                     transition('broken', switch(case('on', 'condition_func'),
-                                                                default('off')),
+                                                                default_case('off')),
                                                trigger='fix')),
         )
-        standard_config = standardize_statemachine_config(**config)
+        standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
         assert len(standard_config['transitions']) == 6
@@ -123,7 +123,7 @@ class TestStatemachineStandardizarion(unittest.TestCase):
                                     transition('off.working', 'on.drying', trigger=["just_dry_already"]))
         )
 
-        standard_config = standardize_statemachine_config(**config)
+        standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
         assert list(standard_config['states'].keys()) == ['off', 'on']

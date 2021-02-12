@@ -22,7 +22,6 @@ class Callbacks(object):
         self._functions = {}
         for name, callback_s in callbacks.items():
             name = name.strip()
-            assert not hasattr(self, name)
             self._callbacks[name] = listify(callback_s)
             self._functions[name] = self._get_func(name)
 
