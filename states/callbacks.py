@@ -28,14 +28,16 @@ class Callbacks(object):
     def _get_func(self, name):
         callbacks = self._callbacks[name]
 
-        def call(obj, *args, __name=name, **kwargs):
-            results = []
+        def call(obj, *args, **kwargs):
+            result = True
             for callback in callbacks:
                 if isinstance(callback, str):
-                    results.append(getattr(obj, callback)(*args, **kwargs))
+                    if not getattr(obj, callback)(*args, **kwargs):
+                        result = False
                 else:
-                    results.append(callback(obj, *args, **kwargs))
-            return all(results)
+                    if not callback(obj, *args, **kwargs):
+                        result = False
+            return result
 
         call.__name__ = name
         return call
