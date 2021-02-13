@@ -275,7 +275,15 @@ def dummy_context_manager(yield_value):
         yield yield_value
     return contextlib.contextmanager(dummy)
 
+class DummyMapping(Mapping):
+    def __len__(self):
+        return 0
 
+    def __iter__(self):
+        yield from ()
+
+    def __getitem__(self, key):
+        raise KeyError(f"{self.__class__.__name__} has no keys: '{key}'")
 
 @contextmanager
 def stopwatch(timer=perf_counter):

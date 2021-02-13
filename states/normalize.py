@@ -82,7 +82,7 @@ def get_spliced_paths(old_state_name, new_state_name, getter, extend=True):
 
 def get_spliced_state_names(old_state_name, new_state_name, getter, extend=True):
     """ '.' separated names version of get_spliced_paths (turns paths into strings) """
-    return [tuple(map(str, e)) for e in get_spliced_paths(old_state_name, new_state_name, getter=getter, extend=extend)]
+    return [tuple(map(str, p)) for p in get_spliced_paths(old_state_name, new_state_name, getter=getter, extend=extend)]
 
 
 _marker = object()

@@ -1,19 +1,17 @@
-import json
+__author__ = "lars van gemerden"
+
 import random
 import unittest
 from contextlib import contextmanager
 from copy import deepcopy
 
-import states.configuration
-from states import state_machine, StatefulObject, TransitionError, MachineError, states, state, transition, state_machine
+from states import StatefulObject, TransitionError, MachineError, states, state, transition, state_machine
 
-from states.tools import Path
-
-__author__ = "lars van gemerden"
+from ..tools import Path
 
 
 def count_transitions(state):
-    return sum(map(len, state.triggering.values()))
+    return len(list(state.iter_transitions()))
 
 
 class TestSimplestStateMachine(unittest.TestCase):
@@ -40,7 +38,6 @@ class TestSimplestStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(type(self.light).state), 2)
         self.assertEqual(count_transitions(type(self.light).state), 2)
-        self.assertEqual(len(type(self.light).state.triggering), 2)
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -52,7 +49,7 @@ class TestSimplestStateMachine(unittest.TestCase):
 
     def test_info(self):
         self.assertEqual(type(self.light).state.sub_states["on"].info, "not turned off")
-        self.assertEqual(type(self.light).state.triggering[Path("off"), "switch"][0].info, "turn the light on")
+        self.assertEqual(type(self.light).state['off'].transitions['switch'][Path('on')].info, "turn the light on")
 
 
 class TestStateMachine(unittest.TestCase):
@@ -77,9 +74,9 @@ class TestStateMachine(unittest.TestCase):
 
         self.config = dict(
             states={
-               "solid": {"on_entry": [callback], "on_exit": [callback], "on_stay": ['do_on_stay']},
-               "liquid": {"on_entry": [callback], "on_exit": [callback]},
-               "gas": {"on_entry": [callback], "on_exit": [callback]}
+                "solid": {"on_entry": [callback], "on_exit": [callback], "on_stay": ['do_on_stay']},
+                "liquid": {"on_entry": [callback], "on_exit": [callback]},
+                "gas": {"on_entry": [callback], "on_exit": [callback]}
             },
             transitions=[
                 {"old_state": "solid", "new_state": "liquid", "trigger": ["melt", "heat"], "on_transfer": [callback],
@@ -133,7 +130,6 @@ class TestStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine), 3)
         self.assertEqual(count_transitions(self.machine), 16)
-        self.assertEqual(len(self.machine.triggering), 8)
 
     def test_state_names(self):
         self.assertEqual(list(self.machine), ['solid', 'liquid', 'gas'])
@@ -196,7 +192,6 @@ class TestStateMachine(unittest.TestCase):
         assert block.temperature == -5
         self.assertEqual(self.block.state, "solid")
         self.assertEqual(self.callback_counter, 0)
-
 
         block = block.heat_by(10)
         assert block.temperature == 5
@@ -331,8 +326,7 @@ class TestWildcardStateMachine(unittest.TestCase):
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine), 4)
-        self.assertEqual(count_transitions(self.machine), 2+2+2+2+4+1)
-        self.assertEqual(len(self.machine.triggering), 2 + 2 + 2 + 2 + 4 + 1)
+        self.assertEqual(count_transitions(self.machine), 2 + 2 + 2 + 2 + 4 + 1)
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -404,7 +398,6 @@ class TestWildcardStateMachine(unittest.TestCase):
             )
 
 
-
 class TestListedTransitionStateMachine(unittest.TestCase):
 
     def setUp(self):
@@ -444,8 +437,7 @@ class TestListedTransitionStateMachine(unittest.TestCase):
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine.sub_states), 3)
-        self.assertEqual(len(self.machine.triggering), 4)
-        self.assertEqual(sum(map(len, self.machine.triggering.values())), 4)
+        self.assertEqual(len(self.machine['solid'].transitions), 1)
 
     def test_transitions(self):
         """test whether transitions work in this case"""
@@ -479,7 +471,7 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
                     {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
                     {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
                     {"old_state": "broken", "trigger": "fix", "new_state": {"on": {"condition": "was_on"},
-                                                                             "off":{}}},
+                                                                            "off": {}}},
                 ],
             )
 
@@ -539,7 +531,7 @@ class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
             {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
             {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
             {"old_state": "broken", "trigger": "fix", "new_state": {"off": {"condition": lambda o: True},
-                                                                     "broken":{}}},
+                                                                    "broken": {}}},
             {"old_state": "broken", "new_state": "broken", "trigger": ["leave"]},
         ],
     )
@@ -554,7 +546,7 @@ class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
             {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
             {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
             {"old_state": "broken", "trigger": "FIX", "new_state": {"off": {"condition": lambda o: True},
-                                                                     "broken":{}}},
+                                                                    "broken": {}}},
             {"old_state": "broken", "new_state": "broken", "trigger": "FIX"},
         ],
     )
@@ -571,7 +563,7 @@ class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
             {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
             {"old_state": "broken", "trigger": "fix", "new_state": {"off": {"condition": lambda o: True,
                                                                             "on_transfer": "do_after_transfer"},
-                                                                     "broken":{}},
+                                                                    "broken": {}},
              "on_transfer": "do_before_transfer"},
             {"old_state": "broken", "new_state": "broken", "trigger": "leave"},
         ],
@@ -580,6 +572,7 @@ class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
     def test_good_double_transition(self):
         class Lamp(StatefulObject):
             state = state_machine(**deepcopy(self.good_machine_dict))
+
         self.assertEqual(count_transitions(Lamp.state), 9)
 
     def test_bad_double_transition(self):
@@ -700,13 +693,13 @@ class TestNestedStateMachine(unittest.TestCase):
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.object_class.state), 2)
-        self.assertEqual(len(self.object_class.state.triggering), 12)
+        self.assertEqual(count_transitions(self.object_class.state), 17)
         child_state = self.object_class.state["on"]
         self.assertEqual(len(child_state), 3)
-        self.assertEqual(len(child_state.triggering), 3)
+        self.assertEqual(count_transitions(child_state), 12)
         child_state = self.object_class.state["off"]
-        self.assertEqual(len(child_state), 2)
-        self.assertEqual(len(child_state.triggering), 2)
+        self.assertEqual(count_transitions(child_state), 5)
+        self.assertEqual(len(child_state['working'].transitions), 4)
 
     def test_len_in_getitem_iter_for_states(self):
         machine = self.object_class.state
@@ -722,12 +715,12 @@ class TestNestedStateMachine(unittest.TestCase):
 
     def test_getitem_for_transitions(self):
         machine = self.object_class.state
-        self.assertEqual(machine["on", "off"][0].old_state.parent, machine["on"])
-        self.assertEqual(machine["on", "off"][0].new_state.parent, machine["off"])
-        self.assertEqual(str(machine["on"]["washing", "drying"][0].old_path), "washing")
-        self.assertEqual(str(machine["on"]["washing", "drying"][0].new_path), "drying")
-        self.assertEqual(str(machine["off.working", "on.drying"][0].old_path), "off.working")
-        self.assertEqual(str(machine["off.working", "on.drying"][0].new_path), "on.drying")
+        self.assertEqual(machine["off.working", "turn_on"][Path("on.none")].state, machine["off"]["working"])
+        self.assertEqual(machine["off.working", "turn_on"][Path("on.none")].target, machine["on"]["none"])
+        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].state_path), "on.washing")
+        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].target_path), "on.drying")
+        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].state_path), "off.working")
+        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].target_path), "on.drying")
 
     def test_in_for_transitions(self):
         machine = self.object_class.state
@@ -761,8 +754,8 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assert_counters(8, 8, 5)
 
     def test_state_string(self):
-        self.assertEqual(str(self.object_class.state["on"]), "on")
-        self.assertEqual(str(self.object_class.state["on"]["washing"]), "on.washing")
+        self.assertEqual(str(self.object_class.state["on"]), "State('on')")
+        self.assertEqual(str(self.object_class.state["on"]["washing"]), "State('on.washing')")
 
     def test_transition_errors(self):
         washer = self.object_class()
@@ -934,7 +927,6 @@ class TestMultiState(unittest.TestCase):
                 self.counter += 1
 
         class MoodyColor(Colored):
-
             mood = state_machine(
                 states=dict(
                     good={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
@@ -986,7 +978,7 @@ class TestMultiState(unittest.TestCase):
         n = 3
         for _ in range(n):
             moodycolor.next()
-        assert moodycolor.counter == 2 + n*2
+        assert moodycolor.counter == 2 + n * 2
 
     def test_only_color(self):
         moodycolor = self.state_class()
@@ -1032,9 +1024,7 @@ class TestMultiState(unittest.TestCase):
 
 
 class TestMultiStateMachine(unittest.TestCase):
-
     class MultiSome(StatefulObject):
-
         color = state_machine(
             states=dict(
                 red={'on_exit': 'color_callback'},
@@ -1080,9 +1070,7 @@ class TestMultiStateMachine(unittest.TestCase):
 
 
 class TestMultiStateMachineNewConstructors(unittest.TestCase):
-
     class MultiSome(StatefulObject):
-
         color = state_machine(
             states=states(
                 red=state(on_exit='color_callback'),
@@ -1125,5 +1113,3 @@ class TestMultiStateMachineNewConstructors(unittest.TestCase):
 
         assert some.history['color'] == ['red', 'blue', 'green', 'red', 'blue', 'green']
         assert some.history['mood'] == ['good', 'bad', 'ugly', 'good', 'bad', 'ugly']
-
-

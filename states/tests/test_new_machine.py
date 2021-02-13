@@ -1,3 +1,5 @@
+__author__ = "lars van gemerden"
+
 import unittest
 from collections import defaultdict
 
@@ -7,11 +9,9 @@ from ..stateful import StatefulObject
 from ..configuration import transitions, default_case, states, state, transition, switch, case
 from ..tools import Path, stopwatch
 
-__author__ = "lars van gemerden"
-
 
 def count_transitions(state):
-    return sum(map(len, state.triggering.values()))
+    return len(list(state.iter_transitions()))
 
 
 class TestSimplestStateMachine(unittest.TestCase):
@@ -48,7 +48,6 @@ class TestSimplestStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(type(self.lamp).state), 2)
         self.assertEqual(count_transitions(type(self.lamp).state), 4)
-        self.assertEqual(len(type(self.lamp).state.triggering), 4)
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -100,7 +99,6 @@ class TestSimpleStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(type(self.lamp).state), 2)
         self.assertEqual(count_transitions(type(self.lamp).state), 2)
-        self.assertEqual(len(type(self.lamp).state.triggering), 2)
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -116,7 +114,7 @@ class TestSimpleStateMachine(unittest.TestCase):
 
     def test_info(self):
         self.assertEqual(type(self.lamp).state.sub_states["on"].info, "not turned off")
-        self.assertEqual(type(self.lamp).state.triggering[Path("off"), "flick"][0].info, "turn the light on")
+        self.assertEqual(type(self.lamp).state['off'].transitions['flick'][Path('on')].info, "turn the light on")
 
 
 class TestStateMachine(unittest.TestCase):
@@ -158,7 +156,7 @@ class TestStateMachine(unittest.TestCase):
                 self.temperature = temperature  # used in tests of condition callback in transition class
                 self.stayed = 0
 
-            @state.on_transfer('gas', 'liquid')
+            @state.on_transfer('gas', 'liquid', )
             @state.on_transfer('liquid', 'solid')
             @state.on_entry('*')
             def do_callback(self, **kwargs):
@@ -206,7 +204,6 @@ class TestStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine), 3)
         self.assertEqual(count_transitions(self.machine), 16)
-        self.assertEqual(len(self.machine.triggering), 8)
 
     def test_state_names(self):
         self.assertEqual(list(self.machine),
@@ -388,7 +385,7 @@ class TestWildcardStateMachine(unittest.TestCase):
             @state.on_entry('*')
             @state.on_transfer('*', '*')
             def callback(obj, **kwargs):
-                """checks whether the object arrives; calback_counter is used to check whether callbacks are all called"""
+                """checks whether the object arrives; callback_counter is used to check whether callbacks are all called"""
                 self.assertEqual(type(obj), Matter)
                 self.callback_counter += 1
 
@@ -401,7 +398,6 @@ class TestWildcardStateMachine(unittest.TestCase):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine), 4)
         self.assertEqual(count_transitions(self.machine), 2 + 2 + 2 + 2 + 4 + 1)
-        self.assertEqual(len(self.machine.triggering), 2 + 2 + 2 + 2 + 4 + 1)
 
     def test_triggers(self):
         """test the basio trigger functions and the resultig states"""
@@ -507,8 +503,7 @@ class TestListedTransitionStateMachine(unittest.TestCase):
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine.sub_states), 3)
-        self.assertEqual(len(self.machine.triggering), 4)
-        self.assertEqual(sum(map(len, self.machine.triggering.values())), 4)
+        self.assertEqual(count_transitions(self.machine), 4)
 
     def test_transitions(self):
         """test whether transitions work in this case"""
@@ -675,15 +670,15 @@ class TestNestedStateMachine(unittest.TestCase):
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.object_class.state), 2)
-        self.assertEqual(len(self.object_class.state.triggering), 12)
+        self.assertEqual(count_transitions(self.machine), 18)
         assert self.object_class.state.default_path == Path("off.working")
         child_state = self.object_class.state["on"]
         self.assertEqual(len(child_state), 3)
-        self.assertEqual(len(child_state.triggering), 3)
+        self.assertEqual(count_transitions(child_state), 12)
         assert child_state.default_path == Path("waiting")
         child_state = self.object_class.state["off"]
         self.assertEqual(len(child_state), 2)
-        self.assertEqual(len(child_state.triggering), 3)
+        self.assertEqual(count_transitions(child_state), 6)
         assert child_state.default_path == Path("working")
         assert child_state.root == self.object_class.state
 
@@ -699,18 +694,17 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertEqual(child_state["waiting"].name, "waiting")
         self.assertEqual(len([s for s in self.object_class.state]), 2)
 
-    def test_getitem_for_triggers(self):
+    def test_getitem_for_transitions(self):
         machine = self.object_class.state
-        self.assertEqual(machine["off.working", "on.waiting"][0].old_state, machine["off"]["working"])
-        self.assertEqual(machine["off.working", "on.waiting"][0].new_state, machine["on"]["waiting"])
-        self.assertEqual(str(machine["on"]["washing", "drying"][0].old_path), "washing")
-        self.assertEqual(str(machine["on"]["washing", "drying"][0].new_path), "drying")
-        self.assertEqual(str(machine["off.working", "on.drying"][0].old_path), "off.working")
-        self.assertEqual(str(machine["off.working", "on.drying"][0].new_path), "on.drying")
+        self.assertEqual(machine["off.working", "turn_on"][Path("on.waiting")].state, machine["off"]["working"])
+        self.assertEqual(machine["off.working", "turn_on"][Path("on.waiting")].target, machine["on"]["waiting"])
+        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].state_path), "on.washing")
+        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].target_path), "on.drying")
+        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].state_path), "off.working")
+        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].target_path), "on.drying")
 
     def test_in_for_transitions(self):
         machine = self.object_class.state
-        self.assertTrue(("off.working", "on.drying") in machine)
         self.assertTrue(("washing", "drying") in machine["on"])
         self.assertTrue(("waiting", "washing") in machine["on"])
 
@@ -740,8 +734,8 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assert_counters(washer, 5, 5, 3, 2)
 
     def test_state_string(self):
-        self.assertEqual(str(self.object_class.state["on"]), "on")
-        self.assertEqual(str(self.object_class.state["on"]["washing"]), "on.washing")
+        assert str(self.object_class.state["on"]) == "State('on')"
+        assert str(self.object_class.state["on"]["washing"]) == "State('on.washing')"
 
     def test_transition_errors(self):
         washer = self.object_class()
@@ -765,7 +759,7 @@ class TestNestedStateMachine(unittest.TestCase):
     def test_as_json_dict_and_repr(self):
         json_dict = self.object_class.state.as_json_dict()
         assert 'states' in json_dict
-        assert 'transitions' in json_dict
+        assert 'transitions' in json_dict['states']['off']['states']['working']
         assert set(json_dict['states']) == {'on', 'off'}
         assert 'states' in json_dict['states']['on']
 
@@ -885,7 +879,7 @@ class TestCallbackDecorators(unittest.TestCase):
 
     def test_as_json_dict(self):
         json_dict = self.object_class.state.as_json_dict()
-        assert any(t.get('condition') for t in json_dict['states']['off']['transitions'])
+        assert any(t.get('condition') for t in json_dict['states']['off']['states']['broken']['transitions'])
 
 
 class TestPerformance(unittest.TestCase):
@@ -915,7 +909,7 @@ class TestPerformance(unittest.TestCase):
     def test_performance(self):
         lamp = self.lamp
 
-        N = 1_000
+        N = 100_000
         with stopwatch() as stop_time:
             for _ in range(N):
                 lamp.flick()
@@ -1264,115 +1258,124 @@ class TestMultiStateMachineOldCallbacks(unittest.TestCase):
 
 
 class TestReadmeOne(unittest.TestCase):
-    class User(StatefulObject):
-        state = state_machine(
-            states=states(new=state(),  # default: exactly the same result as using just the state name
-                          blocked=state(),
-                          active=state(states=states('logged_out', 'logged_in'),
-                                       transitions=[
-                                           transition('logged_out', 'logged_in', trigger='log_in'),
-                                           transition('logged_in', 'logged_out', trigger='log_out')
-                                       ])
-                          ),
-            transitions=[
-                transition('new', 'active', trigger='activate'),
-                transition('active', 'blocked', trigger='block'),
-                transition('blocked', 'active', trigger='unblock'),
-            ]
-        )
-        def __init__(self, username):
-            super().__init__(state='new')
-            self.username = username
-            self.password = None
 
-        @state.on_entry('active')
-        def set_password(self, password):
-            self.password = password
+    def setUp(self):
+        class User(StatefulObject):
+            state = state_machine(
+                states=states(new=state(),  # default: exactly the same result as using just the state name
+                              blocked=state(),
+                              active=state(states=states('logged_out', 'logged_in'),
+                                           transitions=[
+                                               transition('logged_out', 'logged_in', trigger='log_in'),
+                                               transition('logged_in', 'logged_out', trigger='log_out')
+                                           ])
+                              ),
+                transitions=[
+                    transition('new', 'active', trigger='activate'),
+                    transition('active', 'blocked', trigger='block'),
+                    transition('blocked', 'active', trigger='unblock'),
+                ]
+            )
 
-        @state.condition('active.logged_out',
-                         'active.logged_in')
-        def verify_password(self, password):
-            return self.password == password
+            def __init__(self, username):
+                super().__init__(state='new')
+                self.username = username
+                self.password = None
 
-        @state.on_entry('active.logged_in')
-        def print_welcome(self, **ignored):
-            print(f"Welcome back {self.username}")
+            @state.on_entry('active')
+            def set_password(self, password):
+                self.password = password
 
-        @state.on_transfer('active.logged_out',
-                           'active.logged_out')  # this transition is auto_generated by setting a condition
-        def print_welcome(self, **ignored):
-            print(f"Sorry, {self.username}, you gave an incorrect password")
+            @state.condition('active.logged_out',
+                             'active.logged_in')
+            def verify_password(self, password):
+                return self.password == password
+
+            @state.on_entry('active.logged_in')
+            def print_welcome(self, **ignored):
+                print(f"Welcome back {self.username}")
+
+            @state.on_transfer('active.logged_out',
+                               'active.logged_out')  # this transition is auto_generated by setting a condition
+            def print_welcome(self, **ignored):
+                print(f"Sorry, {self.username}, you gave an incorrect password")
+
+        self.user_class = User
 
     def test(self):
-        user = self.User('rosemary').activate(password='very_secret').log_in(password='very_secret')
+        user = self.user_class('rosemary').activate(password='very_secret').log_in(password='very_secret')
         assert user.state == 'active.logged_in'
 
-        user = self.User('rosemary').activate(password='very_secret').log_in(password='not_very_secret')
+        user = self.user_class('rosemary').activate(password='very_secret').log_in(password='not_very_secret')
         assert user.state == 'active.logged_out'
 
 
 class TestReadmeTwo(unittest.TestCase):
-    class User(StatefulObject):
-        state = state_machine(
-            states=states(
-                new=state(),  # default: exactly the same result as using just the state name
-                blocked=state(),
-                active=state(
-                    states=states('logged_out', 'logged_in'),
-                    transitions=[
-                        transition('logged_out', 'logged_in', trigger='login'),
-                        transition('logged_in', 'logged_out', trigger='logout')
-                    ]
+
+    def setUp(self):
+        class User(StatefulObject):
+            state = state_machine(
+                states=states(
+                    new=state(),  # default: exactly the same result as using just the state name
+                    blocked=state(),
+                    active=state(
+                        states=states('logged_out', 'logged_in'),
+                        transitions=[
+                            transition('logged_out', 'logged_in', trigger='login'),
+                            transition('logged_in', 'logged_out', trigger='logout')
+                        ]
+                    ),
+                    deleted=state(),
                 ),
-                deleted=state(),
-            ),
-            transitions=[
-                transition('new', 'active', trigger='activate'),
-                transition('active', 'blocked', trigger='block'),
-                transition('blocked', 'active', trigger='unblock'),
-                transition('*', 'deleted', trigger='delete'),
-            ]
-        )
+                transitions=[
+                    transition('new', 'active', trigger='activate'),
+                    transition('active', 'blocked', trigger='block'),
+                    transition('active.logged_out', 'blocked', trigger='login'),
+                    transition('blocked', 'active', trigger='unblock'),
+                    transition('*', 'deleted', trigger='delete'),
+                ]
+            )
 
-        def __init__(self, username, max_logins=5):
-            super().__init__(state='new')
-            self.username = username
-            self.password = None
-            self.max_logins = max_logins
-            self.login_count = 0
+            def __init__(self, username, max_logins=5):
+                super().__init__(state='new')
+                self.username = username
+                self.password = None
+                self.max_logins = max_logins
+                self.login_count = 0
 
-        @state.on_entry('active')
-        def set_password(self, password):
-            self.password = password
+            @state.on_entry('active')
+            def set_password(self, password):
+                self.password = password
 
-        @state.condition('active.logged_out',
-                         'active.logged_in')
-        def verify_password(self, password):
-            return self.password == password
+            @state.condition('active.logged_out',
+                             'active.logged_in')
+            def verify_password(self, password):
+                return self.password == password
 
-        @state.condition('active.logged_out',
-                         'blocked')
-        def check_login_count(self, **ignored):
-            return self.login_count > self.max_logins
+            @state.condition('active.logged_out',
+                             'blocked',
+                             trigger='login')
+            def check_login_count(self, **ignored):
+                return self.login_count >= self.max_logins
 
-        @state.on_transfer('active.logged_out',
-                           'active.logged_out')  # this transition was auto-generated by setting a condition on logged_out to logged_in
-        def inc_login_count(self, **ignored):
-            self.login_count += 1
+            @state.on_transfer('active.logged_out',
+                               'active.logged_out')  # this transition was auto-generated by setting a condition on logged_out to logged_in
+            def inc_login_count(self, **ignored):
+                self.login_count += 1
 
-        @state.on_exit('blocked')
-        @state.on_entry('active.logged_in')
-        def reset_login_count(self, **ignored):
-            self.login_count = 0
+            @state.on_exit('blocked')
+            @state.on_entry('active.logged_in')
+            def reset_login_count(self, **ignored):
+                self.login_count = 0
+
+        self.user_class = User
 
     def test(self):
-        user = self.User('rosemary').activate(password='very_secret')
+        user = self.user_class('rosemary').activate(password='very_secret')
 
-        for _ in range(user.max_logins+2):
-            user.login(password='also_very_secret')
-            print(_, user.login_count)
+        for _ in range(user.max_logins):
+            user.login(password='very_wrong')
             assert user.state == 'active.logged_out'
 
-        user.login(password='also_very_secret')  # the 6th time
+        user.login(password='also_wrong')  # the 6th time
         assert user.state == 'blocked'
-
