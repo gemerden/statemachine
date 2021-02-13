@@ -193,7 +193,7 @@ class StateMachine(ParentState):
         self.up = [self]
         super().__init__(states=states or {}, transitions=transitions,
                          on_stay=on_stay, prepare=prepare, info=info)
-        self._contextmanager = contextmanager or dummy_context_manager(_marker)
+        self._contextmanager = contextmanager
         self._trigger_transitions_cache = {}  # cache for transition lookup when trigger is called
         self.attr_name = None
 
@@ -244,6 +244,9 @@ class StateMachine(ParentState):
         else:
             setattr(obj, self.attr_name, str(path + target_state.default_path))
 
+    def fast_set_state(self, obj, state_name):  # no validation
+        setattr(obj, self.attr_name, state_name)
+
     def get_path(self, obj):
         return Path(getattr(obj, self.attr_name))
 
@@ -263,6 +266,9 @@ class StateMachine(ParentState):
                     transition = trans_dict[trigg].get(new_path)
                     if transition is not None:
                         transitions.append(transition)
+        if not len(transitions):
+            raise MachineError(f"no transitions found from '{old_state_name_s}' to '{new_state_name_s}' with trigger '{trigger}'")
+
         return transitions
 
     def _register_state_callback(self, key, *state_names):
@@ -277,9 +283,6 @@ class StateMachine(ParentState):
 
     def _register_transition_callback(self, key, old_state_name_s, new_state_name_s, trigger):
         transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger=trigger)
-
-        if not len(transitions):
-            raise MachineError(f"no transitions found from '{old_state_name_s}' to '{new_state_name_s}'")
 
         def register(func):
             for transition in transitions:
@@ -302,8 +305,8 @@ class StateMachine(ParentState):
 
     def condition(self, old_state_name_s, new_state_name_s, trigger=None):
         transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger)
-        if len(transitions) != 1:
-            raise MachineError(f"{len(transitions)} transition(s) found "
+        if len(transitions) > 1:
+            raise MachineError(f"multiple transition(s) found when setting condition for transition "
                                f"from '{old_state_name_s}' to '{new_state_name_s}' with '{trigger}' trigger")
 
         self._trigger_transitions_cache.clear()  # a condition can result in a new default transition being created
@@ -337,11 +340,16 @@ class StateMachine(ParentState):
     def trigger(self, trigger, obj, *args, **kwargs):
         """ Executes the transition when called through a trigger """
         self.callbacks.prepare(obj, *args, **kwargs)
-        with self._contextmanager(obj, *args, **kwargs) as context:
-            if context is not _marker:
+        if self._contextmanager:
+            with self._contextmanager(obj, *args, **kwargs) as context:
                 if 'context' in kwargs:
                     raise TransitionError(f"cannot pass context from contextmanager: trigger called with argument 'context'")
                 kwargs['context'] = context
+                for transition in self._get_trigger_transitions(getattr(obj, self.attr_name), trigger):
+                    if transition.condition(obj, *args, **kwargs):
+                        return transition.execute(obj, *args, **kwargs)
+                raise TransitionError(f"no transitions from '{obj.state}' with trigger '{trigger}' found")
+        else:
             for transition in self._get_trigger_transitions(getattr(obj, self.attr_name), trigger):
                 if transition.condition(obj, *args, **kwargs):
                     return transition.execute(obj, *args, **kwargs)

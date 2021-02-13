@@ -55,7 +55,7 @@ class Transition(object):
         on_transfer = self.callbacks.on_transfer
         inner_stays = self.state.on_stays
         outer_stays = self.common_state.on_stays
-        set_state = self.state.root.set_state  # TODO: faster?
+        set_state = self.state.root.fast_set_state
 
         if self.state is self.target:
             callbacks = [on_transfer] + inner_stays

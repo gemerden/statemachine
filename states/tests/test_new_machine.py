@@ -909,12 +909,12 @@ class TestPerformance(unittest.TestCase):
     def test_performance(self):
         lamp = self.lamp
 
-        N = 100_000
+        N = 1_000
         with stopwatch() as stop_time:
             for _ in range(N):
                 lamp.flick()
-        assert stop_time() / N < 3e-5  # normally < 1e-5, but not when test is run by github actions
-        print(stop_time())
+        assert stop_time() / N < 1.5e-5  # normally < 6e-6, but not when test is run by github actions
+        print(stop_time() / N)
 
 
 class TestMultiState(unittest.TestCase):
