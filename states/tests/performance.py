@@ -1,4 +1,5 @@
 import pstats, cProfile as profile
+from pstats import SortKey
 
 from states import StatefulObject, state_machine, state, transitions, transition, states
 
@@ -18,4 +19,7 @@ def run_transitions(count):
 
 
 if __name__ == '__main__':
-    profile.run('run_transitions(100_000)')
+    profile.run('run_transitions(100_000)', './data/profile')
+
+    p = pstats.Stats('./data/profile')
+    p.strip_dirs().sort_stats(SortKey.CUMULATIVE).print_stats(16)
