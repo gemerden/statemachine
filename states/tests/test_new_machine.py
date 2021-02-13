@@ -708,6 +708,26 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertTrue(("washing", "drying") in machine["on"])
         self.assertTrue(("waiting", "washing") in machine["on"])
 
+    def test_decoration_double_wildcard(self):
+        machine = self.object_class.state
+
+        exits = []
+        entries = []
+
+        def exit_callback(obj):
+            exits.append(obj.state)
+
+        def entry_callback(obj):
+            entries.append(obj.state)
+
+        machine.on_exit('*.*')(exit_callback)
+        machine.on_entry('*.*')(entry_callback)
+        washer = self.object_class()
+        washer.turn_on()
+
+        assert exits == ['off.working']
+        assert entries == ['on.waiting']
+
     def test_triggering(self):
         washer = self.object_class()
         self.assertEqual(washer.state, "off.working")
@@ -913,7 +933,7 @@ class TestPerformance(unittest.TestCase):
         with stopwatch() as stop_time:
             for _ in range(N):
                 lamp.flick()
-        assert stop_time() / N < 1.5e-5  # normally < 6e-6, but not when test is run by github actions
+        assert stop_time() / N < 1.2e-5  # normally < 0.4e-5 (2016, i7), but not when run by github actions
         print(stop_time() / N)
 
 
