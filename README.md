@@ -16,7 +16,7 @@ This state machine implementation is developed with the following goals in mind:
 * Optimized for speed and memory efficient.
 
 ## Installation
-To install the module you can use: `pip install states3`
+To install the module you can use: `pip install states3`. It has no external dependencies, except optionally `graphviz` for creating an image of your state machine. 
 
 ## Limitations
 This module only runs on Python >= 3.6.
