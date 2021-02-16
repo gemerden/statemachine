@@ -65,7 +65,6 @@ class TestSimplestStateMachine(unittest.TestCase):
         self.assertEqual(self.lamp.on_count, 2)
         self.assertEqual(self.lamp.off_count, 2)
         assert self.lamp.stays == dict(on=["b"], off=["d"])
-        print(repr(type(self.lamp).state))
 
 
 class TestSimpleStateMachine(unittest.TestCase):
@@ -87,7 +86,7 @@ class TestSimpleStateMachine(unittest.TestCase):
                 self.on_count += 1
 
             @state.on_entry('off')
-            def inc_on_count(self, **kwargs):
+            def inc_off_count(self, **kwargs):
                 self.off_count += 1
 
         self.lamp = Lamp()
@@ -333,7 +332,10 @@ class TestStateMachine(unittest.TestCase):
                     transition("liquid", "solid", trigger=["evaporate"]),
                 ]
             )
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(RuntimeError):
+            # Note the RuntimeError, this is because the error is raised in StateMachine.__set_name__, where
+            #   the condition function is looked up on the class; any error raised there is caught and
+            #   reraised as a RuntimeError. There is no place to catch this error within the state machine.
             class A(StatefulObject):
                 state = state_machine(
                     states=states(
@@ -345,8 +347,12 @@ class TestStateMachine(unittest.TestCase):
                     ]
                 )
 
-            a = A()
-            a.state = "liquid"
+        class B(StatefulObject):
+            state = state_machine(states=states("A"))
+        b = B()
+
+        with self.assertRaises(TransitionError):
+            b.state = "liquid"
 
 
 class TestWildcardStateMachine(unittest.TestCase):
@@ -698,10 +704,10 @@ class TestNestedStateMachine(unittest.TestCase):
         machine = self.object_class.state
         self.assertEqual(machine["off.working", "turn_on"][Path("on.waiting")].state, machine["off"]["working"])
         self.assertEqual(machine["off.working", "turn_on"][Path("on.waiting")].target, machine["on"]["waiting"])
-        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].state_path), "on.washing")
-        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].target_path), "on.drying")
-        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].state_path), "off.working")
-        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].target_path), "on.drying")
+        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].state.path), "on.washing")
+        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].target.path), "on.drying")
+        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].state.path), "off.working")
+        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].target.path), "on.drying")
 
     def test_in_for_transitions(self):
         machine = self.object_class.state
@@ -727,6 +733,34 @@ class TestNestedStateMachine(unittest.TestCase):
 
         assert exits == ['off.working']
         assert entries == ['on.waiting']
+
+    def test_on_stay(self):
+        machine = self.object_class.state
+
+        inner_stays = []
+        outer_stays = []
+
+        def inner_callback(obj):
+            inner_stays.append(obj.state)
+
+        def outer_callback(obj):
+            outer_stays.append(obj.state)
+
+        machine.on_stay('off')(outer_callback)
+        machine.on_stay('off.broken')(inner_callback)
+        washer = self.object_class()
+        assert washer.state == 'off.working'
+        washer.smash()
+        assert washer.state == 'off.broken'
+
+        assert inner_stays == []  # inner_callback not been called
+        assert outer_stays == ['off.broken']
+
+        washer.smash()
+        assert washer.state == 'off.broken'
+
+        assert inner_stays == ['off.broken']  # inner_callback has been called
+        assert outer_stays == ['off.broken', 'off.broken']
 
     def test_triggering(self):
         washer = self.object_class()
@@ -929,12 +963,12 @@ class TestPerformance(unittest.TestCase):
     def test_performance(self):
         lamp = self.lamp
 
-        N = 1_000
+        N = 10_000
         with stopwatch() as stop_time:
             for _ in range(N):
                 lamp.flick()
-        assert stop_time() / N < 1.2e-5  # normally < 0.4e-5 (2016, i7), but not when run by github actions
-        print(stop_time() / N)
+        assert stop_time() / N < 4.0e-6  # normally ~ 1.2e-6 (windows, i7, 2016), but github Actions can be slower
+        print('\n', stop_time() / N)
 
 
 class TestMultiState(unittest.TestCase):
@@ -1178,13 +1212,13 @@ class TestPrepare(unittest.TestCase):
         lightswitch = self.lightswitch_class(time=0,
                                              state="on")
         self.assertTrue(lightswitch.is_night())
-        lightswitch.flick(hours=7)  # lightswitch.time == 7
+        lightswitch.flick(hours=7)
         assert lightswitch.time == 7
         self.assertTrue(lightswitch.state == "off")
-        lightswitch.flick(hours=7)  # lightswitch.time == 14
+        lightswitch.flick(hours=7)
         assert lightswitch.time == 14
         self.assertTrue(lightswitch.state == "off")
-        lightswitch.flick(hours=7)  # lightswitch.time == 21
+        lightswitch.flick(hours=7)
         assert lightswitch.time == 21
         lightswitch.flick(hours=7)  # lightswitch.time == 28 % 24 == 4
         assert lightswitch.time == 4
@@ -1399,3 +1433,55 @@ class TestReadmeTwo(unittest.TestCase):
 
         user.login(password='also_wrong')  # the 6th time
         assert user.state == 'blocked'
+
+
+class TestCaching(unittest.TestCase):
+    """test the case where transition configuration contains wildcards '*' """
+
+    def setUp(self):
+        class User(StatefulObject):
+            state = state_machine(
+                states=states(
+                    new=state(),  # default: exactly the same result as using just the state name
+                    active=state(
+                        states=states('logged_out', 'logged_in'),
+                        transitions=[
+                            transition('logged_out', 'logged_in', trigger='login'),
+                            transition('logged_in', 'logged_out', trigger='logout')
+                        ]
+                    ),
+                ),
+                transitions=[
+                    transition('new', 'active', trigger='activate'),
+                ]
+            )
+
+            def __init__(self, username):
+                super().__init__(state='new')
+                self.username = username
+                self.password = None
+
+            @state.on_entry('active')
+            def set_password(self, password):
+                self.password = password
+
+        self.user_class = User
+
+    def test_late_condition(self):
+        user = self.user_class(username='bob')
+        user.activate('password')
+
+        user.login("wrong")
+        assert user.state == 'active.logged_in'
+        user.logout()
+        assert user.state == 'active.logged_out'
+
+        @self.user_class.state.condition('active.logged_out',
+                                         'active.logged_in')
+        def verify_password(user, password):
+            return user.password == password
+
+        user.login('wrong')
+        assert user.state == 'active.logged_out'
+
+

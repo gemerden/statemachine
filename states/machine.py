@@ -2,13 +2,14 @@ import contextlib
 import json
 from collections import defaultdict
 from functools import partial
+from operator import attrgetter
 from typing import Mapping
 
 from .exception import MachineError, TransitionError
 from .callbacks import Callbacks
 from .transitions import Transition
 from .normalize import normalize_statemachine_config, get_expanded_paths
-from .tools import Path, lazy_property, dummy_context_manager, DummyMapping
+from .tools import Path, lazy_property, DummyMapping
 
 _marker = object()
 
@@ -29,8 +30,8 @@ class BaseState(object):
         return name
 
     def __init__(self, name=None, info="", on_stay=(), **callbacks):
-        self.name = self._validate_name(name)
         self.callbacks = Callbacks(on_stay=on_stay, **callbacks)
+        self.name = self._validate_name(name)
         self.info = info
 
     @lazy_property
@@ -46,10 +47,6 @@ class BaseState(object):
     @lazy_property
     def default_state(self):
         return self.default_path.get_in(self)
-
-    @lazy_property
-    def on_stays(self):
-        return [state.callbacks.on_stay for state in self.up]
 
     def as_json_dict(self, **extra):
         result = dict(name=self.name, **self.callbacks.as_json_dict())
@@ -111,6 +108,11 @@ class ParentState(BaseState, Mapping):
                 return Path(key[0]).get_in(self).transitions[key[1]][self.path + key[2]]
         raise KeyError(f"key '{key}' does not exist in state {self.name}")
 
+    def iter_states(self):
+        yield self
+        for state in self.sub_states.values():
+            yield from state.iter_states()
+
     def iter_transitions(self):
         for state in self.sub_states.values():
             yield from state.iter_transitions()
@@ -161,7 +163,10 @@ class LeafState(ChildState, DummyMapping):
     def create_transition(self, **trans_dict):
         target = self.parent.lookup(Path(trans_dict.pop('new_state')))
         transition = Transition(state=self, target=target, **trans_dict)
-        self.transitions[transition.trigger][transition.target_path] = transition
+        self.transitions[transition.trigger][transition.target.path] = transition
+
+    def iter_states(self):
+        yield self
 
     def iter_transitions(self):
         for transition_dict in self.transitions.values():
@@ -194,32 +199,54 @@ class StateMachine(ParentState):
         super().__init__(states=states or {}, transitions=transitions,
                          on_stay=on_stay, prepare=prepare, info=info)
         self._contextmanager = contextmanager
-        self._trigger_transitions_cache = {}  # cache for transition lookup when trigger is called
+        self._triggered_cache = defaultdict(dict)  # cache for transition lookup when trigger is called
         self.attr_name = None
+        self.owner_cls = None
+
+    def _reset_on_new_callback(self):
+        self._triggered_cache.clear()
+        if self.owner_cls:
+            self._install_triggers(self.owner_cls)
 
     def __set_name__(self, cls, name):
         self.name = self._validate_name(name)
         self.attr_name = '_' + self.name
-        if cls._state_machines is None:
+        self.owner_cls = cls
+        if not cls._state_machines:
             cls._state_machines = {}
         cls._state_machines[self.name] = self
+        self._resolve_callbacks(cls)
         self._install_triggers(cls)
 
     def _install_triggers(self, cls):
         trigger_functions = defaultdict(list)
         for machine in cls._state_machines.values():
             for trigger in machine.triggers:  # the names
-                function = partial(machine.trigger, trigger)
-                trigger_functions[trigger].append(function)
+                trigger_function = machine.get_trigger(trigger)
+                trigger_functions[trigger].append(trigger_function)
 
-        for trigger, functions in trigger_functions.items():
+        for trigger, funcs in trigger_functions.items():
 
-            def trigger_function(self, *args, __functions=functions, **kwargs):
-                for f in __functions:
-                    f(self, *args, **kwargs)
-                return self
+            if len(funcs) == 1:
+                trigger_function = funcs[0]
+            else:
+                def trigger_function(obj, *args, __fs=funcs, **kwargs):
+                    for f in __fs:
+                        f(obj, *args, **kwargs)
+                    return obj
 
+            trigger_function.__name__ = trigger
             setattr(cls, trigger, trigger_function)
+
+    def _resolve_callbacks(self, cls):
+        """
+            looks up callbacks defined with strings on the class. Called in __set_name__, when cls is known.
+            Callbacks that are added later are already callables, because they are added by decoration.
+        """
+        for state in self.iter_states():
+            state.callbacks.resolve(cls)
+        for transition in self.iter_transitions():
+            transition.callbacks.resolve(cls)
 
     def __get__(self, obj, cls=None):
         if obj is None:
@@ -232,7 +259,7 @@ class StateMachine(ParentState):
          - using setattr() instead of putting in __dict__ to enable external machinery of getattr to still be called
         """
         if hasattr(obj, self.attr_name):
-            raise AttributeError(f"state {self.name} of {type(obj).__name__} cannot be changed directly; use triggers instead")
+            raise TransitionError(f"state of {type(obj).__name__} cannot be changed directly; use triggers instead")
         setattr(obj, self.attr_name, state_name)
 
     def set_state(self, obj, state_name):
@@ -243,12 +270,6 @@ class StateMachine(ParentState):
             raise TransitionError(f"state machine does not have a state '{state_name}'")
         else:
             setattr(obj, self.attr_name, str(path + target_state.default_path))
-
-    def fast_set_state(self, obj, state_name):  # no validation
-        setattr(obj, self.attr_name, state_name)
-
-    def get_path(self, obj):
-        return Path(getattr(obj, self.attr_name))
 
     def _lookup_states(self, *state_names):
         state_paths = get_expanded_paths(*state_names,
@@ -267,7 +288,8 @@ class StateMachine(ParentState):
                     if transition is not None:
                         transitions.append(transition)
         if not len(transitions):
-            raise MachineError(f"no transitions found from '{old_state_name_s}' to '{new_state_name_s}' with trigger '{trigger}'")
+            raise MachineError(
+                f"no transitions found from '{old_state_name_s}' to '{new_state_name_s}' with trigger '{trigger}'")
 
         return transitions
 
@@ -276,19 +298,10 @@ class StateMachine(ParentState):
 
         def register(func):
             for state in states:
-                state.callbacks.register(key, func)
+                state.callbacks.register(**{key: func})
             return func
 
-        return register
-
-    def _register_transition_callback(self, key, old_state_name_s, new_state_name_s, trigger):
-        transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger=trigger)
-
-        def register(func):
-            for transition in transitions:
-                transition.callbacks.register(key, func)
-            return func
-
+        self._reset_on_new_callback()
         return register
 
     def on_entry(self, state_name, *state_names):
@@ -301,7 +314,15 @@ class StateMachine(ParentState):
         return self._register_state_callback('on_stay', *state_names)
 
     def on_transfer(self, old_state_name_s, new_state_name_s, trigger=None):
-        return self._register_transition_callback('on_transfer', old_state_name_s, new_state_name_s, trigger)
+        transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger=trigger)
+
+        def register(func):
+            for transition in transitions:
+                transition.callbacks.register(on_transfer=func)
+            return func
+
+        self._reset_on_new_callback()
+        return register
 
     def condition(self, old_state_name_s, new_state_name_s, trigger=None):
         transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger)
@@ -309,51 +330,77 @@ class StateMachine(ParentState):
             raise MachineError(f"multiple transition(s) found when setting condition for transition "
                                f"from '{old_state_name_s}' to '{new_state_name_s}' with '{trigger}' trigger")
 
-        self._trigger_transitions_cache.clear()  # a condition can result in a new default transition being created
-
         def register(func):
             transitions[0].add_condition(func)
             return func
 
+        self._reset_on_new_callback()
         return register
 
     def prepare(self, func):
-        self.callbacks.register('prepare', func)
+        self.callbacks.register(prepare=func)
+        self._reset_on_new_callback()
+        return func
 
     def contextmanager(self, func):
         self._contextmanager = contextlib.contextmanager(func)
+        self._reset_on_new_callback()
+        return func
 
     def init_entry(self, obj, *args, **kwargs):
-        for state in self.get_path(obj).iter_in(self):
+        for state in Path(getattr(obj, self.attr_name)).iter_in(self):
             state.callbacks.on_entry(obj, *args, **kwargs)
 
-    def _get_trigger_transitions(self, state_name, trigger):
-        try:
-            return self._trigger_transitions_cache[state_name, trigger]
-        except KeyError:
-            transitions = list(Path(state_name).get_in(self).transitions[trigger].values())
-            if transitions:
-                self._trigger_transitions_cache[state_name, trigger] = transitions
-                return transitions
-            raise TransitionError(f"transition from '{state_name}' with trigger '{trigger}' does not exist in '{self.name}'")
+    def get_trigger(self, trigger):
+        """ property that holds the function that executes when a trigger is called """
 
-    def trigger(self, trigger, obj, *args, **kwargs):
-        """ Executes the transition when called through a trigger """
-        self.callbacks.prepare(obj, *args, **kwargs)
-        if self._contextmanager:
-            with self._contextmanager(obj, *args, **kwargs) as context:
-                if 'context' in kwargs:
-                    raise TransitionError(f"cannot pass context from contextmanager: trigger called with argument 'context'")
-                kwargs['context'] = context
-                for transition in self._get_trigger_transitions(getattr(obj, self.attr_name), trigger):
-                    if transition.condition(obj, *args, **kwargs):
-                        return transition.execute(obj, *args, **kwargs)
-                raise TransitionError(f"no transitions from '{obj.state}' with trigger '{trigger}' found")
-        else:
-            for transition in self._get_trigger_transitions(getattr(obj, self.attr_name), trigger):
-                if transition.condition(obj, *args, **kwargs):
-                    return transition.execute(obj, *args, **kwargs)
+        prepare = self.callbacks.prepare
+        contextmanager = self._contextmanager
+        trigger_cache = self._triggered_cache[trigger]
+        state_getter = attrgetter(self.attr_name)
+
+        def triggered(state_name):
+            try:
+                return trigger_cache[state_name]
+            except KeyError:
+                transitions = list(Path(state_name).get_in(self).transitions[trigger].values())
+                if transitions:
+                    executes = trigger_cache[state_name] = [t.execute for t in transitions]
+                    return executes
+                raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
+
+        def execute(obj, *args, **kwargs):
+            for execute_ in triggered(state_getter(obj)):
+                if execute_(obj, *args, **kwargs):
+                    return obj
             raise TransitionError(f"no transitions from '{obj.state}' with trigger '{trigger}' found")
+
+        def kwargs_with_context(kwargs, context):
+            if 'context' in kwargs:
+                raise TransitionError(f"cannot pass context from contextmanager: trigger called with argument 'context'")
+            kwargs['context'] = context
+
+        if contextmanager:
+            if prepare:
+                def inner_trigger(obj, *args, **kwargs):
+                    prepare(obj, *args, **kwargs)
+                    with contextmanager(obj, *args, **kwargs) as context:
+                        kwargs_with_context(kwargs, context)
+                        return execute(obj, *args, **kwargs)
+            else:
+                def inner_trigger(obj, *args, **kwargs):
+                    with contextmanager(obj, *args, **kwargs) as context:
+                        kwargs_with_context(kwargs, context)
+                        return execute(obj, *args, **kwargs)
+        else:
+            if prepare:
+                def inner_trigger(obj, *args, **kwargs):
+                    prepare(obj, *args, **kwargs)
+                    return execute(obj, *args, **kwargs)
+            else:
+                inner_trigger = execute
+
+        return inner_trigger
 
     def __str__(self):
         return f"StateMachine('{self.name}')"

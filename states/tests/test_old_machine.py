@@ -264,7 +264,7 @@ class TestStateMachine(unittest.TestCase):
                     {"old_state": "liquid", "new_state": "solid", "trigger": ["evaporate"]},
                 ]
             )
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(TransitionError):
             class A(StatefulObject):
                 state = state_machine(
                     states={
@@ -277,7 +277,7 @@ class TestStateMachine(unittest.TestCase):
                 )
 
             a = A()
-            a.state = "liquid"
+            a.state = 'solid'
 
 
 class TestWildcardStateMachine(unittest.TestCase):
@@ -717,10 +717,10 @@ class TestNestedStateMachine(unittest.TestCase):
         machine = self.object_class.state
         self.assertEqual(machine["off.working", "turn_on"][Path("on.none")].state, machine["off"]["working"])
         self.assertEqual(machine["off.working", "turn_on"][Path("on.none")].target, machine["on"]["none"])
-        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].state_path), "on.washing")
-        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].target_path), "on.drying")
-        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].state_path), "off.working")
-        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].target_path), "on.drying")
+        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].state.path), "on.washing")
+        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].target.path), "on.drying")
+        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].state.path), "off.working")
+        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].target.path), "on.drying")
 
     def test_in_for_transitions(self):
         machine = self.object_class.state
@@ -904,7 +904,7 @@ class TestCallback(unittest.TestCase):
 class TestMultiState(unittest.TestCase):
 
     def setUp(self):
-        class Colored(StatefulObject):
+        class MoodyColor(StatefulObject):
             color = state_machine(
                 states=dict(
                     red={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
@@ -918,15 +918,6 @@ class TestMultiState(unittest.TestCase):
                 ],
             )
 
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.counter = 0
-
-            @color.on_entry('*')
-            def count_calls(self):
-                self.counter += 1
-
-        class MoodyColor(Colored):
             mood = state_machine(
                 states=dict(
                     good={'on_exit': 'on_exit', 'on_entry': 'on_entry'},
@@ -942,6 +933,7 @@ class TestMultiState(unittest.TestCase):
 
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
+                self.counter = 0
                 self.exit_history = []
                 self.entry_history = []
                 self.transfer_history = []
@@ -949,6 +941,10 @@ class TestMultiState(unittest.TestCase):
             def state(self):
                 return dict(mood=self.mood,
                             color=self.color)
+
+            @color.on_entry('*')
+            def count_calls(self):
+                self.counter += 1
 
             @mood.on_entry('*')
             def count_calls(self):

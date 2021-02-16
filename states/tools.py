@@ -1,6 +1,5 @@
 __author__ = "lars van gemerden"
 
-import contextlib
 from contextlib import contextmanager
 from itertools import zip_longest
 from time import perf_counter
@@ -48,7 +47,6 @@ class Path(tuple):
     '''
 
     separator = "."
-
 
     @classmethod
     def items(cls, target, key_cast=lambda v: v, path=None):  # can be optimized
@@ -241,20 +239,6 @@ class Path(tuple):
         return self.separator.join([str(s) for s in self])
 
 
-def replace_in_list(lst, old_item, new_items):
-    """ replaces single old_item with a list new_item(s), retaining order of new_items """
-    new_items = listify(new_items)
-    index = lst.index(old_item)
-    lst.remove(old_item)
-    for i, item in enumerate(new_items):
-        lst.insert(index + i, item)
-    return lst
-
-
-def has_doubles(lst):  # slow, O(n^2)
-    return any(lst.count(l) > 1 for l in lst)
-
-
 class lazy_property(object):
     """A read-only @property that is only evaluated once."""
 
@@ -270,11 +254,6 @@ class lazy_property(object):
         return result
 
 
-def dummy_context_manager(yield_value):
-    def dummy(*args, **kwargs):
-        yield yield_value
-    return contextlib.contextmanager(dummy)
-
 class DummyMapping(Mapping):
     def __len__(self):
         return 0
@@ -285,10 +264,28 @@ class DummyMapping(Mapping):
     def __getitem__(self, key):
         raise KeyError(f"{self.__class__.__name__} has no keys: '{key}'")
 
+
 @contextmanager
 def stopwatch(timer=perf_counter):
-    """ do not call lambda within context = with-block """
+    """ do not call lambda within context == with-block """
     t = timer()
     yield lambda: delta
     delta = timer() - t  # assigned on context exit
 
+
+class AssignClass(object):
+    def __init__(self, func):
+        self.func = func
+
+    def __set_name__(self, cls, name):
+        # do something with owner, i.e.
+        self.on_set_name(cls, name)
+        # then replace ourself with the original method
+        setattr(cls, name, self.func)
+
+    def on_set_name(self, cls, name):
+        raise NotImplementedError
+
+
+if __name__ == '__main__':
+    pass

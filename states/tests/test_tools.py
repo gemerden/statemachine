@@ -1,7 +1,7 @@
 import unittest
 
 from states.configuration import default_case
-from states.tools import Path, replace_in_list, has_doubles, copy_struct
+from states.tools import Path, copy_struct
 from states import state, transition, switch, case
 
 __author__ = "lars van gemerden"
@@ -164,13 +164,6 @@ class TestDictClasses(unittest.TestCase):
 
 
 class TestFunctions(unittest.TestCase):
-
-    def test_replace_in_list(self):
-        self.assertEqual(replace_in_list([1, 2, 3], 2, [4, 5]), [1, 4, 5, 3])
-
-    def test_has_doubles(self):
-        self.assertTrue(has_doubles([1, 2, 3, 2]))
-        self.assertFalse(has_doubles([1, 2, 3, 4]))
 
     def test_copy_struct(self):
         struct = {'a': [1,2,3],

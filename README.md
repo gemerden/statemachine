@@ -11,7 +11,7 @@ This state machine implementation is developed with the following goals in mind:
 * Simple state machines do not require advanced knowledge; complexity of configuration scales with complexity of requirements, 
 * One state machine manages the state of all instances of a class; the objects only store their current state as a string,
 * Option to use multiple interacting state machines in the same class, with no added complexity,
-* Fast and memory efficient.
+* Optimized for speed and memory efficient.
 
 ## Installation
 To install the module you can use: `pip install states3`
@@ -19,9 +19,20 @@ To install the module you can use: `pip install states3`
 ## Limitations
 This module only runs on Python >= 3.6.
 
+## Concepts
+
+The following basic state machine concepts are used:
+
+* *state machine*: system that manages the states of objects according to predefined states and transitions,
+* *state*: state of an stateful object; objects can be in one state at the time,
+* *transition*: transition of the object from one state to another,
+* *trigger*: (generated) method called on an object that triggers a state transition,
+* *callback*: different functions called on state transitions by the state machine,
+* *condition*: conditions that allow a specific state transition to take place.
+
 ## Code Example
 
-Here is a simple statemachine to give some idea of what the configuration looks like.
+Here is a simple state machine to give some idea of what the configuration looks like.
 ```python
 from states import state_machine, StatefulObject, states, state, transition
 
@@ -39,19 +50,10 @@ class LightSwitch(StatefulObject):
         print(f"{name} turned the light {self.state}")    
     
 lightswitch = LightSwitch(state="off") 
-lightswitch.flick(name="Bob")  # prints: "Bob turned the light on"                 
+lightswitch.flick(name="Bob")  # prints: "Bob turned the light on"
+lightswitch.flick(name="Ann")  # prints: "Ann turned the light off"   
 ```
 > Note that this configuration works for the versions >= 0.5.0.
-
-## Concepts
-The following basic state machine concepts are used:
-
-* *state machine*: system that manages the states of objects according to predefined states and transitions,
-* *state*: state of an stateful object; objects can be in one state at the time,
-* *transition*: transition of the object from one state to another,
-* *trigger*: (generated) method called on an object that triggers a state transition,
-* *callback*: different functions called on state transitions by the state machine,
-* *condition*: conditions that allow a specific state transition to take place.
 
 ## Features
 The module has the following basic and some more advanced features:
@@ -62,47 +64,32 @@ The module has the following basic and some more advanced features:
 * _conditional transitions_ can be used to change state depending on condition functions,
     * if a transition is triggered, but the condition is not met, the transition does not take place
     * to do this, create multiple transitions from the same state to different states and give them different conditions
-* a number of _callbacks_ can be installed for each state and transition, with obj the state managed object and **kwargs the arguments passed via the trigger to the callback, in calling order:
-    * `Machine.prepare(self, *args, **kwargs)`,
-    * `State.on_exit(self, *args, **kwargs)`,
-    * `Transition.on_transfer(self, *args, **kwargs)`,
-    * `State.on_entry(self, *args, **kwargs)`,
-    * `State.parent.on_stay(self, *args, **kwargs)`,
-    * note that if a condition is present and not met, the object will stay in its state and an optional callback `State.on_stay` will be called.
+* a number of _callbacks_ can be installed for each state and transition, with `obj` the state managed object and `**kwargs` the arguments passed via the trigger to the callback, in calling order:
+    * `Machine.prepare(obj, *args, **kwargs)`,
+    * `with Machine.contextmanager(obj, *args, **kwargs) as context:`
+    * `State.on_exit(obj, *args, **kwargs)`,
+    * `Transition.on_transfer(obj, *args, **kwargs)`,
+    * `State.on_entry(obj, *args, **kwargs)`,
+    * `State.parent.on_stay(obj, *args, **kwargs)`,
+    * note that if a condition is present and not met, the object will stay in its state and an optional callback `State.on_stay` will be called (but not `on_exit` or `on_entry`),
+    * note also that `obj` can be `self`, so callbacks can (and usually are) methods of the class that uses the state machine.
 * _callbacks_ can be methods on the class of which the state is managed by the machine:
     * This is the case the calback is configured as a string (e.g. `"on_entry": "do_callback"`) that is looked op on the stateful class,
 * _wildcards_ (`*`) and listed states can be used to define (callbacks for) multiple transitions or at once:
-    * e.g. transition `transition(["A", "B"], "C")` would create 2 transitions, on from A to C and one from B to C,
+    * for example transition `transition(["A", "B"], "C")` would create 2 transitions, on from A to C and one from B to C; `transition("*", "C")` would create transitions from all states to C,
 * _nested_ states can be used to better organize states and transitions, states can be nested to any depth,
-* _multiple_ state machines can be used in the same class and have access to that class for callbacks,
+* _multiple_ state machines can be used in the same class and have access to that class for callbacks, a single trigger can result in callbacks on multiple machines,
 * a _context manager_ can be defined on state machine level to create a context for each transition,
 * custom _exceptions_:
-    * MachineError: raised in case of a misconfiguration of the state machine,
-    * TransitionError: raised in case of e.g. an attempt to trigger a non-existing transition,
+    * `MachineError`: raised at initialization time in case of a misconfiguration of the state machine,
+    * `TransitionError`: raised at run time in case of, for example, an attempt to trigger a non-existing transition,
 
 ---
 
-## Example
+## Tutorial
  This section we will show an example that shows most of the features of the state machine. We will introduce features step-by-step. 
- 
- Lets define a User in the context of getting access to a web app:
- 
- ```python
-from states import StatefulObject
 
-class User(StatefulObject):
-    
-    def __init__(self, email, **kwargs):
-        super().__init__(**kwargs)
-        self.email = email
-        self.password = None
-    
-```
-We will keep the user class simple for clarity sake. No password hashing, tokens, etc.
-
-Notice the base class `StatefulObject`: it sets one class attribute and adds trigger methods to the `User` class when these are defined.
-
-Now let's add a state machine to the 'User':
+ Lets define a simple User class, say for getting access to an application:
 
  ```python
 from states import StatefulObject, state_machine
@@ -114,10 +101,12 @@ class User(StatefulObject):
         super().__init__(state=state)
         self.username = username
         self.password = None
-```
- 
+ ```
+
+
+* Class `StatefulObject` sets one class attribute and adds trigger methods to the `User` class when these are defined.
 * `state_machine` is the factory function that takes a configuration and turns it in a fully fledged state machine.
-* Notice you can set the initial state through the `state` (name of the state machine), argument of `__init__`.
+* Notice you can set the initial state through the `state` (or any other name you gave the state machine), argument of `__init__`.
 
 lets add some states: 
 * `new`: a user that has just been created, without password, etc.
@@ -136,13 +125,14 @@ class User(StatefulObject):
         super().__init__(state='new')
         self.username = username
         self.password = None
-```
- 
+ ```
+
 * `state_machine` takes a parameter `states`, preferable created with the `states` function that returns a validated dictionary.
 * The initial state can be set as above; if not given, the first state of the state machine will be the initial state,
-* Note that the state_machine `state` can have any other name.
+* In this example transitions will be automatically added to the state machine. All possible transitions and related triggers are generated and can be called as `goto_[statename](...)`, so e.g. `user.goto_active(...)`,
+* `states('new', 'active', 'blocked')` is shorthand for `states(new=state(), active=state(), blocked=state())`; the longer form is only needed when extra configuration of the states is needed,
 
-Next we will add transitions to the state machine to get a working state machine:
+Most of the time you might want to define the transitions yourself, to configure them and to limit possible transitions (e.g. reduce the chance of users logging in without password).
 
 ```python
 from states import StatefulObject, state_machine, states, transition
@@ -200,12 +190,13 @@ assert user.password == 'very_secret'
 ```
 
 * The decorator `@state.on_entry('active')` basically sets `set_password` to be called on entry of the state `active` by the user.
-* Remember that to go to the state 'active' the trigger function`user.activate(...)` needed to be called:
+* Remember that to go to the state 'active' the trigger function`user.activate(...)` needs to be called:
     * All arguments passed to the trigger function will be passed to ALL callbacks that are called as a result,
-    * Tip: use keyword arguments in callbacks and when calling trigger functions in other than trivial cases. 
+    * Tip: use keyword arguments in callbacks and when calling trigger functions in other than trivial cases,
+    * if there are multiple arguments needed by different callbacks, they can be defined like e.g. `callback(used_args, .., **ignored)` to ignore all unneeded arguments by this callback, but possibly needed by others.
 * We can similarly set callbacks for `on_exit`, `on_stay`.
 
-To make the possibilities of callbacks clearer, let us add some more:
+To make the possibilities of callbacks clearer, let's have some more:
 
 ```python
 from states import StatefulObject, state_machine, states, transition
@@ -220,7 +211,7 @@ class User(StatefulObject):
         ]   
     )
     ...
-    @state.on_entry('active')
+    
     def set_password(self, password):
         self.password = password
 
@@ -237,7 +228,8 @@ class User(StatefulObject):
         pass
 
 ```
-* A wildcard '*' can be used to indicate all states,
+* A wildcard `*` can be used to indicate all states (or sub-states, as in 'active.*' , more on that later),
+* for callback decorators `on_entry`, `on_exit` and `on_stay`, multiple comma separated states can be given (e.g. `@state.on_exit('new', active')`) and the callback will be installed on each state,
 * If an action is required on a specific transition, this can be achieved with  `@state.on_transfer(old_state, new_state)`; if too many `on_transfer` callbacks are required on a state machine, there might be a problem in the state definitions, 
 
 To make this state machine a bit more useful, let us include a basic login process. To do this we will add 2 sub-states to the 'active' state:
@@ -263,12 +255,12 @@ class User(StatefulObject):
 ```
 *  Notice `active=state(states=states('logged_out', 'logged_in'))`:
     * the sub_state has the same configuration as the main state machine, 
-    * but instead of `state_machine` we will use the function `state` returning a dict,
+    * but instead of `state_machine` we will use the function `state` returning a dictionary,
     * actual construction of the sub-states is left to the main `state_machine`
-* the transition `transition('new', 'active', trigger='activate')` will now put the user in the 'active.logged_out' state (because it is first in the list of arguments)
-* the transition `transition('active', 'blocked', trigger='block')` will put the user in the 'blocked' state independent of the 'active' sub-state the user was in,
+* the transition `transition('new', 'active', trigger='activate')` will now put the user in the `active.logged_out` state (because it is first in the list of sub-states of `active`)
+* the transition `transition('active', 'blocked', trigger='block')` will put the user in the `blocked` state independent of the `active` sub-state the user was in,
 
-Of course the user needs to be able to login and logout and to login, a password must be checked:
+Of course the user needs to be able to login and logout and during login, a password must be checked:
 
 ```python
 from states import StatefulObject, state_machine, states, transition, state
@@ -311,36 +303,38 @@ class User(StatefulObject):
         print(f"Goodbye {self.username}")
 
     @state.on_transfer('active.logged_out', 
-                       'active.logged_out')  # this transition was auto-generated by setting a condition on logged_out to logged_in
-    def print_welcome(self, **ignored):
+                       'active.logged_out')  # this transition was auto-generated (see below)
+    def print_sorry(self, **ignored):
         print(f"Sorry, {self.username}, you gave an incorrect password")
 
 
 user = User('rosemary').activate(password='very_secret').log_in(password='very_secret')
 assert user.state == 'active.logged_in'
 
-user = User('rosemary').activate(password='very_secret').log_in(password='not_very_secret')
+user = User('rosemary').activate(password='very_secret').log_in(password='wrong_secret')
 assert user.state == 'active.logged_out'
 ```
 
 * With `@state.condition(...)` a conditional transition is introduced:
     * this means that the transition only takes place when the decorated method returns `True`,
-    * So, what if the condition returns `False`: 
-        - when the condition was added to the state machine, a transition back to the original state was auto-generated,
+    * So, what if the condition returns `False`?
+        - During state machine initialization, a check for a default (without condition) takes place,
+        - if not found, an unconditional transition back to the original state is auto-generated,
         - this transition is executed when the conditions fails,
         - in `@state.on_transfer(...)` you can see that it is actually possible to set a callback on this transition,
-* Note that the triggers can be chained `User(...).activate(...).log_in(...)`, the trigger functions return the object itself.
-    
+* Note that the triggers can be chained `User(...).activate(...).log_in(...)`, the trigger functions return the object itself,
+* A function can have multiple callback decorators applied to it; also the same decorator can be applied to multiple callback functions,
+  
 * This completes a basic state machine for the user flow for application access, it might seem little code, but it accomplished quite a lot:
     * The user must provide a password to become active,
     * the user must be active to be able to log in,
     * the user must provide the correct password to login,
-    * the user can be provided with different feedback for each occasion, 
+    * the user is be provided with different feedback for each occasion, 
     * the user can be blocked and unblocked and he/she cannot login when blocked,
 
 Lets extend the example one more time:
-* We want to block to user after 5 failed login attempts (because 3 is soo limiting ;-)
-* Let's add a 'deleted' state for users you want to get rid of (but never throw away data),
+* We want to block the user after 5 failed login attempts (because 3 is soo limiting ;-)
+* Let's add a 'deleted' state for users you want to get rid of (for some reason),
 * We'll leave out the messages, to keep focus on the task at hand.
 
 ```python
@@ -354,18 +348,19 @@ class User(StatefulObject):
             active=state(
                 states=states('logged_out', 'logged_in'),
                 transitions=[
-                    transition('logged_out', 'logged_in', trigger='log_in'),
-                    transition('logged_in', 'logged_out', trigger='log_out')
-                 ]
+                    transition('logged_out', 'logged_in', trigger='login'),
+                    transition('logged_in', 'logged_out', trigger='logout')
+                ]
             ),
             deleted=state(),
         ),
         transitions=[
             transition('new', 'active', trigger='activate'),
             transition('active', 'blocked', trigger='block'),
+            transition('active.logged_out', 'blocked', trigger='login'),
             transition('blocked', 'active', trigger='unblock'),
             transition('*', 'deleted', trigger='delete'),
-        ]   
+        ]
     )
 
     def __init__(self, username, max_logins=5):
@@ -379,18 +374,19 @@ class User(StatefulObject):
     def set_password(self, password):
         self.password = password
 
-    @state.condition('active.logged_out', 
+    @state.condition('active.logged_out',
                      'active.logged_in')
     def verify_password(self, password):
         return self.password == password
 
-    @state.condition('active.logged_out', 
-                     'blocked')
+    @state.condition('active.logged_out',
+                     'blocked',
+                     trigger='login')
     def check_login_count(self, **ignored):
-        return self.login_count > self.max_logins
+        return self.login_count >= self.max_logins
 
-    @state.on_transfer('active.logged_out', 
-                       'active.logged_out')  # this transition was auto-generated by setting a condition on logged_out to logged_in
+    @state.on_transfer('active.logged_out',
+                       'active.logged_out')  
     def inc_login_count(self, **ignored):
         self.login_count += 1
 
@@ -403,54 +399,61 @@ class User(StatefulObject):
 user = User('rosemary').activate(password='very_secret')
 
 for _ in range(user.max_logins):
-    user.login('also_very_secret')
+    user.login('wrong')
     assert user.state == 'active.logged_out'
 
-user.login('also_very_secret')  # the 6th time
+user.login('wrong')  # one time too many
 assert user.state == 'blocked'
 
 ```
+* We count login attempts when the user goes from `active.logged_out` back to `active.logged_out` and reset the count on any successful login,
+* in `check_login_count` we check whether the login count has exceeded the maximum,
+* Notice that the decorator above  `check_login_count()` includes the trigger `login`, this is because there is another transition from `active.logged_out` to `blocked` with trigger `block`. The state machine will raise a `MachineError` when there is more then a single possible transitions to add the condition to.
 
- 
 ---
 
 ## Change Log
 This is a new section of the readme, starting at version 0.4.0.
 
-####Version 0.5.0
+#### Version 0.5.0
 A major overhaul, with many improvements, especially in configuration and performance:
+
 **Features**
+
 - simplified configuration and partial auto-generation of state-machine (minimally just using state names),
 - adding callbacks to the state machine using decorators, instead of directly in the main configuration,
+- much improved speed: a single transition with a single (minimal) callback now takes < 2 microseconds on a normal PC,  
 - better validation with improved error messages,
 - Corrected and improved README.md (this document).
 
 **Changes**
-- configuration now uses validating functions instead of plain dicts and lists and they require less typing. 
+
+- configuration now uses validating functions instead of plain dictionaries and lists. 
+- Old configurations should still work, but no guarantees.
 
 **Bug fixes**
-- none.
+- no known bugs
 
-
-####Version 0.4.1:
+#### Version 0.4.1:
 
 **Bug fixes**
 - fixed incorrect calling of `on_exit` in some cases. Introduced in 0.3.2. Do upgrade if you can.
 
-####Version 0.4.0:
+#### Version 0.4.0:
 
 
 **Features**
  - trigger calls now return the object itself, making them idempotent: `object.trigger1().trigger2()` works,
  - added an `on_stay` callback option to states, called when a trigger is called which results in the state not changing. This and `on_transfer` are the only callbacks being called in such a case.
- 
+
 **Bug fixes**
 - no current bugs, please inform me if any are found
   
+
 **Changes**
  - when no transition takes place on a trigger call, `on_exit`, `on_entry` etc. are not called anymore (`on_transfer` will be if defined). `on_stay` can be used to register callbacks for this case. This breaks backward-compatibility in some cases, but in practice makes the definition of the state machine a lot easier when calling `on_exit` etc. is undesirable when the actual state does not change. It makes configuration also a lot more intuitive (at least for me ;-).
  - trigger calls do not return whether a state change has taken place (a `bool`), but the object on which the trigger was called, making them idempotent.
- 
+
 ## Rules (for the mathematically minded)
 The state machine in the module has the following rules for setting up states and transitions:
 

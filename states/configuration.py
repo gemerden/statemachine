@@ -1,9 +1,9 @@
-from typing import Mapping
+from typing import Mapping, Callable
 
 from .exception import MachineError
 
 """
-These are functions to make the state machine config more readable and to to validate it
+Functions to validate and make the state machine config more readable.
 """
 
 
@@ -15,6 +15,8 @@ def states(*state_names, **state_configs):
         raise MachineError(f"all states in 'states' should be of type 'dict'")
     all_state_configs = {s: state() for s in state_names}  # generate state configs
     all_state_configs.update(state_configs)
+    if not len(all_state_configs):
+        raise MachineError(f"no states defined in state machine configuration")
     return all_state_configs
 
 
@@ -37,8 +39,10 @@ def transitions(*transitions_):
 def transition(old_state, new_state, trigger, on_transfer=None, condition=None, info=""):
     if isinstance(new_state, Mapping) and case:
         raise MachineError(f"transitions with multiple (switched) end-states cannot have a single condition")
-    return dict(old_state=old_state, new_state=new_state, trigger=trigger,
-                on_transfer=on_transfer or [], condition=condition or [], info=info)
+
+    result = dict(old_state=old_state, new_state=new_state, trigger=trigger,
+                  on_transfer=on_transfer or [], condition=condition or [], info=info)
+    return validate_dict(result, 'old_state', 'new_state', 'trigger', type_=(dict, str))
 
 
 def switch(*state_conditions):
@@ -48,8 +52,41 @@ def switch(*state_conditions):
 
 
 def case(state, condition, on_transfer=None, info=""):
-    return dict(state=state, condition=condition, on_transfer=on_transfer or [], info=info)
+    result = dict(state=state, condition=condition, on_transfer=on_transfer or [], info=info)
+    return validate_dict(validate_dict(result, 'state'), 'condition', type_=(str, Callable))
 
 
 def default_case(state, on_transfer=None, info=""):
-    return dict(state=state, condition=(), on_transfer=on_transfer or [], info=info)
+    result = dict(state=state, condition=(), on_transfer=on_transfer or [], info=info)
+    return validate_dict(result, 'state')
+
+def validate_dict(dct, *keys, type_=str):
+    def check_type(key, value):
+        if not isinstance(value, type_):
+            raise MachineError(f"incorrect type {type_.__name__} for argument {key} in state machine configuration")
+
+    def check_value(key, value):
+        if not value:
+            raise MachineError(f"missing argument {key} in state machine configuration")
+
+    def clean_value(value):
+        if isinstance(value, str):
+            value = value.strip()
+        return value
+
+    def validate(key, value):
+        check_type(key, value)
+        value = clean_value(value)
+        check_value(key, value)
+        return value
+
+    for k in keys:
+        if isinstance(dct[k], (tuple, list)):
+            dct[k] = list(dct[k])
+            for i, value in enumerate(dct[k]):
+                dct[k][i] = validate(k, value)
+        else:
+            dct[k] = validate(k, dct[k])
+    return dct
+
+
