@@ -31,5 +31,6 @@ setup(
         'Programming Language :: Python :: 3.9',
     ],
     python_requires='>=3.6',
-    keywords='statemachine states transitions object-oriented nested multi-state callbacks condition contextmanager performance easy-to-use low-memory',
+    keywords='statemachine states transitions object-oriented nested multi-state callbacks '
+             'condition contextmanager performance easy-to-use low-memory',
 )
