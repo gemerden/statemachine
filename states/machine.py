@@ -9,7 +9,7 @@ from .exception import MachineError, TransitionError
 from .callbacks import Callbacks
 from .transitions import Transition
 from .normalize import normalize_statemachine_config, get_expanded_paths
-from .tools import Path, lazy_property, DummyMapping
+from .tools import Path, lazy_property, DummyMapping, save_graph
 
 _marker = object()
 
@@ -108,14 +108,15 @@ class ParentState(BaseState, Mapping):
                 return Path(key[0]).get_in(self).transitions[key[1]][self.path + key[2]]
         raise KeyError(f"key '{key}' does not exist in state {self.name}")
 
-    def iter_states(self):
-        yield self
+    def iter_states(self, filter=lambda s: True):
+        if filter(self):
+            yield self
         for state in self.sub_states.values():
-            yield from state.iter_states()
+            yield from state.iter_states(filter)
 
-    def iter_transitions(self):
+    def iter_transitions(self, filter=lambda t: True):
         for state in self.sub_states.values():
-            yield from state.iter_transitions()
+            yield from state.iter_transitions(filter)
 
     @lazy_property
     def triggers(self):
@@ -165,12 +166,15 @@ class LeafState(ChildState, DummyMapping):
         transition = Transition(state=self, target=target, **trans_dict)
         self.transitions[transition.trigger][transition.target.path] = transition
 
-    def iter_states(self):
-        yield self
+    def iter_states(self, filter=lambda s: True):
+        if filter(self):
+            yield self
 
-    def iter_transitions(self):
+    def iter_transitions(self, filter=lambda t: True):
         for transition_dict in self.transitions.values():
-            yield from transition_dict.values()
+            for transaction in transition_dict.values():
+                if filter(transaction):
+                    yield transaction
 
     @lazy_property
     def triggers(self):
@@ -401,6 +405,11 @@ class StateMachine(ParentState):
                 inner_trigger = execute
 
         return inner_trigger
+
+    def save_graph(self, filename, **options):
+        save_graph(machine=self,
+                   filename=filename,
+                   **options)
 
     def __str__(self):
         return f"StateMachine('{self.name}')"

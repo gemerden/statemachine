@@ -273,18 +273,30 @@ def stopwatch(timer=perf_counter):
     delta = timer() - t  # assigned on context exit
 
 
-class AssignClass(object):
-    def __init__(self, func):
-        self.func = func
+def save_graph(machine, filename='png', **kwargs):
+    try:
+        import graphviz
+    except Exception as error:
+        raise RuntimeError(f"graphviz cannot be imported to save graph iamage: {error}")
 
-    def __set_name__(self, cls, name):
-        # do something with owner, i.e.
-        self.on_set_name(cls, name)
-        # then replace ourself with the original method
-        setattr(cls, name, self.func)
+    graph_name = f"{machine.owner_cls.__name__}_{machine.name}"
+    file_parts = filename.rsplit('.', 1)
+    if len(file_parts) == 1:  # just an extension
+        filename = graph_name
+    else:
+        filename = file_parts[0]
 
-    def on_set_name(self, cls, name):
-        raise NotImplementedError
+    dot = graphviz.Digraph(comment=graph_name,
+                           format=file_parts[-1],
+                           graph_attr=kwargs)
+
+    for transition in machine.iter_transitions():
+        dot.edge(str(transition.state.path),
+                 str(transition.target.path),
+                 label=" " + transition.trigger)
+
+    dot.render(filename, view=True)
+    return dot
 
 
 if __name__ == '__main__':
