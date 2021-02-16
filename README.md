@@ -66,17 +66,19 @@ The module has the following basic and some more advanced features:
 * _conditional transitions_ can be used to change state depending on condition functions,
     * if a transition is triggered, but the condition is not met, the transition does not take place
     * to do this, create multiple transitions from the same state to different states and give them different conditions
-* a number of _callbacks_ can be installed for each state and transition, with `obj` the state managed object and `**kwargs` the arguments passed via the trigger to the callback, in calling order:
+* a number of _callbacks_ can be installed for each state and transition, with `obj` the state managed object and `**kwargs` the arguments passed via the trigger to the callback, (in calling order):
     * `Machine.prepare(obj, *args, **kwargs)`,
     * `with Machine.contextmanager(obj, *args, **kwargs) as context:`
+    * `State.before_exit(obj, *args, **kwargs)`,
     * `State.on_exit(obj, *args, **kwargs)`,
     * `Transition.on_transfer(obj, *args, **kwargs)`,
     * `State.on_entry(obj, *args, **kwargs)`,
+    * `State.after_entry(obj, *args, **kwargs)`,
     * `State.parent.on_stay(obj, *args, **kwargs)`,
     * note that if a condition is present and not met, the object will stay in its state and an optional callback `State.on_stay` will be called (but not `on_exit` or `on_entry`),
     * note also that `obj` can be `self`, so callbacks can (and usually are) methods of the class that uses the state machine.
 * _callbacks_ can be methods on the class of which the state is managed by the machine:
-    * This is the case the calback is configured as a string (e.g. `"on_entry": "do_callback"`) that is looked op on the stateful class,
+    * This is the case the callback is configured as a string (e.g. `"on_entry": "do_callback"`) that is looked op on the stateful class,
 * _wildcards_ (`*`) and listed states can be used to define (callbacks for) multiple transitions or at once:
     * for example transition `transition(["A", "B"], "C")` would create 2 transitions, on from A to C and one from B to C; `transition("*", "C")` would create transitions from all states to C,
 * _nested_ states can be used to better organize states and transitions, states can be nested to any depth,
@@ -338,10 +340,15 @@ assert user.state == 'active.logged_out'
 Lets extend the example one more time:
 * We want to block the user after 5 failed login attempts (because 3 is soo limiting ;-)
 * Let's add a 'deleted' state for users you want to get rid of (for some reason),
+* Let's also add some logging, we want to know about state transitions,
 * We'll leave out the messages, to keep focus on the task at hand.
 
 ```python
+import logging
+
 from states import StatefulObject, state_machine, states, transition, state
+
+logger = logging.getLogger(__name__)
 
 class User(StatefulObject):
     state = state_machine(
@@ -397,6 +404,10 @@ class User(StatefulObject):
     @state.on_entry('active.logged_in')
     def reset_login_count(self, **ignored):
         self.login_count = 0
+        
+    @state.after_entry()
+    def do_log(self, **ignored):
+        logger.info(f"user went to state {self.state}")
 
 
 user = User('rosemary').activate(password='very_secret')
@@ -411,7 +422,8 @@ assert user.state == 'blocked'
 ```
 * We count login attempts when the user goes from `active.logged_out` back to `active.logged_out` and reset the count on any successful login,
 * in `check_login_count` we check whether the login count has exceeded the maximum,
-* Notice that the decorator above  `check_login_count()` includes the trigger `login`, this is because there is another transition from `active.logged_out` to `blocked` with trigger `block`. The state machine will raise a `MachineError` when there is more then a single possible transitions to add the condition to.
+* Notice that the decorator above  `check_login_count()` includes the trigger `login`, this is because there is another transition from `active.logged_out` to `blocked` with trigger `block`. The state machine will raise a `MachineError` when there is more then a single possible transitions to add the condition to,
+* The `@state.after_entry('somestate')` decorator applies to any entry of a (sub-) sub-state of the state. No argument means the root state machine: `@state.after_entry()`. Similarly there is `@state.before_exit(...)`. 
 
 **Options & Niceties**
 
@@ -460,6 +472,22 @@ The state machine has a couple of other options and niceties to enhance the expe
 ## Change Log
 
 This is a new section of the readme, starting at version 0.4.0.
+
+#### Version 0.5.1
+
+Added extra decorators for convenience and some edge case:
+
+**Features**
+
+- add `before_exit` and `after_entry` decorators,
+
+**Changes**
+
+- None other
+
+**Bug fixes**
+
+- no known bugs
 
 #### Version 0.5.0
 A major overhaul, with many improvements, especially in configuration and performance:

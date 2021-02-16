@@ -349,6 +349,7 @@ class TestStateMachine(unittest.TestCase):
 
         class B(StatefulObject):
             state = state_machine(states=states("A"))
+
         b = B()
 
         with self.assertRaises(TransitionError):
@@ -624,6 +625,7 @@ class TestNestedStateMachine(unittest.TestCase):
                                     broken=state()),
                              transitions(transition('working', 'broken', trigger='smash'),
                                          transition('broken', 'working', trigger='fix'))),
+
                    on=state(states(waiting=state(),
                                    washing=state(),
                                    drying=state()),
@@ -645,6 +647,8 @@ class TestNestedStateMachine(unittest.TestCase):
                 self.entry_counter = 0  # reset for every tests; used to count number of callbacks from machine
                 self.any_counter = 0  # reset for every tests; used to count number of callbacks from machine
                 self.transfer_counter = 0
+                self.before_exits = {}
+                self.after_entries = {}
 
             @state.on_exit('off.*', 'on.*')
             def inc_exit_counter(self, **kwargs):
@@ -664,6 +668,22 @@ class TestNestedStateMachine(unittest.TestCase):
             @state.on_transfer('off', 'on')
             def inc_transfer_counter(self, **kwargs):
                 self.transfer_counter += 1
+
+            @state.before_exit()
+            def append_to_before_root(self, **kwargs):
+                self.before_exits['root'] = self.state
+
+            @state.after_entry()
+            def append_to_after_root(self, **kwargs):
+                self.after_entries['root'] = self.state
+
+            @state.before_exit('off')
+            def append_to_before_off(self, **kwargs):
+                self.before_exits['off'] = self.state
+
+            @state.after_entry('off')
+            def append_to_after_off(self, **kwargs):
+                self.after_entries['off'] = self.state
 
         self.object_class = WashingMachine
 
@@ -733,6 +753,41 @@ class TestNestedStateMachine(unittest.TestCase):
 
         assert exits == ['off.working']
         assert entries == ['on.waiting']
+
+    def test_before_after(self):
+        washer = self.object_class()
+
+        def assert_before_after(before, after):
+            def assert_before(key):
+                assert washer.before_exits.get(key) == before[key]
+
+            def assert_after(key):
+                assert washer.after_entries.get(key) == after[key]
+
+            assert_before('root')
+            assert_before('off')
+            assert_after('root')
+            assert_after('off')
+
+        assert washer.state == 'off.working'
+        assert_before_after(before=dict(root=None, off=None),
+                            after=dict(root=None, off=None))
+        washer.smash()
+        assert washer.state == 'off.broken'
+        assert_before_after(before=dict(root='off.working', off='off.working'),
+                            after=dict(root='off.broken', off='off.broken'))
+        washer.fix()
+        assert washer.state == 'off.working'
+        assert_before_after(before=dict(root='off.broken', off='off.broken'),
+                            after=dict(root='off.working', off='off.working'))
+        washer.turn_on()
+        assert washer.state == 'on.waiting'
+        assert_before_after(before=dict(root='off.working', off='off.working'),
+                            after=dict(root='on.waiting', off='off.working'))
+        washer.smash()
+        assert washer.state == 'off.broken'
+        assert_before_after(before=dict(root='on.waiting', off='off.working'),
+                            after=dict(root='off.broken', off='off.broken'))
 
     def test_on_stay(self):
         machine = self.object_class.state
@@ -1483,5 +1538,3 @@ class TestCaching(unittest.TestCase):
 
         user.login('wrong')
         assert user.state == 'active.logged_out'
-
-
