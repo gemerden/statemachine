@@ -1,6 +1,8 @@
 # StateMachine
 Easy to use state machine to manage the state of python objects.
 
+![User_state_vert.gv](User_state_vert.gv.png)
+
 
 ## Introduction
 This state machine implementation is developed with the following goals in mind:
@@ -83,6 +85,7 @@ The module has the following basic and some more advanced features:
 * custom _exceptions_:
     * `MachineError`: raised at initialization time in case of a misconfiguration of the state machine,
     * `TransitionError`: raised at run time in case of, for example, an attempt to trigger a non-existing transition,
+* Basic support to draw states and transitions using `graphviz`.
 
 ---
 
@@ -410,9 +413,52 @@ assert user.state == 'blocked'
 * in `check_login_count` we check whether the login count has exceeded the maximum,
 * Notice that the decorator above  `check_login_count()` includes the trigger `login`, this is because there is another transition from `active.logged_out` to `blocked` with trigger `block`. The state machine will raise a `MachineError` when there is more then a single possible transitions to add the condition to.
 
+**Options & Niceties**
+
+The state machine has a couple of other options and niceties to enhance the experience:
+
+* A prepare callback that if present will be called before any transition: the `@[state machine name].prepare` decorator will install it on the machine. Note that the decorator takes no arguments,
+
+* A context manager callback that if present, can create a context for all transitions: it can be installed as follows:
+
+  ```python
+  @[state machine name].contextmanager
+  def some_context(obj, *args, **kwargs):
+      ...  # initialize context
+      yield context
+      ...  # finalize context
+  ```
+
+  *Important*: it will pass the context as a keyword argument to all callbacks called within the transitions (all but `prepare`), so the callbacks must be able to take the `context` argument, as in for example:
+
+  ```python
+  @some_machine.on_exit('somestate')
+  def some_callback(obj, context, ...):
+      pass  # do something with the context
+  ```
+
+   or
+
+  ```python
+  @some_machine.on_exit('somestate')
+  def some_callback(obj, some_args, **ignored):
+      pass  # ignore the context
+  ```
+
+* You can save the graph of the state machine in different formats using `.save_graph(filename, **options)` as in:
+
+  ```python
+  User.state.save_graph('user_state.png')  # see image at top of readme
+  ```
+
+   The options are passed to `graphviz` as the options for the graph itself. It must be installed on your system; see [graphviz](https://graphviz.readthedocs.io/en/stable/manual.html).
+
 ---
 
+
+
 ## Change Log
+
 This is a new section of the readme, starting at version 0.4.0.
 
 #### Version 0.5.0
@@ -422,7 +468,8 @@ A major overhaul, with many improvements, especially in configuration and perfor
 
 - simplified configuration and partial auto-generation of state-machine (minimally just using state names),
 - adding callbacks to the state machine using decorators, instead of directly in the main configuration,
-- much improved speed: a single transition with a single (minimal) callback now takes < 2 microseconds on a normal PC,  
+- much improved speed: a single transition with a single (minimal) callback now takes < 2 microseconds on a normal PC, 
+- basic option to create a graph from the state machine, using `graphviz`, 
 - better validation with improved error messages,
 - Corrected and improved README.md (this document).
 
