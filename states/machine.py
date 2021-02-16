@@ -15,7 +15,7 @@ _marker = object()
 
 
 class BaseState(object):
-    path = root = up = None
+    parent = path = root = up = None
 
     @classmethod
     def _validate_name(cls, name, exclude=(".", "*", "[", "]", "(", ")")):
@@ -63,8 +63,8 @@ class BaseState(object):
 
 
 class ParentState(BaseState, Mapping):
-    def __init__(self, states, transitions, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, states, transitions, before_exit=(), after_entry=(), **kwargs):
+        super().__init__(before_exit=before_exit, after_entry=after_entry, **kwargs)
         self._init_states(states)
         self._init_transitions(transitions)
 
@@ -298,6 +298,7 @@ class StateMachine(ParentState):
         return transitions
 
     def _register_state_callback(self, key, *state_names):
+        state_names = state_names or ("",)
         states = self._lookup_states(*state_names)
 
         def register(func):
@@ -316,6 +317,12 @@ class StateMachine(ParentState):
 
     def on_stay(self, *state_names):
         return self._register_state_callback('on_stay', *state_names)
+
+    def before_exit(self, *state_names):
+        return self._register_state_callback('before_exit', *state_names)
+
+    def after_entry(self, *state_names):
+        return self._register_state_callback('after_entry', *state_names)
 
     def on_transfer(self, old_state_name_s, new_state_name_s, trigger=None):
         transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger=trigger)

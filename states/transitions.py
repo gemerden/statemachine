@@ -36,19 +36,27 @@ class Transition(object):
     @property
     def on_exits(self):
         on_exits = []
+        common = False
         for state in self.state.up:
+            if state.parent:
+                on_exits.append(state.parent.callbacks.before_exit)
             if state is self.common_state:
-                break
-            on_exits.append(state.callbacks.on_exit)
+                common = True
+            if not common:
+                on_exits.append(state.callbacks.on_exit)
         return [e for e in on_exits if e]
 
     @property
     def on_entries(self):
         on_entries = []
+        common = False
         for state in self.target.up:
+            if state.parent:
+                on_entries.append(state.parent.callbacks.after_entry)
             if state is self.common_state:
-                break
-            on_entries.append(state.callbacks.on_entry)
+                common = True
+            if not common:
+                on_entries.append(state.callbacks.on_entry)
         return list(reversed([e for e in on_entries if e]))
 
     @property
