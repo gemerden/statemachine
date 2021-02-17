@@ -49,7 +49,7 @@ class TestSimplestStateMachine(unittest.TestCase):
 
     def test_info(self):
         self.assertEqual(type(self.light).state.sub_states["on"].info, "not turned off")
-        self.assertEqual(type(self.light).state['off'].transitions['switch'][Path('on')].info, "turn the light on")
+        self.assertEqual(type(self.light).state['off'].trigger_transitions['switch'][Path('on')].info, "turn the light on")
 
 
 class TestStateMachine(unittest.TestCase):
@@ -437,7 +437,7 @@ class TestListedTransitionStateMachine(unittest.TestCase):
     def test_construction(self):
         """test whether all states, transitions and trigger(s) are in place"""
         self.assertEqual(len(self.machine.sub_states), 3)
-        self.assertEqual(len(self.machine['solid'].transitions), 1)
+        self.assertEqual(len(self.machine['solid'].trigger_transitions), 1)
 
     def test_transitions(self):
         """test whether transitions work in this case"""
@@ -699,7 +699,7 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertEqual(count_transitions(child_state), 12)
         child_state = self.object_class.state["off"]
         self.assertEqual(count_transitions(child_state), 5)
-        self.assertEqual(len(child_state['working'].transitions), 4)
+        self.assertEqual(len(child_state['working'].trigger_transitions), 4)
 
     def test_len_in_getitem_iter_for_states(self):
         machine = self.object_class.state

@@ -473,6 +473,23 @@ The state machine has a couple of other options and niceties to enhance the expe
 
 This is a new section of the readme, starting at version 0.4.0.
 
+#### Version 0.5.3
+
+Enables easier integration with SqlAlchemy (and probably Django).
+
+**Features**
+
+- add argument `name` (default `None` in which case nothing changes) to state machine configuration. This is the attribute name the state is stored under on the stateful object. For example useful as column name for use with SqlAlchemy, to enable querying on the state:
+
+  ```python
+  class User(StatefulObject, SqlaBase):
+      state = Column(String(32), nullable=False)
+      machine = state_machine(name='state', ...) 
+      ...
+      
+  blocked_users = session.query(User).filter(User.state='blocked').all()
+  ```
+
 #### Version 0.5.2
 
 Bugfix release
@@ -487,15 +504,7 @@ Added extra decorators for convenience and some edge case:
 
 **Features**
 
-- add `before_exit` and `after_entry` decorators,
-
-**Changes**
-
-- None other
-
-**Bug fixes**
-
-- no known bugs
+- add `before_exit` and `after_entry` decorators.
 
 #### Version 0.5.0
 A major overhaul, with many improvements, especially in configuration and performance:
@@ -513,9 +522,6 @@ A major overhaul, with many improvements, especially in configuration and perfor
 
 - configuration now uses validating functions instead of plain dictionaries and lists. 
 - Old configurations should still work, but no guarantees.
-
-**Bug fixes**
-- no known bugs
 
 #### Version 0.4.1:
 

@@ -99,8 +99,7 @@ def normalize_statemachine_config(**config):
     :param config: configuration written by user-developer
     :return: normalized configuration
     """
-    config = copy_struct(config)
-
+    config_listify_keys = ('transitions', 'prepare')
     state_listify_keys = ('on_entry', 'on_exit', 'on_stay')
     trans_listify_keys = ('old_state', 'trigger', 'on_transfer', 'condition')
     case_listify_keys = ('on_transfer', 'condition')
@@ -142,6 +141,12 @@ def normalize_statemachine_config(**config):
         for k in keys:
             if k in dct:
                 dct[k] = listify(dct[k])
+
+    def normalize_config(config):
+        config = copy_struct(config)
+        listify_by_keys(config, *config_listify_keys)
+        return config
+
 
     def verify_states(*state_names):
         for state_name in state_names:
@@ -287,11 +292,12 @@ def normalize_statemachine_config(**config):
         check_conditionals(transition_dicts)
         return transition_dicts
 
+    config = normalize_config(config)
     config_states = config.get('states')
     if config_states:
         states_dict = normalize_states(config['states'])
-        transitions = normalize_transitions(config['transitions'])
+        transition_dicts = normalize_transitions(config['transitions'])
         for state_name, state_config in config_states.items():
             states_dict[state_name] = normalize_statemachine_config(**state_config)
-        config.update(states=states_dict, transitions=transitions)
+        config.update(states=states_dict, transitions=transition_dicts)
     return config

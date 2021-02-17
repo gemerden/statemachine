@@ -18,12 +18,12 @@ class BaseState(object):
     parent = path = root = up = None
 
     @classmethod
-    def _validate_name(cls, name, exclude=(".", "*", "[", "]", "(", ")")):
+    def _validate_name(cls, name, exclude=(".", "*", "[", "]", "(", ")"), underscore=False):
         if name is None:
             return None
         if not len(name.strip()):
             raise MachineError(f"state or state machine must have a name")
-        if name.startswith('_'):
+        if not underscore and name.startswith('_'):
             raise MachineError(f"state or machine name '{name}' cannot start with an '_'")
         if any(c in name for c in exclude):
             raise MachineError(f"state or machine name '{name}' cannot contain characters %s" % exclude)
@@ -150,7 +150,7 @@ class LeafState(ChildState, DummyMapping):
 
     def _init_transitions(self, transition_dicts):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
-        self.transitions = defaultdict(dict)
+        self.trigger_transitions = defaultdict(dict)
         for trans_dict in transition_dicts:
             target_name = trans_dict.pop('new_state')
             target = Path(target_name).get_in(self.root)
@@ -159,21 +159,21 @@ class LeafState(ChildState, DummyMapping):
     def create_transition(self, **trans_dict):
         target = self.parent.lookup(Path(trans_dict.pop('new_state')))
         transition = Transition(state=self, target=target, **trans_dict)
-        self.transitions[transition.trigger][transition.target.path] = transition
+        self.trigger_transitions[transition.trigger][transition.target.path] = transition
 
     def iter_states(self, filter=lambda s: True):
         if filter(self):
             yield self
 
     def iter_transitions(self, filter=lambda t: True):
-        for transition_dict in self.transitions.values():
+        for transition_dict in self.trigger_transitions.values():
             for transaction in transition_dict.values():
                 if filter(transaction):
                     yield transaction
 
     @lazy_property
     def triggers(self):
-        return set(self.transitions)
+        return set(self.trigger_transitions)
 
     def as_json_dict(self, **extra):
         return super().as_json_dict(transitions=[t.as_json_dict() for t in self.iter_transitions()], **extra)
@@ -182,20 +182,22 @@ class LeafState(ChildState, DummyMapping):
 class StateMachine(ParentState):
 
     @classmethod
-    def from_config(cls, states, transitions=(), **config):
+    def from_config(cls, name=None, states=None, transitions=(), **config):
+        if not states:
+            raise MachineError(f"cannot initialize state machine without states")
         if not len(transitions):
             transitions = []
             for old_state in states:
                 for new_state in states:
                     transitions.append(dict(old_state=old_state, new_state=new_state, trigger='goto_' + new_state))
         config = normalize_statemachine_config(states=states, transitions=transitions, **config)
-        return cls(**config)
+        return cls(name=name, **config)
 
-    def __init__(self, states=None, transitions=(), on_stay=(), prepare=(), contextmanager=None, info=""):
+    def __init__(self, name=None, states=None, transitions=(), on_stay=(), prepare=(), contextmanager=None, info=""):
         self.path = Path()
         self.root = self
         self.up = [self]
-        super().__init__(states=states or {}, transitions=transitions,
+        super().__init__(name=name, states=states or {}, transitions=transitions,
                          on_stay=on_stay, prepare=prepare, info=info)
         self._contextmanager = contextmanager
         self._triggered_cache = defaultdict(dict)  # cache for transition lookup when trigger is called
@@ -208,8 +210,11 @@ class StateMachine(ParentState):
             self._install_triggers(self.owner_cls)
 
     def __set_name__(self, cls, name):
-        self.name = self._validate_name(name)
-        self.attr_name = '_' + self.name
+        if self.name and self.name != name:
+            self.attr_name = self._validate_name(name)
+        else:
+            self.name = self._validate_name(name)
+            self.attr_name = '_' + self.name
         self.owner_cls = cls
         if not cls._state_machines:
             cls._state_machines = {}
@@ -283,7 +288,7 @@ class StateMachine(ParentState):
         transitions = []
         getter = lambda p: self[p]
         for old_path in get_expanded_paths(old_state_name_s, getter=getter, extend=True):
-            trans_dict = old_path.get_in(self).transitions
+            trans_dict = old_path.get_in(self).trigger_transitions
             triggers = [trigger] if trigger else list(trans_dict)
             for new_path in get_expanded_paths(new_state_name_s, getter=getter, extend=True):
                 for trigg in triggers:
@@ -307,6 +312,14 @@ class StateMachine(ParentState):
 
         self._reset_on_new_callback()
         return register
+
+    @property
+    def states(self):
+        return [s.name for s in self.iter_states()]
+
+    @property
+    def transitions(self):
+        return [(str(t.state.path), str(t.target.path)) for t in self.iter_transitions()]
 
     def on_entry(self, state_name, *state_names):
         return self._register_state_callback('on_entry', state_name, *state_names)
@@ -377,7 +390,7 @@ class StateMachine(ParentState):
                 return executes
 
         def get_executes(state_name):
-            transitions = list(Path(state_name).get_in(self).transitions[trigger].values())
+            transitions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
             if transitions:
                 return [t.execute for t in transitions]
             raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")

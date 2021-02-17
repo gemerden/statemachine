@@ -115,7 +115,7 @@ class Transition(object):
 
     def add_condition(self, callback):
         self.callbacks.register(condition=callback)
-        related = list(self.state.transitions[self.trigger].values())
+        related = list(self.state.trigger_transitions[self.trigger].values())
         if related[-1].callbacks.condition:
             if any(t.state is t.target for t in related):
                 raise MachineError(f"cannot create default same state transition from '{self.state.name}' "

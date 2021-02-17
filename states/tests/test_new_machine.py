@@ -18,7 +18,7 @@ class TestSimplestStateMachine(unittest.TestCase):
 
     def setUp(self):
         class Lamp(StatefulObject):
-            state = state_machine(states("off", "on"))
+            state = state_machine(states=states("off", "on"))
 
             def __init__(self):
                 super().__init__()
@@ -71,10 +71,10 @@ class TestSimpleStateMachine(unittest.TestCase):
 
     def setUp(self):
         class Lamp(StatefulObject):
-            state = state_machine(states(off=state(info="not turned on"),
-                                         on=state(info="not turned off")),
-                                  transitions(transition("off", "on", trigger="flick", info="turn the light on"),
-                                              transition("on", "off", trigger="flick", info="turn the light off")))
+            state = state_machine(states=states(off=state(info="not turned on"),
+                                                on=state(info="not turned off")),
+                                  transitions=transitions(transition("off", "on", trigger="flick", info="turn the light on"),
+                                                          transition("on", "off", trigger="flick", info="turn the light off")))
 
             def __init__(self):
                 super().__init__()
@@ -113,7 +113,7 @@ class TestSimpleStateMachine(unittest.TestCase):
 
     def test_info(self):
         self.assertEqual(type(self.lamp).state.sub_states["on"].info, "not turned off")
-        self.assertEqual(type(self.lamp).state['off'].transitions['flick'][Path('on')].info, "turn the light on")
+        self.assertEqual(type(self.lamp).state['off'].trigger_transitions['flick'][Path('on')].info, "turn the light on")
 
 
 class TestStateMachine(unittest.TestCase):
@@ -366,17 +366,17 @@ class TestWildcardStateMachine(unittest.TestCase):
         # create a machine based on phase changes of matter (solid, liquid, gas)
 
         self.machine = state_machine(
-            states(solid=state(),
-                   liquid=state(),
-                   gas=state(),
-                   void=state()),
+            states=states(solid=state(),
+                          liquid=state(),
+                          gas=state(),
+                          void=state()),
 
-            transitions(transition('solid', 'liquid', trigger=["melt", "heat"]),
-                        transition('liquid', 'gas', trigger=["evaporate", "heat"]),
-                        transition('gas', 'liquid', trigger=["condense", "cool"]),
-                        transition('liquid', 'solid', trigger=["freeze", "cool"]),
-                        transition('*', 'void', trigger=["zap"]),
-                        transition('void', 'solid', trigger=["unzap"]))
+            transitions=(transition('solid', 'liquid', trigger=["melt", "heat"]),
+                         transition('liquid', 'gas', trigger=["evaporate", "heat"]),
+                         transition('gas', 'liquid', trigger=["condense", "cool"]),
+                         transition('liquid', 'solid', trigger=["freeze", "cool"]),
+                         transition('*', 'void', trigger=["zap"]),
+                         transition('void', 'solid', trigger=["unzap"]))
         )
 
         class Matter(StatefulObject):
@@ -484,12 +484,12 @@ class TestListedTransitionStateMachine(unittest.TestCase):
         class Matter(StatefulObject):
             """object class fo which the state is managed"""
             state = state_machine(
-                states(solid=state(),
-                       liquid=state(),
-                       gas=state()),
-                transitions(transition(["solid", "liquid"], 'gas', trigger='zap'),
-                            transition("gas", "liquid", trigger='cool'),
-                            transition("liquid", "solid", trigger='cool')),
+                states=states(solid=state(),
+                              liquid=state(),
+                              gas=state()),
+                transitions=(transition(["solid", "liquid"], 'gas', trigger='zap'),
+                             transition("gas", "liquid", trigger='cool'),
+                             transition("liquid", "solid", trigger='cool')),
             )
 
             def __init__(self, name, state="solid"):
@@ -596,16 +596,16 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
     def test_machine_error(self):
         with self.assertRaises(MachineError):
             state_machine(
-                states(
+                states=states(
                     on=state(),
                     off=state(),
                     broken=state()),
-                transitions(transition('off', 'on', trigger=["turn_on", "switch"]),
-                            transition('on', 'off', trigger=["turn_off", "switch"]),
-                            transition(["on", "off"], 'broken', trigger="smash"),
-                            transition('broken', switch(default_case('off'),  # wrong order
-                                                        case('on', 'was_on')),
-                                       trigger='fix'))
+                transitions=(transition('off', 'on', trigger=["turn_on", "switch"]),
+                             transition('on', 'off', trigger=["turn_off", "switch"]),
+                             transition(["on", "off"], 'broken', trigger="smash"),
+                             transition('broken', switch(default_case('off'),  # wrong order
+                                                         case('on', 'was_on')),
+                                        trigger='fix'))
             )
 
 
@@ -621,21 +621,21 @@ class TestNestedStateMachine(unittest.TestCase):
         """called before any individual test method"""
         # create a machine config based on phase changes of matter (solid, liquid, gas)
         self.machine = state_machine(
-            states(off=state(states(working=state(),
-                                    broken=state()),
-                             transitions(transition('working', 'broken', trigger='smash'),
-                                         transition('broken', 'working', trigger='fix'))),
+            states=states(off=state(states(working=state(),
+                                           broken=state()),
+                                    transitions(transition('working', 'broken', trigger='smash'),
+                                                transition('broken', 'working', trigger='fix'))),
 
-                   on=state(states(waiting=state(),
-                                   washing=state(),
-                                   drying=state()),
-                            transitions(transition('waiting', 'washing', trigger='wash'),
-                                        transition('washing', 'drying', trigger='dry'),
-                                        transition('drying', 'waiting', trigger='stop')))),
-            transitions(transition('off.working', 'on', trigger=["turn_on", "flick"]),
-                        transition('on', 'off', trigger=["turn_off", "flick"]),
-                        transition(('on.*', 'off'), 'off.broken', trigger=["smash"]),
-                        transition('off.working', 'on.drying', trigger=["just_dry_already"]))
+                          on=state(states(waiting=state(),
+                                          washing=state(),
+                                          drying=state()),
+                                   transitions(transition('waiting', 'washing', trigger='wash'),
+                                               transition('washing', 'drying', trigger='dry'),
+                                               transition('drying', 'waiting', trigger='stop')))),
+            transitions=(transition('off.working', 'on', trigger=["turn_on", "flick"]),
+                         transition('on', 'off', trigger=["turn_off", "flick"]),
+                         transition(('on.*', 'off'), 'off.broken', trigger=["smash"]),
+                         transition('off.working', 'on.drying', trigger=["just_dry_already"]))
         )
 
         class WashingMachine(StatefulObject):
@@ -869,20 +869,20 @@ class TestCallbackDecorators(unittest.TestCase):
         """called before any individual test method"""
         # create a machine config based on phase changes of matter (solid, liquid, gas)
         self.machine = state_machine(
-            states(off=state(states(working=state(),
-                                    broken=state()),
-                             transitions(transition('working', 'broken', trigger='smash'),
-                                         transition('broken', 'working', trigger='fix'))),
-                   on=state(states(waiting=state(),
-                                   washing=state(),
-                                   drying=state()),
-                            transitions(transition('waiting', 'washing', trigger='wash'),
-                                        transition('washing', 'drying', trigger='dry'),
-                                        transition('drying', 'waiting', trigger='stop')))),
-            transitions(transition('off.working', 'on', trigger="turn_on"),
-                        transition('on', 'off', trigger="turn_off"),
-                        transition(('on', 'off'), 'off.broken', trigger="smash"),
-                        transition('off.broken', 'off.working', trigger="fix"))
+            states=states(off=state(states(working=state(),
+                                           broken=state()),
+                                    transitions(transition('working', 'broken', trigger='smash'),
+                                                transition('broken', 'working', trigger='fix'))),
+                          on=state(states(waiting=state(),
+                                          washing=state(),
+                                          drying=state()),
+                                   transitions(transition('waiting', 'washing', trigger='wash'),
+                                               transition('washing', 'drying', trigger='dry'),
+                                               transition('drying', 'waiting', trigger='stop')))),
+            transitions=(transition('off.working', 'on', trigger="turn_on"),
+                         transition('on', 'off', trigger="turn_off"),
+                         transition(('on', 'off'), 'off.broken', trigger="smash"),
+                         transition('off.broken', 'off.working', trigger="fix"))
         )
 
         class WashingMachine(StatefulObject):
@@ -981,10 +981,10 @@ class TestPerformance(unittest.TestCase):
 
     def setUp(self):
         class Lamp(StatefulObject):
-            state = state_machine(states(off=state(),
-                                         on=state()),
-                                  transitions(transition("off", "on", trigger="flick"),
-                                              transition("on", "off", trigger="flick")))
+            state = state_machine(states=states(off=state(),
+                                                on=state()),
+                                  transitions=(transition("off", "on", trigger="flick"),
+                                               transition("on", "off", trigger="flick")))
 
             def __init__(self):
                 super().__init__()
