@@ -1524,3 +1524,44 @@ class TestCaching(unittest.TestCase):
 
         user.login('wrong')
         assert user.state == 'active.logged_out'
+
+
+class TestNameArgument(unittest.TestCase):
+    """test the case where transition configuration contains wildcards '*' """
+
+    def setUp(self):
+        class User(StatefulObject):
+            machine = state_machine(
+                name='state',
+                states=states(
+                    new=state(),  # default: exactly the same result as using just the state name
+                    active=state(),
+                ),
+                transitions=[
+                    transition('new', 'active', trigger='activate'),
+                ]
+            )
+
+            def __init__(self, username):
+                super().__init__(state='new')
+                self.username = username
+                self.password = None
+
+            @machine.on_entry('active')
+            def set_password(self, password):
+                self.password = password
+
+        self.user_class = User
+
+    def test_name_argument(self):
+        user = self.user_class(username='bob')
+        assert user.state == 'new'
+        assert user.machine == 'new'
+        user.activate('password')
+        assert user.state == 'active'
+        assert user.machine == 'active'
+        assert 'state' in user.__dict__
+        assert 'machine' not in user.__dict__
+        assert hasattr(user, 'state')
+        assert hasattr(user, 'machine')
+

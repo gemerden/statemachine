@@ -211,15 +211,17 @@ class StateMachine(ParentState):
 
     def __set_name__(self, cls, name):
         if self.name and self.name != name:
-            self.attr_name = self.name
+            key = self.attr_name = self.name
             self.name = self._validate_name(name)
         else:
-            self.name = self._validate_name(name)
+            key = self.name = self._validate_name(name)
             self.attr_name = '_' + self.name
-        self.owner_cls = cls
+
         if not cls._state_machines:
             cls._state_machines = {}
-        cls._state_machines[self.name] = self
+        cls._state_machines[key] = self
+
+        self.owner_cls = cls
         self._resolve_callbacks(cls)
         self._install_triggers(cls)
 
