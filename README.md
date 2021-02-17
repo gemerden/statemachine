@@ -66,16 +66,16 @@ The module has the following basic and some more advanced features:
 * _conditional transitions_ can be used to change state depending on condition functions,
     * if a transition is triggered, but the condition is not met, the transition does not take place
     * to do this, create multiple transitions from the same state to different states and give them different conditions
-* a number of _callbacks_ can be installed for each state and transition, with `obj` the state managed object and `**kwargs` the arguments passed via the trigger to the callback, (in calling order):
-    * `Machine.prepare(obj, *args, **kwargs)`,
-    * `with Machine.contextmanager(obj, *args, **kwargs) as context:`
-    * `State.before_exit(obj, *args, **kwargs)`,
-    * `State.on_exit(obj, *args, **kwargs)`,
-    * `Transition.on_transfer(obj, *args, **kwargs)`,
-    * `State.on_entry(obj, *args, **kwargs)`,
-    * `State.after_entry(obj, *args, **kwargs)`,
-    * `State.parent.on_stay(obj, *args, **kwargs)`,
-    * note that if a condition is present and not met, the object will stay in its state and an optional callback `State.on_stay` will be called (but not `on_exit` or `on_entry`),
+* a number of _callbacks_ can be installed *when needed*. With `obj` the state managed object and `*args` and `**kwargs` the arguments passed via the trigger to the callback, (in calling order):
+    * `Machine.prepare(obj, *args, **kwargs)` called at the start of any transition (if present)
+    * `with Machine.contextmanager(obj, *args, **kwargs) as context:` context manager for any transition
+    * `State.before_exit(obj, *args, **kwargs)`, called for any sub-state exit,
+    * `State.on_exit(obj, *args, **kwargs)`, called when this state is left,
+    * `Transition.on_transfer(obj, *args, **kwargs)`, called for this specific transition,
+    * `State.on_entry(obj, *args, **kwargs)`, called when this state is entered,
+    * `State.after_entry(obj, *args, **kwargs)`, called for any sub-state entry,
+    * `State.parent.on_stay(obj, *args, **kwargs)`, called when transition does not leave the parent state,
+    * note that if a condition is present and not met, the object will stay in its state and an optional callback `State.on_stay` and `Transition.on_transfer(obj, *args, **kwargs)` (if the transition goes back to the same state) will be called (but not `on_exit` or `on_entry`, etc.),
     * note also that `obj` can be `self`, so callbacks can (and usually are) methods of the class that uses the state machine.
 * _callbacks_ can be methods on the class of which the state is managed by the machine:
     * This is the case the callback is configured as a string (e.g. `"on_entry": "do_callback"`) that is looked op on the stateful class,
@@ -472,6 +472,14 @@ The state machine has a couple of other options and niceties to enhance the expe
 ## Change Log
 
 This is a new section of the readme, starting at version 0.4.0.
+
+#### Version 0.5.2
+
+Bugfix release
+
+**Bug fixes**
+
+- fix in normalize in case of multiple old states and a condition.
 
 #### Version 0.5.1
 
