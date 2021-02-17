@@ -165,14 +165,11 @@ def normalize_statemachine_config(**config):
             state_config = state_config_getter(state_name)
             return list(sub_paths(state_config, path=Path(state_name)))
 
-        def append_transition(old_state, new_state, trigger, transition_dict, case=None):
+        def append_transition(old_state, new_state, trigger, condition=None, on_transfer=None, info=""):
             verify_states(old_state, new_state)
             new_state = initial_state(validate_new_state(new_state))
-            new_transition = transition(old_state, new_state, trigger)
-            new_transition.update(copy_struct(transition_dict))
-            on_transfer = (case or {}).pop('on_transfer', [])
-            new_transition['on_transfer'].extend(on_transfer)  # transition and case have on_transfer
-            new_transition.update(copy_struct(case or {}))
+            new_transition = transition(old_state, new_state, trigger,
+                                        condition=condition, on_transfer=on_transfer, info=info)
             transition_dicts.append(new_transition)
 
         def append_default_transition(old_state, trigger):
@@ -183,6 +180,7 @@ def normalize_statemachine_config(**config):
         old_states = transition_dict.pop('old_state')
         new_states = transition_dict.pop('new_state')
         triggers = transition_dict.pop('trigger')
+        on_transfer = transition_dict.pop('on_transfer', [])
 
         for old_state in get_expanded_state_names(*old_states,
                                                   state_getter=states_getter):
@@ -191,13 +189,17 @@ def normalize_statemachine_config(**config):
                     if isinstance(new_states, Mapping):
                         for new_state, case in new_states.items():
                             listify_by_keys(case, *case_listify_keys)
-                            append_transition(full_old_state, new_state, trigger, transition_dict, case)
+                            on_transfer = on_transfer + case.get('on_transfer', [])
+                            append_transition(full_old_state, new_state, trigger,
+                                              case.get('condition'), on_transfer, case.get('info', ""))
                     elif isinstance(new_states, (list, tuple)):
                         for case in new_states:
                             listify_by_keys(case, *case_listify_keys)
-                            append_transition(full_old_state, case.pop('state'), trigger, transition_dict, case)
+                            on_transfer = on_transfer + case.get('on_transfer', [])
+                            append_transition(full_old_state, case['state'], trigger,
+                                              case.get('condition'), on_transfer, case.get('info', ""))
                     else:
-                        append_transition(full_old_state, new_states, trigger, transition_dict)
+                        append_transition(full_old_state, new_states, trigger, on_transfer=on_transfer, **transition_dict)
 
                     if transition_dicts[-1].get('condition'):
                         if transition_dicts[-1]['old_state'] == transition_dicts[-1]['new_state']:

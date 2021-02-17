@@ -133,3 +133,21 @@ class TestStatemachineStandardizarion(unittest.TestCase):
         assert len(standard_config['states']['off']['transitions']) == 3
 
         # assert config == standard_config  # to print out the diff in pycharm
+
+    def test_multiple_old_states_with_conditions(self):
+        config = dict(
+            states=states(on=state(),
+                          off=state(),
+                          broken=state()),
+            transitions=transitions(transition('off', 'on', trigger="flip"),
+                                    transition('on', 'off', trigger="flip"),
+                                    transition(["on", "off"], 'broken', trigger="smash"),
+                                    transition(('broken', 'off'), switch(case('on', 'condition_func'),
+                                                                         default_case('off')),
+                                               trigger='fix')),
+        )
+        standard_config = normalize_statemachine_config(**config)
+        self.assert_standard_config(standard_config)
+
+        assert len(standard_config['transitions']) == 8
+        assert count(standard_config['transitions'], key=lambda t: t['condition']) == 2
