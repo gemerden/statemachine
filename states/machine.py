@@ -211,7 +211,8 @@ class StateMachine(ParentState):
 
     def __set_name__(self, cls, name):
         if self.name and self.name != name:
-            self.attr_name = self._validate_name(name)
+            self.attr_name = self.name
+            self.name = self._validate_name(name)
         else:
             self.name = self._validate_name(name)
             self.attr_name = '_' + self.name
