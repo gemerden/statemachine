@@ -720,20 +720,6 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertEqual(child_state["waiting"].name, "waiting")
         self.assertEqual(len([s for s in self.object_class.state]), 2)
 
-    def test_getitem_for_transitions(self):
-        machine = self.object_class.state
-        self.assertEqual(machine["off.working", "turn_on"][Path("on.waiting")].state, machine["off"]["working"])
-        self.assertEqual(machine["off.working", "turn_on"][Path("on.waiting")].target, machine["on"]["waiting"])
-        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].state.path), "on.washing")
-        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].target.path), "on.drying")
-        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].state.path), "off.working")
-        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].target.path), "on.drying")
-
-    def test_in_for_transitions(self):
-        machine = self.object_class.state
-        self.assertTrue(("washing", "drying") in machine["on"])
-        self.assertTrue(("waiting", "washing") in machine["on"])
-
     def test_decoration_double_wildcard(self):
         machine = self.object_class.state
 
@@ -1018,7 +1004,7 @@ class TestPerformance(unittest.TestCase):
     def test_performance(self):
         lamp = self.lamp
 
-        N = 10_000
+        N = 100_000
         with stopwatch() as stop_time:
             for _ in range(N):
                 lamp.flick()

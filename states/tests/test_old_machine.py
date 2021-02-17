@@ -713,21 +713,6 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertEqual(child_state["none"].name, "none")
         self.assertEqual(len([s for s in self.object_class.state]), 2)
 
-    def test_getitem_for_transitions(self):
-        machine = self.object_class.state
-        self.assertEqual(machine["off.working", "turn_on"][Path("on.none")].state, machine["off"]["working"])
-        self.assertEqual(machine["off.working", "turn_on"][Path("on.none")].target, machine["on"]["none"])
-        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].state.path), "on.washing")
-        self.assertEqual(str(machine["on"]["washing", "dry"][Path('on.drying')].target.path), "on.drying")
-        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].state.path), "off.working")
-        self.assertEqual(str(machine["off.working", "just_dry_already", "on.drying"].target.path), "on.drying")
-
-    def test_in_for_transitions(self):
-        machine = self.object_class.state
-        self.assertTrue(("off.working", "on.drying") in machine)
-        self.assertTrue(("washing", "drying") in machine["on"])
-        self.assertTrue(("none", "washing") in machine["on"])
-
     def test_triggering(self):
         washer = self.object_class()
         self.assertEqual(washer.state, "off.working")

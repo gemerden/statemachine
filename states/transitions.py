@@ -78,9 +78,7 @@ class Transition(object):
         return set_state
 
     @property
-    def execute(self):
-        condition = self.condition
-
+    def effective_callbacks(self):
         if self.state is self.target:
             callbacks = [self.on_transfer,
                          *self.inner_stays]
@@ -93,6 +91,12 @@ class Transition(object):
 
         if not self.on_transfer:
             callbacks.remove(self.on_transfer)
+        return callbacks
+
+    @property
+    def execute(self):
+        condition = self.condition
+        callbacks = self.effective_callbacks
 
         if condition:
             def execute(obj, *args, **kwargs):
