@@ -101,11 +101,6 @@ class ParentState(BaseState, Mapping):
             return self.sub_states[key]
         elif isinstance(key, Path):
             return key.get_in(self)
-        elif isinstance(key, tuple):
-            if len(key) == 2:
-                return Path(key[0]).get_in(self).transitions[key[1]]
-            elif len(key) == 3:
-                return Path(key[0]).get_in(self).transitions[key[1]][self.path + key[2]]
         raise KeyError(f"key '{key}' does not exist in state {self.name}")
 
     def iter_states(self, filter=lambda s: True):
@@ -223,24 +218,28 @@ class StateMachine(ParentState):
         self._install_triggers(cls)
 
     def _install_triggers(self, cls):
+        """
+        Adds trigger methods to the owner class, the trigger method can trigger multiple state machines
+
+        :param cls: owner class on which the triggers are installed
+        """
         trigger_functions = defaultdict(list)
-        for machine in cls._state_machines.values():
-            for trigger in machine.triggers:  # the names
-                trigger_function = machine.get_trigger(trigger)
-                trigger_functions[trigger].append(trigger_function)
+        for machine in cls._state_machines.values():  # gather state machines organized by trigger (name)
+            for trigger_name in machine.triggers:
+                trigger_function = machine.get_trigger(trigger_name)
+                trigger_functions[trigger_name].append(trigger_function)
 
-        for trigger, funcs in trigger_functions.items():
-
+        for trigger_name, funcs in trigger_functions.items():
             if len(funcs) == 1:
                 trigger_function = funcs[0]
             else:
                 def trigger_function(obj, *args, __fs=funcs, **kwargs):
-                    for f in __fs:
+                    for f in __fs:  # one f per state machine
                         f(obj, *args, **kwargs)
                     return obj
 
-            trigger_function.__name__ = trigger
-            setattr(cls, trigger, trigger_function)
+            trigger_function.__name__ = trigger_name
+            setattr(cls, trigger_name, trigger_function)
 
     def _resolve_callbacks(self, cls):
         """
@@ -363,7 +362,7 @@ class StateMachine(ParentState):
             state.callbacks.on_entry(obj, *args, **kwargs)
 
     def get_trigger(self, trigger):
-        """ property that holds the function that executes when a trigger is called """
+        """ returns the function that executes when a trigger is called """
 
         prepare = self.callbacks.prepare
         contextmanager = self._contextmanager
@@ -374,11 +373,14 @@ class StateMachine(ParentState):
             try:
                 return trigger_cache[state_name]
             except KeyError:
-                transitions = list(Path(state_name).get_in(self).transitions[trigger].values())
-                if transitions:
-                    executes = trigger_cache[state_name] = [t.execute for t in transitions]
-                    return executes
-                raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
+                executes = trigger_cache[state_name] = get_executes(state_name)
+                return executes
+
+        def get_executes(state_name):
+            transitions = list(Path(state_name).get_in(self).transitions[trigger].values())
+            if transitions:
+                return [t.execute for t in transitions]
+            raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
 
         def execute(obj, *args, **kwargs):
             for execute_ in triggered(state_getter(obj)):
