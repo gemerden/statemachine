@@ -200,12 +200,12 @@ class StateMachine(ParentState):
         super().__init__(name=name, states=states or {}, transitions=transitions,
                          on_stay=on_stay, prepare=prepare, info=info)
         self._contextmanager = contextmanager
-        self._triggered_cache = defaultdict(dict)  # cache for transition lookup when trigger is called
+        self._callback_cache = defaultdict(dict)  # cache for transition lookup when trigger is called
         self.attr_name = None
         self.owner_cls = None
 
     def _reset_on_new_callback(self):
-        self._triggered_cache.clear()
+        self._callback_cache.clear()
         if self.owner_cls:
             self._install_triggers(self.owner_cls)
 
@@ -374,62 +374,72 @@ class StateMachine(ParentState):
         return func
 
     def init_entry(self, obj, *args, **kwargs):
-        for state in Path(getattr(obj, self.attr_name)).iter_in(self):
-            state.callbacks.on_entry(obj, *args, **kwargs)
+        """
+        entry in initial state, optional during object construction;
+        somewhat laborious since no convenient transition exists
+        """
+        if self.callbacks.prepare:
+            self.callbacks.prepare(obj, *args, **kwargs)
+        if self._contextmanager:
+            with self._contextmanager(obj, *args, **kwargs) as context:
+                if context in kwargs:
+                    raise TransitionError(f"cannot pass context from contextmanager: trigger called with argument 'context'")
+                kwargs['context'] = context
+                for state in Path(getattr(obj, self.attr_name)).iter_in(self):
+                    state.callbacks.on_entry(obj, *args, **kwargs)
+                    state.parent.callbacks.after_entry(obj, *args, **kwargs)
+        else:
+            for state in Path(getattr(obj, self.attr_name)).iter_in(self):
+                state.callbacks.on_entry(obj, *args, **kwargs)
+                state.parent.callbacks.after_entry(obj, *args, **kwargs)
 
     def get_trigger(self, trigger):
         """ returns the function that executes when a trigger is called """
-
-        prepare = self.callbacks.prepare
-        contextmanager = self._contextmanager
-        trigger_cache = self._triggered_cache[trigger]
+        callback_cache = self._callback_cache[trigger]
         state_getter = attrgetter(self.attr_name)
 
-        def triggered(state_name):
-            try:
-                return trigger_cache[state_name]
-            except KeyError:
-                executes = trigger_cache[state_name] = get_executes(state_name)
-                return executes
-
-        def get_executes(state_name):
-            transitions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
-            if transitions:
-                return [t.execute for t in transitions]
+        def get_callbacks(state_name):
+            transactions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
+            if transactions:
+                return [(t.condition or None, t.effective_callbacks) for t in transactions]  # resolve falsehood
             raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
 
         def execute(obj, *args, **kwargs):
-            for execute_ in triggered(state_getter(obj)):
-                if execute_(obj, *args, **kwargs):
+            state_name = state_getter(obj)
+            try:
+                condition_callbacks = callback_cache[state_name]
+            except KeyError:
+                condition_callbacks = callback_cache[state_name] = get_callbacks(state_name)
+
+            for condition, callbacks in condition_callbacks:
+                if condition is None or condition(obj, *args, **kwargs):
+                    for callback in callbacks:
+                        callback(obj, *args, **kwargs)
                     return obj
-            raise TransitionError(f"no transitions from '{obj.state}' with trigger '{trigger}' found")
+            raise MachineError(f"no transition returned 'True' from '{obj.state}' with trigger '{trigger}'; please report!")
 
-        def kwargs_with_context(kwargs, context):
-            if 'context' in kwargs:
-                raise TransitionError(f"cannot pass context from contextmanager: trigger called with argument 'context'")
-            kwargs['context'] = context
-
-        if contextmanager:
-            if prepare:
-                def inner_trigger(obj, *args, **kwargs):
-                    prepare(obj, *args, **kwargs)
-                    with contextmanager(obj, *args, **kwargs) as context:
-                        kwargs_with_context(kwargs, context)
-                        return execute(obj, *args, **kwargs)
+        def get_trigger_func(execute_, prepare_, contextmanager_):
+            if contextmanager_:
+                if prepare_:
+                    def trigger_func(obj, *args, **kwargs):
+                        prepare_(obj, *args, **kwargs)
+                        with contextmanager_(obj, *args, **kwargs) as context:
+                            return execute_(obj, *args, context=context, **kwargs)
+                else:
+                    def trigger_func(obj, *args, **kwargs):
+                        with contextmanager_(obj, *args, **kwargs) as context:
+                            return execute_(obj, *args, context=context, **kwargs)
             else:
-                def inner_trigger(obj, *args, **kwargs):
-                    with contextmanager(obj, *args, **kwargs) as context:
-                        kwargs_with_context(kwargs, context)
-                        return execute(obj, *args, **kwargs)
-        else:
-            if prepare:
-                def inner_trigger(obj, *args, **kwargs):
-                    prepare(obj, *args, **kwargs)
-                    return execute(obj, *args, **kwargs)
-            else:
-                inner_trigger = execute
+                if prepare_:
+                    def trigger_func(obj, *args, **kwargs):
+                        prepare_(obj, *args, **kwargs)
+                        return execute_(obj, *args, **kwargs)
+                else:
+                    trigger_func = execute_
 
-        return inner_trigger
+            return trigger_func
+
+        return get_trigger_func(execute, self.callbacks.prepare, self._contextmanager)
 
     def save_graph(self, filename, **options):
         save_graph(machine=self,
