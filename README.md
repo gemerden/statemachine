@@ -473,6 +473,24 @@ The state machine has a couple of other options and niceties to enhance the expe
 
 This is a new section of the readme, starting at version 0.4.0.
 
+#### Version 0.5.5
+
+**Features**
+
+* improved speed (~20%); simple state machine with single callback now changes state in ~ 0.82 microseconds on intel i7 from 2016, with Win10.
+
+**Bug fixes**
+
+- method for calling `on_entry` callbacks after initializing the state of an object during construction is now consistent with previous fixes.
+
+#### Version 0.5.4
+
+Bugfix release
+
+**Bug fixes**
+
+- small fix for lost code (must be tired) + extra test.
+
 #### Version 0.5.3
 
 Enables easier integration with SqlAlchemy (and probably Django).
