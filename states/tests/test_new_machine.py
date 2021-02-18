@@ -986,18 +986,13 @@ class TestPerformance(unittest.TestCase):
                                   transitions=(transition("off", "on", trigger="flick"),
                                                transition("on", "off", trigger="flick")))
 
-            def __init__(self):
-                super().__init__()
-                self.on_count = 0
-                self.off_count = 0
-
             @state.on_entry('on')
-            def inc_on_count(self, **kwargs):
-                self.on_count += 1
+            def inc_on_count(self):
+                pass
 
             @state.on_entry('off')
-            def inc_on_count(self, **kwargs):
-                self.off_count += 1
+            def inc_on_count(self):
+                pass
 
         self.lamp = Lamp()
 
@@ -1008,7 +1003,7 @@ class TestPerformance(unittest.TestCase):
         with stopwatch() as stop_time:
             for _ in range(N):
                 lamp.flick()
-        assert stop_time() / N < 4.0e-6  # normally ~ 1.2e-6 (windows, i7, 2016), but github Actions can be slower
+        assert stop_time() / N < 2.0e-6  # < 1.0e-6 (windows, i7, 2016), but unit-testing by github Actions can be slower
         print('\n', stop_time() / N)
 
 
