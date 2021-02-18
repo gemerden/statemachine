@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='states3',
-    version='0.5.4',
+    version='0.5.5',
     description='state machine for python classes',
     long_description='see <https://github.com/gemerden/statemachine>',  # after long battle to get markdown to work on PyPI
     author='Lars van Gemerden',
