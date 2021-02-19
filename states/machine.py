@@ -271,7 +271,7 @@ class StateMachine(ParentState):
         """
         if hasattr(obj, self.attr_name):
             raise TransitionError(f"state of {type(obj).__name__} cannot be changed directly; use triggers instead")
-        setattr(obj, self.attr_name, state_name)
+        self.set_state(obj, state_name)
 
     def set_state(self, obj, state_name):
         path = Path(state_name)
@@ -301,7 +301,6 @@ class StateMachine(ParentState):
         if not len(transitions):
             raise MachineError(
                 f"no transitions found from '{old_state_name_s}' to '{new_state_name_s}' with trigger '{trigger}'")
-
         return transitions
 
     def _register_state_callback(self, key, *state_names):
