@@ -3,7 +3,6 @@ __author__ = "lars van gemerden"
 import json
 
 from .callbacks import Callbacks
-from .exception import MachineError
 from .tools import Path, lazy_property
 
 
@@ -115,14 +114,7 @@ class Transition(object):
 
     def add_condition(self, callback):
         self.callbacks.register(condition=callback)
-        related = list(self.state.trigger_transitions[self.trigger].values())
-        if related[-1].callbacks.condition:
-            if any(t.state is t.target for t in related):
-                raise MachineError(f"cannot create default same state transition from '{self.state.name}' "
-                                   f"with trigger '{self.trigger}': same state transition already exists")
-            else:
-                self.state.create_transition(new_state=str(self.state.path), trigger=self.trigger,
-                                             info="auto-generated default transition in case conditions fails")
+        self.state.update_transitions(self.trigger)
 
     def as_json_dict(self):
         result = dict(old_state=str(self.state.path),

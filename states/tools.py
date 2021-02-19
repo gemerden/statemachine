@@ -1,5 +1,6 @@
 __author__ = "lars van gemerden"
 
+from collections import defaultdict
 from contextlib import contextmanager
 from itertools import zip_longest
 from time import perf_counter
@@ -263,6 +264,13 @@ class DummyMapping(Mapping):
 
     def __getitem__(self, key):
         raise KeyError(f"{self.__class__.__name__} has no keys: '{key}'")
+
+
+def group_by(objs, key):
+    grouped = defaultdict(list)
+    for obj in objs:
+        grouped[key(obj)].append(obj)
+    return grouped
 
 
 @contextmanager
