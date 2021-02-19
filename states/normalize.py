@@ -205,12 +205,6 @@ def normalize_statemachine_config(**config):
                                               case.get('condition'), on_transfer, case.get('info', ""))
                     else:
                         append_transition(full_old_state, new_states, trigger, on_transfer=on_transfer, **transition_dict)
-
-                    if transition_dicts[-1].get('condition'):
-                        if transition_dicts[-1]['old_state'] == transition_dicts[-1]['new_state']:
-                            raise MachineError(f"cannot generate default transition: condition on same state transition")
-                        append_default_transition(full_old_state, trigger)
-
         return transition_dicts
 
     def pushdown_transitions(transition_dicts):
@@ -276,20 +270,7 @@ def normalize_statemachine_config(**config):
                     raise MachineError(f"double {unique_key} transition in expanded transitions")
                 seen_keys.add(unique_key)
 
-        def check_conditionals(trans_dicts):
-            triggering = defaultdict(list)
-            for trans_dict in trans_dicts:
-                triggering[get(trans_dict, 'old_state', 'trigger')].append(trans_dict)
-            for key, transes in triggering.items():
-                for trans in transes[:-1]:
-                    if not trans.get("condition"):
-                        raise MachineError(f"missing conditions in transitions with {key}")
-
-                if transes[-1].get("condition"):
-                    raise MachineError(f"no default for conditional transition with {key}")
-
         check_uniqueness(transition_dicts)
-        check_conditionals(transition_dicts)
         return transition_dicts
 
     config = normalize_config(config)

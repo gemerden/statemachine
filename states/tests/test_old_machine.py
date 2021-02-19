@@ -252,18 +252,19 @@ class TestStateMachine(unittest.TestCase):
                 ]
             )
         with self.assertRaises(MachineError):
-            state_machine(
-                states={
-                    "solid": {},
-                    "liquid": {},
-                    "gas": {},
-                },
-                transitions=[
-                    {"old_state": "solid", "new_state": "liquid", "trigger": ["melt"]},
-                    {"old_state": "liquid", "new_state": "gas", "trigger": ["evaporate"]},
-                    {"old_state": "liquid", "new_state": "solid", "trigger": ["evaporate"]},
-                ]
-            )
+            class Matter(StatefulObject):
+                state = state_machine(
+                    states={
+                        "solid": {},
+                        "liquid": {},
+                        "gas": {},
+                    },
+                    transitions=[
+                        {"old_state": "solid", "new_state": "liquid", "trigger": ["melt"]},
+                        {"old_state": "liquid", "new_state": "gas", "trigger": ["evaporate"]},
+                        {"old_state": "liquid", "new_state": "solid", "trigger": ["evaporate"]},
+                    ]
+                )
         with self.assertRaises(TransitionError):
             class A(StatefulObject):
                 state = state_machine(
@@ -501,9 +502,9 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
         light_switch.fix()
         self.assertEqual(light_switch.state, "on")
 
-    def test_machine_error(self):
-        with self.assertRaises(MachineError):
-            state_machine(
+    def test_no_machine_error(self):
+        class Lamp(StatefulObject):
+            state = state_machine(
                 states={
                     "on": {},
                     "off": {},
@@ -517,6 +518,9 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
                     {"old_state": "broken", "new_state": "on", "trigger": "fix", "condition": "was_on"},
                 ],
             )
+
+            def was_on(self):
+                pass
 
 
 class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
@@ -823,12 +827,14 @@ class TestSwitchedTransition(unittest.TestCase):
         config = deepcopy(self.machine_config)
         Path("transitions.3.new_state.off.condition").set_in(config, ())
         with self.assertRaises(MachineError):
-            state_machine(**config)
+            class Washer(StatefulObject):
+                state = state_machine(**config)
 
         config = deepcopy(self.machine_config)
         Path("transitions.3.new_state.off").set_in(config, {})
         with self.assertRaises(MachineError):
-            state_machine(**config)
+            class Washer(StatefulObject):
+                state = state_machine(**config)
 
 
 class TestCallback(unittest.TestCase):
@@ -1005,44 +1011,47 @@ class TestMultiState(unittest.TestCase):
 
 
 class TestMultiStateMachine(unittest.TestCase):
-    class MultiSome(StatefulObject):
-        color = state_machine(
-            states=dict(
-                red={'on_exit': 'color_callback'},
-                blue={'on_exit': 'color_callback'},
-                green={'on_exit': 'color_callback'}
-            ),
-            transitions=[
-                dict(old_state='red', new_state='blue', trigger='next'),
-                dict(old_state='blue', new_state='green', trigger='next'),
-                dict(old_state='green', new_state='red', trigger='next'),
-            ],
-        )
-        mood = state_machine(
-            states=dict(
-                good={'on_exit': 'mood_callback'},
-                bad={'on_exit': 'mood_callback'},
-                ugly={'on_exit': 'mood_callback'}
-            ),
-            transitions=[
-                dict(old_state='good', new_state='bad', trigger='next'),
-                dict(old_state='bad', new_state='ugly', trigger='next'),
-                dict(old_state='ugly', new_state='good', trigger='next'),
-            ],
-        )
+    def setUp(self):
+        class MultiSome(StatefulObject):
+            color = state_machine(
+                states=dict(
+                    red={'on_exit': 'color_callback'},
+                    blue={'on_exit': 'color_callback'},
+                    green={'on_exit': 'color_callback'}
+                ),
+                transitions=[
+                    dict(old_state='red', new_state='blue', trigger='next'),
+                    dict(old_state='blue', new_state='green', trigger='next'),
+                    dict(old_state='green', new_state='red', trigger='next'),
+                ],
+            )
+            mood = state_machine(
+                states=dict(
+                    good={'on_exit': 'mood_callback'},
+                    bad={'on_exit': 'mood_callback'},
+                    ugly={'on_exit': 'mood_callback'}
+                ),
+                transitions=[
+                    dict(old_state='good', new_state='bad', trigger='next'),
+                    dict(old_state='bad', new_state='ugly', trigger='next'),
+                    dict(old_state='ugly', new_state='good', trigger='next'),
+                ],
+            )
 
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.history = dict(color=[], mood=[])
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.history = dict(color=[], mood=[])
 
-        def color_callback(self):
-            self.history['color'].append(self.color)
+            def color_callback(self):
+                self.history['color'].append(self.color)
 
-        def mood_callback(self):
-            self.history['mood'].append(self.mood)
+            def mood_callback(self):
+                self.history['mood'].append(self.mood)
+
+        self.obj_class = MultiSome
 
     def test_transitions(self):
-        some = self.MultiSome()
+        some = self.obj_class()
         for _ in range(6):
             some.next()
 
@@ -1051,44 +1060,47 @@ class TestMultiStateMachine(unittest.TestCase):
 
 
 class TestMultiStateMachineNewConstructors(unittest.TestCase):
-    class MultiSome(StatefulObject):
-        color = state_machine(
-            states=states(
-                red=state(on_exit='color_callback'),
-                blue=state(on_exit='color_callback'),
-                green=state(on_exit='color_callback'),
-            ),
-            transitions=[
-                transition('red', 'blue', trigger='next'),
-                transition('blue', 'green', trigger='next'),
-                transition('green', 'red', trigger='next'),
-            ],
-        )
-        mood = state_machine(
-            states=states(
-                good=state(on_exit='mood_callback'),
-                bad=state(on_exit='mood_callback'),
-                ugly=state(on_exit='mood_callback')
-            ),
-            transitions=[
-                transition('good', 'bad', trigger='next'),
-                transition('bad', 'ugly', trigger='next'),
-                transition('ugly', 'good', trigger='next'),
-            ],
-        )
+    def setUp(self):
+        class MultiSome(StatefulObject):
+            color = state_machine(
+                states=states(
+                    red=state(on_exit='color_callback'),
+                    blue=state(on_exit='color_callback'),
+                    green=state(on_exit='color_callback'),
+                ),
+                transitions=[
+                    transition('red', 'blue', trigger='next'),
+                    transition('blue', 'green', trigger='next'),
+                    transition('green', 'red', trigger='next'),
+                ],
+            )
+            mood = state_machine(
+                states=states(
+                    good=state(on_exit='mood_callback'),
+                    bad=state(on_exit='mood_callback'),
+                    ugly=state(on_exit='mood_callback')
+                ),
+                transitions=[
+                    transition('good', 'bad', trigger='next'),
+                    transition('bad', 'ugly', trigger='next'),
+                    transition('ugly', 'good', trigger='next'),
+                ],
+            )
 
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.history = dict(color=[], mood=[])
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.history = dict(color=[], mood=[])
 
-        def color_callback(self):
-            self.history['color'].append(self.color)
+            def color_callback(self):
+                self.history['color'].append(self.color)
 
-        def mood_callback(self):
-            self.history['mood'].append(self.mood)
+            def mood_callback(self):
+                self.history['mood'].append(self.mood)
+
+        self.obj_class = MultiSome
 
     def test_transitions(self):
-        some = self.MultiSome()
+        some = self.obj_class()
         for _ in range(6):
             some.next()
 

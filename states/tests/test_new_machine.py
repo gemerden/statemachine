@@ -320,19 +320,20 @@ class TestStateMachine(unittest.TestCase):
                 ]
             )
         with self.assertRaises(MachineError):
-            state_machine(
-                states=states(
-                    solid=state(),
-                    liquid=state(),
-                    gas=state(),
-                ),
-                transitions=[
-                    transition("solid", "liquid", trigger=["melt"]),
-                    transition("liquid", "gas", trigger=["evaporate"]),
-                    transition("liquid", "solid", trigger=["evaporate"]),
-                ]
-            )
-        with self.assertRaises(RuntimeError):
+            class Matter(StatefulObject):
+                state = state_machine(
+                    states=states(
+                        solid=state(),
+                        liquid=state(),
+                        gas=state(),
+                    ),
+                    transitions=[
+                        transition("solid", "liquid", trigger=["melt"]),
+                        transition("liquid", "gas", trigger=["evaporate"]),
+                        transition("liquid", "solid", trigger=["evaporate"]),
+                    ]
+                )
+        with self.assertRaises(MachineError):
             # Note the RuntimeError, this is because the error is raised in StateMachine.__set_name__, where
             #   the condition function is looked up on the class; any error raised there is caught and
             #   reraised as a RuntimeError. There is no place to catch this error within the state machine.
@@ -594,8 +595,8 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
         assert light_switch.in_any_case_called == True
 
     def test_machine_error(self):
-        with self.assertRaises(MachineError):
-            state_machine(
+        class Light(StatefulObject):
+            state = state_machine(
                 states=states(
                     on=state(),
                     off=state(),
@@ -603,10 +604,13 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
                 transitions=(transition('off', 'on', trigger=["turn_on", "switch"]),
                              transition('on', 'off', trigger=["turn_off", "switch"]),
                              transition(["on", "off"], 'broken', trigger="smash"),
-                             transition('broken', switch(default_case('off'),  # wrong order
+                             transition('broken', switch(default_case('off'),  # wrong order is fixed
                                                          case('on', 'was_on')),
                                         trigger='fix'))
             )
+
+            def was_on(self, **kwargs):
+                return False
 
 
 class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
@@ -1262,38 +1266,41 @@ class TestPrepare(unittest.TestCase):
 
 
 class TestMultiStateMachine(unittest.TestCase):
-    class MultiSome(StatefulObject):
-        color = state_machine(
-            states=states("red", "blue", "green"),
-            transitions=[
-                transition('red', 'blue', trigger='next'),
-                transition('blue', 'green', trigger='next'),
-                transition('green', 'red', trigger='next'),
-            ],
-        )
-        mood = state_machine(
-            states=states("good", "bad", "ugly"),
-            transitions=[
-                transition('good', 'bad', trigger='next'),
-                transition('bad', 'ugly', trigger='next'),
-                transition('ugly', 'good', trigger='next'),
-            ],
-        )
+    def setUp(self):
+        class MultiSome(StatefulObject):
+            color = state_machine(
+                states=states("red", "blue", "green"),
+                transitions=[
+                    transition('red', 'blue', trigger='next'),
+                    transition('blue', 'green', trigger='next'),
+                    transition('green', 'red', trigger='next'),
+                ],
+            )
+            mood = state_machine(
+                states=states("good", "bad", "ugly"),
+                transitions=[
+                    transition('good', 'bad', trigger='next'),
+                    transition('bad', 'ugly', trigger='next'),
+                    transition('ugly', 'good', trigger='next'),
+                ],
+            )
 
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.history = dict(color=[], mood=[])
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.history = dict(color=[], mood=[])
 
-        @color.on_exit('*')
-        def color_callback(self):
-            self.history['color'].append(self.color)
+            @color.on_exit('*')
+            def color_callback(self):
+                self.history['color'].append(self.color)
 
-        @mood.on_exit('*')
-        def mood_callback(self):
-            self.history['mood'].append(self.mood)
+            @mood.on_exit('*')
+            def mood_callback(self):
+                self.history['mood'].append(self.mood)
+
+        self.obj_class = MultiSome
 
     def test_transitions(self):
-        some = self.MultiSome()
+        some = self.obj_class()
         for _ in range(6):
             some.next()
 
@@ -1302,44 +1309,47 @@ class TestMultiStateMachine(unittest.TestCase):
 
 
 class TestMultiStateMachineOldCallbacks(unittest.TestCase):
-    class MultiSome(StatefulObject):
-        color = state_machine(
-            states=states(
-                red=state(on_exit='color_callback'),
-                blue=state(on_exit='color_callback'),
-                green=state(on_exit='color_callback'),
-            ),
-            transitions=[
-                transition('red', 'blue', trigger='next'),
-                transition('blue', 'green', trigger='next'),
-                transition('green', 'red', trigger='next'),
-            ],
-        )
-        mood = state_machine(
-            states=states(
-                good=state(on_exit='mood_callback'),
-                bad=state(on_exit='mood_callback'),
-                ugly=state(on_exit='mood_callback')
-            ),
-            transitions=[
-                transition('good', 'bad', trigger='next'),
-                transition('bad', 'ugly', trigger='next'),
-                transition('ugly', 'good', trigger='next'),
-            ],
-        )
+    def setUp(self):
+        class MultiSome(StatefulObject):
+            color = state_machine(
+                states=states(
+                    red=state(on_exit='color_callback'),
+                    blue=state(on_exit='color_callback'),
+                    green=state(on_exit='color_callback'),
+                ),
+                transitions=[
+                    transition('red', 'blue', trigger='next'),
+                    transition('blue', 'green', trigger='next'),
+                    transition('green', 'red', trigger='next'),
+                ],
+            )
+            mood = state_machine(
+                states=states(
+                    good=state(on_exit='mood_callback'),
+                    bad=state(on_exit='mood_callback'),
+                    ugly=state(on_exit='mood_callback')
+                ),
+                transitions=[
+                    transition('good', 'bad', trigger='next'),
+                    transition('bad', 'ugly', trigger='next'),
+                    transition('ugly', 'good', trigger='next'),
+                ],
+            )
 
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.history = dict(color=[], mood=[])
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.history = dict(color=[], mood=[])
 
-        def color_callback(self):
-            self.history['color'].append(self.color)
+            def color_callback(self):
+                self.history['color'].append(self.color)
 
-        def mood_callback(self):
-            self.history['mood'].append(self.mood)
+            def mood_callback(self):
+                self.history['mood'].append(self.mood)
+
+        self.obj_class = MultiSome
 
     def test_transitions(self):
-        some = self.MultiSome()
+        some = self.obj_class()
         for _ in range(6):
             some.next()
 
@@ -1357,6 +1367,7 @@ class TestReadmeOne(unittest.TestCase):
                               active=state(states=states('logged_out', 'logged_in'),
                                            transitions=[
                                                transition('logged_out', 'logged_in', trigger='log_in'),
+                                               transition('logged_out', 'logged_out', trigger='log_in'),
                                                transition('logged_in', 'logged_out', trigger='log_out')
                                            ])
                               ),
@@ -1412,7 +1423,8 @@ class TestReadmeTwo(unittest.TestCase):
                         states=states('logged_out', 'logged_in'),
                         transitions=[
                             transition('logged_out', 'logged_in', trigger='login'),
-                            transition('logged_in', 'logged_out', trigger='logout')
+                            transition('logged_out', 'logged_out', trigger='login'),
+                            transition('logged_in', 'logged_out', trigger='logout'),
                         ]
                     ),
                     deleted=state(),
@@ -1503,21 +1515,74 @@ class TestCaching(unittest.TestCase):
 
         self.user_class = User
 
-    def test_late_condition(self):
+    def test_late_callback(self):
         user = self.user_class(username='bob')
-        user.activate('password')
+        test_value = [False]
+
+        @self.user_class.state.on_entry('active')
+        def func(obj, *args, **kwargs):
+            test_value[0] = True
+
+        user.activate("pwd")
+        assert test_value[0] == True
+
+    def test_no_late_condition(self):
+        user = self.user_class(username='bob')
+        with self.assertRaises(MachineError):
+            @self.user_class.state.condition('active.logged_out',
+                                             'active.logged_in')
+            def func():
+                pass
+
+
+class TestConditionWithDoubleOldState(unittest.TestCase):
+    """test the case where transition configuration contains wildcards '*' """
+
+    def setUp(self):
+        class User(StatefulObject):
+            state = state_machine(
+                states=states(
+                    new=state(),  # default: exactly the same result as using just the state name
+                    active=state(
+                        states=states('logged_out', 'logged_in'),
+                        transitions=[
+                            transition(('logged_out', 'logged_in'), 'logged_in', trigger='login'),
+                            transition('logged_in', 'logged_out', trigger=('login', 'logout'))
+                        ]
+                    ),
+                ),
+                transitions=[
+                    transition('new', 'active', trigger='activate'),
+                ]
+            )
+
+            def __init__(self, username):
+                super().__init__(state='new')
+                self.username = username
+                self.password = None
+
+            @state.on_entry('active')
+            def set_password(self, password):
+                self.password = password
+
+            @state.condition(('active.logged_out',
+                              'active.logged_in'),
+                             'active.logged_in')
+            def verify_password(self, password):
+                return password == self.password
+
+        self.user_class = User
+
+    def test_transitions(self):
+        user = self.user_class(username='bob').activate('password')
 
         user.login("wrong")
-        assert user.state == 'active.logged_in'
-        user.logout()
         assert user.state == 'active.logged_out'
-
-        @self.user_class.state.condition('active.logged_out',
-                                         'active.logged_in')
-        def verify_password(user, password):
-            return user.password == password
-
-        user.login('wrong')
+        user.login("password")
+        assert user.state == 'active.logged_in'
+        user.login("password")
+        assert user.state == 'active.logged_in'
+        user.login("wrong")
         assert user.state == 'active.logged_out'
 
 
@@ -1559,4 +1624,3 @@ class TestNameArgument(unittest.TestCase):
         assert 'machine' not in user.__dict__
         assert hasattr(user, 'state')
         assert hasattr(user, 'machine')
-

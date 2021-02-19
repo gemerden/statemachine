@@ -67,7 +67,6 @@ class Callbacks(object):
                     if callback(obj, *args, **kwargs) is False:
                         result = False
                 return result
-
         call.__name__ = name
         return call
 
@@ -82,6 +81,9 @@ class Callbacks(object):
         for name, callback in callbacks.items():
             self._callbacks[name].extend(listify(callback))
         self._clear_cache(*callbacks)
+
+    def has(self, name):
+        return bool(self._callbacks.get(name))
 
     def _clear_cache(self, *names):
         if len(names):

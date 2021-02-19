@@ -9,6 +9,14 @@ class StatefulObject(object):
 
     _state_machines = None  # initialized by state machines on subclasses
 
+    def __init_subclass__(cls, **kwargs):
+        """ moved from StateMachine.__set_class__ for better error handling (no RunTimeError)"""
+        super().__init_subclass__(**kwargs)
+        for machine in cls._state_machines.values():
+            machine.resolve_callbacks(cls)
+            machine.install_triggers(cls)
+            machine.validate()
+
     def __init__(self, *args, **kwargs):
         """
         Constructor for this base class. Initial state(s) can be given with the name of the state machine(s), as in:
