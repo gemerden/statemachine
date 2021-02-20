@@ -376,6 +376,9 @@ class StateMachine(ParentState):
         return self._register_state_callback('after_entry', *state_names)
 
     def constraint(self, *state_names):
+        if self.validated:
+            raise MachineError(f"cannot dynamically add constraint for {state_names} "
+                               f"to '{self.name}' after class construction")
         return self._register_state_callback('constraint', *state_names)
 
     def on_transfer(self, old_state_name_s, new_state_name_s, trigger=None):
