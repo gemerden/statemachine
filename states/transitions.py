@@ -25,8 +25,9 @@ class Transition(object):
         return common.get_in(self.state.root)
 
     @property
-    def condition(self):
-        return self.callbacks.condition
+    def conditions(self):
+        conditions = [self.callbacks.condition, *(state.callbacks.constraint for state in self.target.up)]
+        return [c for c in conditions if c]
 
     @property
     def on_transfer(self):
@@ -94,12 +95,12 @@ class Transition(object):
 
     @property
     def execute(self):
-        condition = self.condition
+        conditions = self.conditions
         callbacks = self.effective_callbacks
 
-        if condition:
+        if conditions:
             def execute(obj, *args, **kwargs):
-                if condition(obj, *args, **kwargs):
+                if any(c(obj, *args, **kwargs) for c in conditions):
                     for callback in callbacks:
                         callback(obj, *args, **kwargs)
                     return True

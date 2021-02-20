@@ -28,8 +28,8 @@ class BaseState(object):
             raise MachineError(f"state or machine name '{name}' cannot contain characters %s" % exclude)
         return name
 
-    def __init__(self, name=None, info="", on_stay=(), **callbacks):
-        self.callbacks = Callbacks(on_stay=on_stay, **callbacks)
+    def __init__(self, name=None, info="", on_stay=(), constraint=(), **callbacks):
+        self.callbacks = Callbacks(on_stay=on_stay, constraint=constraint, **callbacks)
         self.name = self._validate_name(name)
         self.info = info
 
@@ -196,11 +196,11 @@ class LeafState(ChildState, DummyMapping):
         for trigger in self.trigger_transitions:
             transitions = self.update_transitions(trigger)
             for transition in transitions[:-1]:
-                if not transition.condition:
+                if not transition.conditions:
                     raise MachineError(f"missing condition in transitions from '{str(self.path)}' to "
                                        f"'{str(transition.target.path)}' with trigger '{trigger}' "
                                        f"in machine '{self.name}'")
-            if transitions[-1].condition:
+            if transitions[-1].conditions:
                 if any(t.state is t.target for t in transitions):
                     raise MachineError(f"default transition for conditional transitions from '{str(self.path)}' "
                                        f"with trigger '{trigger}' cannot be created, same state transition "
@@ -375,6 +375,9 @@ class StateMachine(ParentState):
     def after_entry(self, *state_names):
         return self._register_state_callback('after_entry', *state_names)
 
+    def constraint(self, *state_names):
+        return self._register_state_callback('constraint', *state_names)
+
     def on_transfer(self, old_state_name_s, new_state_name_s, trigger=None):
         transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger=trigger)
 
@@ -442,7 +445,7 @@ class StateMachine(ParentState):
         def get_callbacks(state_name):
             transactions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
             if transactions:
-                return [(t.condition or None, t.effective_callbacks) for t in transactions]  # resolve falsehood
+                return [(t.conditions or None, t.effective_callbacks) for t in transactions]  # resolve falsehood
             raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
 
         def execute(obj, *args, **kwargs):
@@ -452,8 +455,8 @@ class StateMachine(ParentState):
             except KeyError:
                 condition_callbacks = callback_cache[state_name] = get_callbacks(state_name)
 
-            for condition, callbacks in condition_callbacks:
-                if condition is None or condition(obj, *args, **kwargs):
+            for conditions, callbacks in condition_callbacks:
+                if conditions is None or any(c(obj, *args, **kwargs) for c in conditions):
                     for callback in callbacks:
                         callback(obj, *args, **kwargs)
                     return obj
