@@ -521,6 +521,16 @@ This state machine is pure python, but very optimized; on a normal PC a state tr
 
 This is a new section of the readme, starting at version 0.4.0.
 
+#### Version 0.5.7
+
+**Changes**
+
+* Some robustness/simplicity improvements, especially handling the alternative name case for e.g. SqlAlchemy.
+
+**Bug fixes**
+
+* fixes bug where no subclass of StatefulObject could be created without state machine.
+
 #### Version 0.5.6
 
 **Features**
