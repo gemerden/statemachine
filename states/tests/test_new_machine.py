@@ -1626,8 +1626,7 @@ class TestNameArgument(unittest.TestCase):
         assert hasattr(user, 'machine')
         with self.assertRaises(TransitionError):
             user.machine = 'active'
-        with self.assertRaises(TransitionError):
-            user.state = 'active'
+        user.state = 'active'
 
 
 class TestStateConstraint(unittest.TestCase):
