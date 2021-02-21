@@ -235,7 +235,7 @@ class StateMachine(ParentState):
                          on_stay=on_stay, prepare=prepare, info=info)
         self._contextmanager = contextmanager
         self._callback_cache = defaultdict(dict)  # cache for transition lookup when trigger is called
-        self.alt_name = None
+        self.use_attr = False
         self.owner_cls = None
         self.validated = False
 
@@ -246,32 +246,29 @@ class StateMachine(ParentState):
 
     def __set_name__(self, cls, name):
         self.owner_cls = cls
-
         if not cls._state_machines:
             cls._state_machines = []
         cls._state_machines.append(self)
 
-        attr_name = self._validate_name(name)
         if self.name and self.name != name:
-            self.alt_name = self.name
-            self.name = attr_name
+            self.use_attr = True
         else:
-            self.name = attr_name
+            self.name = self._validate_name(name)
 
     def __get__(self, obj, cls=None):
         if obj is None:
             return self
-        if self.alt_name:
-            return getattr(obj, self.alt_name)
+        if self.use_attr:
+            return getattr(obj, self.name)
         else:
             return obj.__dict__[self.name]
 
     def __set__(self, obj, state_name):
         """
          - store string version instead of Path() due to e.g. easier persistence in database
-         - using setattr() instead of putting in __dict__ to enable external machinery of getattr to still be called
+         - using setattr() instead of putting in __dict__ to enable external machinery of setattr to still be called
         """
-        if (self.alt_name or self.name) in obj.__dict__:
+        if (self.use_attr and hasattr(obj, self.name)) or self.name in obj.__dict__:
             raise TransitionError(f"state of {type(obj).__name__} cannot be changed directly; use triggers instead")
 
         path = Path(state_name)
@@ -281,25 +278,24 @@ class StateMachine(ParentState):
             raise TransitionError(f"state machine does not have a state '{state_name}'")
         else:
             full_state_name = str(path + target.default_path)
-            if self.alt_name:
-                setattr(obj, self.alt_name, full_state_name)
+            if self.use_attr:
+                setattr(obj, self.name, full_state_name)
             else:
                 obj.__dict__[self.name] = full_state_name
 
     def set_state_callback(self, state_name):
-        alt_name = self.alt_name
-        dct_name = self.name
-        if alt_name:
+        name = self.name
+        if self.use_attr:
             def inner_set_state_callback(obj, *_, **__):  # mimic other callbacks
-                setattr(obj, alt_name, state_name)
+                setattr(obj, name, state_name)
         else:
             def inner_set_state_callback(obj, *_, **__):
-                obj.__dict__[dct_name] = state_name
+                obj.__dict__[name] = state_name
 
         return inner_set_state_callback
 
     def set_from_kwargs(self, obj, kwargs):
-        state_name = kwargs.pop(self.alt_name or self.name, '')
+        state_name = kwargs.pop(self.name, '')
         self.__set__(obj, state_name)
 
     def install_triggers(self, cls):
@@ -466,7 +462,8 @@ class StateMachine(ParentState):
     def get_trigger(self, trigger):
         """ returns the function that executes when a trigger is called """
         callback_cache = self._callback_cache[trigger]
-        state_getter = attrgetter(self.name)
+        attr_name = self.name
+        use_getattr = self.use_attr
 
         def get_callbacks(state_name):
             transactions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
@@ -475,7 +472,10 @@ class StateMachine(ParentState):
             raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
 
         def execute(obj, *args, **kwargs):
-            state_name = state_getter(obj)
+            if use_getattr:
+                state_name = getattr(obj, attr_name)
+            else:
+                state_name = obj.__dict__[attr_name]
             try:
                 condition_callbacks = callback_cache[state_name]
             except KeyError:
