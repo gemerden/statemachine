@@ -1621,7 +1621,6 @@ class TestNameArgument(unittest.TestCase):
         assert user.state == 'active'
         assert user.machine == 'active'
         assert 'state' in user.__dict__
-        assert 'machine' in user.__dict__
         assert hasattr(user, 'state')
         assert hasattr(user, 'machine')
         with self.assertRaises(TransitionError):

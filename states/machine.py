@@ -261,37 +261,30 @@ class StateMachine(ParentState):
     def __get__(self, obj, cls=None):
         if obj is None:
             return self
-        return obj.__dict__[self.name]
+        if self.alt_name:
+            return getattr(obj, self.alt_name)
+        else:
+            return obj.__dict__[self.name]
 
     def __set__(self, obj, state_name):
         """
          - store string version instead of Path() due to e.g. easier persistence in database
          - using setattr() instead of putting in __dict__ to enable external machinery of getattr to still be called
         """
-        if self.name in obj.__dict__:
+        if (self.alt_name or self.name) in obj.__dict__:
             raise TransitionError(f"state of {type(obj).__name__} cannot be changed directly; use triggers instead")
 
         path = Path(state_name)
         try:
-            target_state = path.get_in(self)
+            target = path.get_in(self)
         except KeyError:
             raise TransitionError(f"state machine does not have a state '{state_name}'")
         else:
-            self._set_state(obj, str(path + target_state.default_path))
-
-    @lazy_property
-    def _set_state(self):
-        alt_name = self.alt_name
-        dct_name = self.name
-        if alt_name:
-            def inner_set_state(obj, state_name):
-                setattr(obj, alt_name, state_name)
-                obj.__dict__[dct_name] = state_name
-        else:
-            def inner_set_state(obj, state_name):
-                obj.__dict__[dct_name] = state_name
-
-        return inner_set_state
+            full_state_name = str(path + target.default_path)
+            if self.alt_name:
+                setattr(obj, self.alt_name, full_state_name)
+            else:
+                obj.__dict__[self.name] = full_state_name
 
     def set_state_callback(self, state_name):
         alt_name = self.alt_name
@@ -299,7 +292,6 @@ class StateMachine(ParentState):
         if alt_name:
             def inner_set_state_callback(obj, *_, **__):  # mimic other callbacks
                 setattr(obj, alt_name, state_name)
-                obj.__dict__[dct_name] = state_name
         else:
             def inner_set_state_callback(obj, *_, **__):
                 obj.__dict__[dct_name] = state_name
@@ -474,7 +466,7 @@ class StateMachine(ParentState):
     def get_trigger(self, trigger):
         """ returns the function that executes when a trigger is called """
         callback_cache = self._callback_cache[trigger]
-        state_getter = itemgetter(self.name)
+        state_getter = attrgetter(self.name)
 
         def get_callbacks(state_name):
             transactions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
@@ -483,7 +475,7 @@ class StateMachine(ParentState):
             raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
 
         def execute(obj, *args, **kwargs):
-            state_name = obj.__dict__[self.name]
+            state_name = state_getter(obj)
             try:
                 condition_callbacks = callback_cache[state_name]
             except KeyError:

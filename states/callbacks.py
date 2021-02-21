@@ -1,7 +1,7 @@
 __author__ = "lars van gemerden"
 
 import json
-from collections import Mapping
+from typing import Mapping
 
 from states.tools import listify
 
