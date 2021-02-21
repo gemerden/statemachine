@@ -49,4 +49,5 @@ if __name__ == '__main__':
         times.append(time)
         count = len(times)
         print(count, '- time per transition:', r(time),
-              'min:', r(min(times)), 'max:', r(max(times)), 'average:', r(sum(times)/count), 'median:', r(times[count//2]))
+              'min:', r(min(times)), 'max:', r(max(times)),
+              'average:', r(sum(times)/count), 'median:', r(sorted(times)[count//2]))
