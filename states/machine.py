@@ -1,7 +1,7 @@
 import contextlib
 import json
 from collections import defaultdict
-from operator import attrgetter
+from operator import attrgetter, itemgetter
 from typing import Mapping
 
 from .exception import MachineError, TransitionError
@@ -47,7 +47,7 @@ class BaseState(object):
     def default_state(self):
         return self.default_path.get_in(self)
 
-    def validate(self):
+    def validate_transitions(self):
         pass
 
     def as_json_dict(self, **extra):
@@ -128,10 +128,10 @@ class ParentState(BaseState, Mapping):
                 pass
         raise MachineError(f"path '{path}' could not be found from state '{self.name}'")
 
-    def validate(self):
-        super().validate()
+    def validate_transitions(self):
+        super().validate_transitions()
         for state in self.sub_states.values():
-            state.validate()
+            state.validate_transitions()
 
     def as_json_dict(self, **extra):
         return super().as_json_dict(states={n: s.as_json_dict() for n, s in self.sub_states.items()}, **extra)
@@ -192,7 +192,7 @@ class LeafState(ChildState, DummyMapping):
     def triggers(self):
         return set(self.trigger_transitions)
 
-    def validate(self):
+    def validate_transitions(self):
         for trigger in self.trigger_transitions:
             transitions = self.update_transitions(trigger)
             for transition in transitions[:-1]:
@@ -235,7 +235,7 @@ class StateMachine(ParentState):
                          on_stay=on_stay, prepare=prepare, info=info)
         self._contextmanager = contextmanager
         self._callback_cache = defaultdict(dict)  # cache for transition lookup when trigger is called
-        self.attr_name = None
+        self.alt_name = None
         self.owner_cls = None
         self.validated = False
 
@@ -245,17 +245,70 @@ class StateMachine(ParentState):
             self.install_triggers(self.owner_cls)
 
     def __set_name__(self, cls, name):
-        if self.name and self.name != name:
-            key = self.attr_name = self.name
-            self.name = self._validate_name(name)
-        else:
-            key = self.name = self._validate_name(name)
-            self.attr_name = '_' + self.name
         self.owner_cls = cls
 
         if not cls._state_machines:
-            cls._state_machines = {}
-        cls._state_machines[key] = self
+            cls._state_machines = []
+        cls._state_machines.append(self)
+
+        attr_name = self._validate_name(name)
+        if self.name and self.name != name:
+            self.alt_name = self.name
+            self.name = attr_name
+        else:
+            self.name = attr_name
+
+    def __get__(self, obj, cls=None):
+        if obj is None:
+            return self
+        return obj.__dict__[self.name]
+
+    def __set__(self, obj, state_name):
+        """
+         - store string version instead of Path() due to e.g. easier persistence in database
+         - using setattr() instead of putting in __dict__ to enable external machinery of getattr to still be called
+        """
+        if self.name in obj.__dict__:
+            raise TransitionError(f"state of {type(obj).__name__} cannot be changed directly; use triggers instead")
+
+        path = Path(state_name)
+        try:
+            target_state = path.get_in(self)
+        except KeyError:
+            raise TransitionError(f"state machine does not have a state '{state_name}'")
+        else:
+            self._set_state(obj, str(path + target_state.default_path))
+
+    @lazy_property
+    def _set_state(self):
+        alt_name = self.alt_name
+        dct_name = self.name
+        if alt_name:
+            def inner_set_state(obj, state_name):
+                setattr(obj, alt_name, state_name)
+                obj.__dict__[dct_name] = state_name
+        else:
+            def inner_set_state(obj, state_name):
+                obj.__dict__[dct_name] = state_name
+
+        return inner_set_state
+
+    def set_state_callback(self, state_name):
+        alt_name = self.alt_name
+        dct_name = self.name
+        if alt_name:
+            def inner_set_state_callback(obj, *_, **__):  # mimic other callbacks
+                setattr(obj, alt_name, state_name)
+                obj.__dict__[dct_name] = state_name
+        else:
+            def inner_set_state_callback(obj, *_, **__):
+                obj.__dict__[dct_name] = state_name
+
+        return inner_set_state_callback
+
+    def set_from_kwargs(self, obj, kwargs):
+        state_name = kwargs.pop(self.alt_name or self.name, '')
+        self.__set__(obj, state_name)
 
     def install_triggers(self, cls):
         """
@@ -264,7 +317,7 @@ class StateMachine(ParentState):
         :param cls: owner class on which the triggers are installed
         """
         trigger_functions = defaultdict(list)
-        for machine in cls._state_machines.values():  # gather state machines organized by trigger (name)
+        for machine in cls._state_machines:  # gather state machines organized by trigger (name)
             for trigger_name in machine.triggers:
                 trigger_function = machine.get_trigger(trigger_name)
                 trigger_functions[trigger_name].append(trigger_function)
@@ -293,29 +346,6 @@ class StateMachine(ParentState):
                 transition.callbacks.resolve(cls)
         except AttributeError as error:
             raise MachineError(f"callback lookup failed: {str(error)}")
-
-    def __get__(self, obj, cls=None):
-        if obj is None:
-            return self
-        return getattr(obj, self.attr_name)
-
-    def __set__(self, obj, state_name):
-        """
-         - store string version instead of Path() due to e.g. easier persistence in database
-         - using setattr() instead of putting in __dict__ to enable external machinery of getattr to still be called
-        """
-        if hasattr(obj, self.attr_name):
-            raise TransitionError(f"state of {type(obj).__name__} cannot be changed directly; use triggers instead")
-        self.set_state(obj, state_name)
-
-    def set_state(self, obj, state_name):
-        path = Path(state_name)
-        try:
-            target_state = path.get_in(self)
-        except KeyError:
-            raise TransitionError(f"state machine does not have a state '{state_name}'")
-        else:
-            setattr(obj, self.attr_name, str(path + target_state.default_path))
 
     def _lookup_states(self, *state_names):
         state_paths = get_expanded_paths(*state_names,
@@ -427,23 +457,24 @@ class StateMachine(ParentState):
         """
         if self.callbacks.prepare:
             self.callbacks.prepare(obj, *args, **kwargs)
+
         if self._contextmanager:
             with self._contextmanager(obj, *args, **kwargs) as context:
                 if context in kwargs:
                     raise TransitionError(f"cannot pass context from contextmanager: trigger called with argument 'context'")
                 kwargs['context'] = context
-                for state in Path(getattr(obj, self.attr_name)).iter_in(self):
+                for state in Path(getattr(obj, self.name)).iter_in(self):
                     state.callbacks.on_entry(obj, *args, **kwargs)
                     state.parent.callbacks.after_entry(obj, *args, **kwargs)
         else:
-            for state in Path(getattr(obj, self.attr_name)).iter_in(self):
+            for state in Path(getattr(obj, self.name)).iter_in(self):
                 state.callbacks.on_entry(obj, *args, **kwargs)
                 state.parent.callbacks.after_entry(obj, *args, **kwargs)
 
     def get_trigger(self, trigger):
         """ returns the function that executes when a trigger is called """
         callback_cache = self._callback_cache[trigger]
-        state_getter = attrgetter(self.attr_name)
+        state_getter = itemgetter(self.name)
 
         def get_callbacks(state_name):
             transactions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
@@ -452,7 +483,7 @@ class StateMachine(ParentState):
             raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
 
         def execute(obj, *args, **kwargs):
-            state_name = state_getter(obj)
+            state_name = obj.__dict__[self.name]
             try:
                 condition_callbacks = callback_cache[state_name]
             except KeyError:
@@ -488,8 +519,8 @@ class StateMachine(ParentState):
 
         return get_trigger_func(execute, self.callbacks.prepare, self._contextmanager)
 
-    def validate(self):
-        super().validate()
+    def validate_transitions(self):
+        super().validate_transitions()
         self.validated = True
 
     def save_graph(self, filename, **options):

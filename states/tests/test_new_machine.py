@@ -1621,9 +1621,13 @@ class TestNameArgument(unittest.TestCase):
         assert user.state == 'active'
         assert user.machine == 'active'
         assert 'state' in user.__dict__
-        assert 'machine' not in user.__dict__
+        assert 'machine' in user.__dict__
         assert hasattr(user, 'state')
         assert hasattr(user, 'machine')
+        with self.assertRaises(TransitionError):
+            user.machine = 'active'
+        with self.assertRaises(TransitionError):
+            user.state = 'active'
 
 
 class TestStateConstraint(unittest.TestCase):
@@ -1759,4 +1763,12 @@ class TestStateConstraint2(unittest.TestCase):
 
         user.login(password='wrong')  # the 6th time
         assert user.state == 'blocked'
+
+
+class TestStatefulNoMachine(unittest.TestCase):
+
+    def test(self):
+        class A(StatefulObject):
+            pass
+
 
