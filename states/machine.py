@@ -268,7 +268,7 @@ class StateMachine(ParentState):
          - store string version instead of Path() due to e.g. easier persistence in database
          - using setattr() instead of putting in __dict__ to enable external machinery of setattr to still be called
         """
-        if (self.use_attr and hasattr(obj, self.name)) or self.name in obj.__dict__:
+        if (self.use_attr and getattr(obj, self.name, None)) or self.name in obj.__dict__:
             raise TransitionError(f"state of {type(obj).__name__} cannot be changed directly; use triggers instead")
 
         path = Path(state_name)
