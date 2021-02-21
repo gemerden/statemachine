@@ -1,6 +1,7 @@
 __author__ = "lars van gemerden"
 
 import json
+from collections import Mapping
 
 from states.tools import listify
 
@@ -16,7 +17,7 @@ class NoFunction(object):
 nofunction = NoFunction()
 
 
-class Callbacks(object):
+class Callbacks(Mapping):
 
     @classmethod
     def _validate_name(cls, name):
@@ -76,6 +77,15 @@ class Callbacks(object):
         except KeyError:
             result = self._function_cache[name] = self._create_function(name)
             return result
+
+    def __len__(self):
+        return len(self._callbacks)
+
+    def __iter__(self):
+        yield from self._callbacks
+
+    def __getitem__(self, key):
+        return self._callbacks[key]
 
     def register(self, **callbacks):
         for name, callback in callbacks.items():

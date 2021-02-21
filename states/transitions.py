@@ -26,12 +26,14 @@ class Transition(object):
 
     @property
     def conditions(self):
-        conditions = [self.callbacks.condition, *(state.callbacks.constraint for state in self.target.up)]
+        conditions = [*self.callbacks['condition']]
+        for state in self.target.up:
+            conditions.extend(state.callbacks['constraint'])
         return [c for c in conditions if c]
 
     @property
-    def on_transfer(self):
-        return self.callbacks.on_transfer
+    def on_transfers(self):
+        return self.callbacks['on_transfer']
 
     @property
     def on_exits(self):
@@ -39,11 +41,11 @@ class Transition(object):
         common = False
         for state in self.state.up:
             if state.parent:
-                on_exits.append(state.parent.callbacks.before_exit)
+                on_exits.extend(state.parent.callbacks['before_exit'])
             if state is self.common_state:
                 common = True
             if not common:
-                on_exits.append(state.callbacks.on_exit)
+                on_exits.extend(state.callbacks['on_exit'])
         return [e for e in on_exits if e]
 
     @property
@@ -52,46 +54,36 @@ class Transition(object):
         common = False
         for state in self.target.up:
             if state.parent:
-                on_entries.append(state.parent.callbacks.after_entry)
+                on_entries.extend(state.parent.callbacks['after_entry'])
             if state is self.common_state:
                 common = True
             if not common:
-                on_entries.append(state.callbacks.on_entry)
+                on_entries.extend(state.callbacks['on_entry'])
         return list(reversed([e for e in on_entries if e]))
 
     @property
     def inner_stays(self):
-        return [s.callbacks.on_stay for s in self.state.up if s.callbacks.on_stay]
+        return sum((s.callbacks['on_stay'] for s in self.state.up if s.callbacks['on_stay']), [])
 
     @property
     def outer_stays(self):
-        return [s.callbacks.on_stay for s in self.common_state.up if s.callbacks.on_stay]
+        return sum((s.callbacks['on_stay'] for s in self.common_state.up if s.callbacks['on_stay']), [])
 
     @property
     def set_state(self):
-        attr_name = self.state.root.attr_name
-        target_state_name = str(self.target.path)
-
-        def set_state(obj, *_, **__):  # provide same signature as the callbacks
-            setattr(obj, attr_name, target_state_name)
-
-        return set_state
+        return self.state.root.set_state_callback(str(self.target.path))
 
     @property
     def effective_callbacks(self):
         if self.state is self.target:
-            callbacks = [self.on_transfer,
-                         *self.inner_stays]
+            return [*self.on_transfers,
+                    *self.inner_stays]
         else:
-            callbacks = [*self.on_exits,
-                         self.set_state,
-                         self.on_transfer,
-                         *self.outer_stays,
-                         *self.on_entries]
-
-        if not self.on_transfer:
-            callbacks.remove(self.on_transfer)
-        return callbacks
+            return [*self.on_exits,
+                    self.set_state,
+                    *self.on_transfers,
+                    *self.outer_stays,
+                    *self.on_entries]
 
     @property
     def execute(self):
