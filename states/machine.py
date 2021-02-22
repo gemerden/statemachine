@@ -17,7 +17,7 @@ class BaseState(object):
     parent = path = root = up = None
 
     @classmethod
-    def _validate_name(cls, name, exclude=(".", "*", "[", "]", "(", ")"), underscore=False):
+    def _validate_name(cls, name, exclude=(".", "*", "[", "]", "(", ")"), underscore=True):
         if name is None:
             return None
         if not len(name.strip()):
