@@ -3,6 +3,7 @@ __author__ = "lars van gemerden"
 from collections import defaultdict
 from contextlib import contextmanager
 from itertools import zip_longest
+from random import random
 from time import perf_counter
 from typing import Sequence, Mapping, MutableMapping, Set
 
@@ -281,7 +282,7 @@ def stopwatch(timer=perf_counter):
     delta = timer() - t  # assigned on context exit
 
 
-def save_graph(machine, filename='png', **kwargs):
+def save_graph(machine, filename='png', view=True, prefix=' ', **options):
     try:
         import graphviz
     except Exception as error:
@@ -296,14 +297,38 @@ def save_graph(machine, filename='png', **kwargs):
 
     dot = graphviz.Digraph(comment=graph_name,
                            format=file_parts[-1],
-                           graph_attr=kwargs)
+                           node_attr=options,
+                           edge_attr=options)
 
-    for transition in machine.iter_transitions():
+    def create_edge(transition):
         dot.edge(str(transition.state.path),
                  str(transition.target.path),
-                 label=" " + transition.trigger)
+                 label=prefix + transition.trigger)
 
-    dot.render(filename, view=True)
+    def create_split_edge(transitions):
+        splitter_node_key = str(random())
+        dot.node(splitter_node_key, label='', shape='circle', width='0.2')
+        dot.edge(str(transitions[0].state.path),
+                 splitter_node_key,
+                 prefix + str(transitions[0].trigger))
+        for transition in transitions:
+            if len(transition.callbacks['condition']):
+                condition_name = f"({transition.callbacks['condition'][0].__name__})"
+            else:
+                condition_name = ''
+            dot.edge(splitter_node_key,
+                     str(transition.target.path),
+                     condition_name)
+
+    for state in machine.iter_states(filter=lambda s: len(s) == 0):  #leaf states
+        for trigger in state.triggers:
+            transitions = list(state.trigger_transitions[trigger].values())
+            if len(transitions) == 1:
+                create_edge(transitions[0])
+            elif len(transitions) > 1:
+                create_split_edge(transitions)
+
+    dot.render(filename, view=view)
     return dot
 
 
