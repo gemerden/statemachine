@@ -65,10 +65,9 @@ class BaseState(object):
 
 
 class ParentState(BaseState, Mapping):
-    def __init__(self, states, transitions, before_exit=(), after_entry=(), **kwargs):
+    def __init__(self, states, before_exit=(), after_entry=(), **kwargs):
         super().__init__(before_exit=before_exit, after_entry=after_entry, **kwargs)
         self._init_states(states)
-        self._init_transitions(transitions)
 
     def _init_states(self, states):
         """creates a dictionary of state_name: BaseState key value pairs"""
@@ -80,10 +79,9 @@ class ParentState(BaseState, Mapping):
             else:
                 self.sub_states[name] = LeafState(**config)
 
-    def _init_transitions(self, transition_dicts):
-        for trans_dict in transition_dicts:
-            old_path = Path(trans_dict.pop('old_state'))
-            old_path.get_in(self).create_transition(**trans_dict)
+    def _init_transitions(self):
+        for state in self.values():
+            state._init_transitions()
 
     def __len__(self):
         """ number of sub-states """
@@ -94,8 +92,7 @@ class ParentState(BaseState, Mapping):
 
     def __getitem__(self, key):
         """
-        Gets sub states according to string key or transition according to the 2-tuple (e.g.
-            key: ("on.washing", "off.broken"))
+        Gets sub states according to string key or Path()
         """
         if isinstance(key, int):
             return list(self.sub_states.values())[key]
@@ -153,18 +150,19 @@ class NestedState(ParentState, ChildState):
 class LeafState(ChildState, DummyMapping):
     def __init__(self, transitions=(), **kwargs):
         super().__init__(**kwargs)
-        self._init_transitions(transitions)
+        self._trans_configs = transitions  # temp; cannot create transitions before state-tree is finished
 
-    def _init_transitions(self, transition_dicts):
+    def _init_transitions(self):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
         self.trigger_transitions = defaultdict(dict)
-        for trans_dict in transition_dicts:
+        for trans_dict in self._trans_configs:
+            del trans_dict['old_state']  # we are already there
             target_name = trans_dict.pop('new_state')
             target = Path(target_name).get_in(self.root)
-            self.create_transition(target=target, **trans_dict)
+            self.create_transition(target, **trans_dict)
+        del self._trans_configs
 
-    def create_transition(self, **trans_dict):
-        target = self.parent.lookup(Path(trans_dict.pop('new_state')))
+    def create_transition(self, target, **trans_dict):
         transition = Transition(state=self, target=target, **trans_dict)
         self.trigger_transitions[transition.trigger][transition.target.path] = transition
         self.update_transitions(transition.trigger)
@@ -173,7 +171,7 @@ class LeafState(ChildState, DummyMapping):
         """ keep the transitions without condition (potential default) last """
         transitions = list(self.trigger_transitions[trigger].values())
         self.trigger_transitions[trigger].clear()
-        transitions = sorted(transitions, key=lambda t: not t.callbacks.has('condition'))
+        transitions = sorted(transitions, key=lambda t: not t.callbacks.get('condition'))
         for transition in transitions:
             self.trigger_transitions[trigger][transition.target.path] = transition
         return list(self.trigger_transitions[trigger].values())
@@ -218,21 +216,21 @@ class StateMachine(ParentState):
     @classmethod
     def from_config(cls, name=None, states=None, transitions=(), **config):
         if not states:
-            raise MachineError(f"cannot initialize state machine without states")
+            raise MachineError(f"cannot initialize state-machine without states")
         if not len(transitions):
             transitions = []
             for old_state in states:
                 for new_state in states:
                     transitions.append(dict(old_state=old_state, new_state=new_state, trigger='goto_' + new_state))
-        config = normalize_statemachine_config(states=states, transitions=transitions, **config)
-        return cls(name=name, **config)
+        normalized_config = normalize_statemachine_config(states=states, transitions=transitions, **config)
+        return cls(name=name, **normalized_config)
 
-    def __init__(self, name=None, states=None, transitions=(), on_stay=(), prepare=(), contextmanager=None, info=""):
+    def __init__(self, name=None, states=None, on_stay=(), prepare=(), contextmanager=None, info=""):
         self.path = Path()
         self.root = self
         self.up = [self]
-        super().__init__(name=name, states=states or {}, transitions=transitions,
-                         on_stay=on_stay, prepare=prepare, info=info)
+        super().__init__(name=name, states=states or {}, on_stay=on_stay, prepare=prepare, info=info)
+        self._init_transitions()
         self._contextmanager = contextmanager
         self._callback_cache = defaultdict(dict)  # cache for transition lookup when trigger is called
         self.use_attr = False
@@ -515,9 +513,12 @@ class StateMachine(ParentState):
         super().validate_transitions()
         self.validated = True
 
-    def save_graph(self, filename, **options):
+    def save_graph(self, filename, view=False, fontsize='10', fontname='Arial bold', **options):
         save_graph(machine=self,
+                   view=view,
                    filename=filename,
+                   fontsize=fontsize,
+                   fontname=fontname,
                    **options)
 
     def __str__(self):
