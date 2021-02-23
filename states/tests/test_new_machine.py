@@ -309,17 +309,6 @@ class TestStateMachine(unittest.TestCase):
                 ]
             )
         with self.assertRaises(MachineError):
-            state_machine(
-                states=states(
-                    solid=state(),
-                    liquid=state(),
-                ),
-                transitions=[
-                    transition("solid", "liquid", trigger=["melt"]),
-                    transition("solid", "liquid", trigger=["melt"])
-                ]
-            )
-        with self.assertRaises(MachineError):
             class Matter(StatefulObject):
                 state = state_machine(
                     states=states(
@@ -355,6 +344,19 @@ class TestStateMachine(unittest.TestCase):
 
         with self.assertRaises(TransitionError):
             b.state = "liquid"
+
+    def test_double_transition(self):
+        with self.assertRaises(MachineError):
+            state_machine(
+                states=states(
+                    solid=state(),
+                    liquid=state(),
+                ),
+                transitions=[
+                    transition("solid", "liquid", trigger=["melt"]),
+                    transition("solid", "liquid", trigger=["melt"])
+                ]
+            )
 
 
 class TestWildcardStateMachine(unittest.TestCase):
@@ -627,8 +629,7 @@ class TestNestedStateMachine(unittest.TestCase):
         self.machine = state_machine(
             states=states(off=state(states(working=state(),
                                            broken=state()),
-                                    transitions(transition('working', 'broken', trigger='smash'),
-                                                transition('broken', 'working', trigger='fix'))),
+                                    transitions(transition('broken', 'working', trigger='fix'))),
 
                           on=state(states(waiting=state(),
                                           washing=state(),
@@ -875,8 +876,7 @@ class TestCallbackDecorators(unittest.TestCase):
         self.machine = state_machine(
             states=states(off=state(states(working=state(),
                                            broken=state()),
-                                    transitions(transition('working', 'broken', trigger='smash'),
-                                                transition('broken', 'working', trigger='fix'))),
+                                    transitions(transition('broken', 'working', trigger='fix'))),
                           on=state(states(waiting=state(),
                                           washing=state(),
                                           drying=state()),
@@ -885,8 +885,7 @@ class TestCallbackDecorators(unittest.TestCase):
                                                transition('drying', 'waiting', trigger='stop')))),
             transitions=(transition('off.working', 'on', trigger="turn_on"),
                          transition('on', 'off', trigger="turn_off"),
-                         transition(('on', 'off'), 'off.broken', trigger="smash"),
-                         transition('off.broken', 'off.working', trigger="fix"))
+                         transition(('on', 'off'), 'off.broken', trigger="smash"))
         )
 
         class WashingMachine(StatefulObject):
@@ -1769,4 +1768,63 @@ class TestStatefulNoMachine(unittest.TestCase):
         class A(StatefulObject):
             pass
 
+
+class TestGraphviz(unittest.TestCase):
+
+    def setUp(self):
+        class User(StatefulObject):
+            state = state_machine(
+                states=states(
+                    new=state(),  # default: exactly the same result as using just the state name
+                    blocked=state(),
+                    active=state(
+                        states=states('logged_out', 'logged_in'),
+                        transitions=[
+                            transition('logged_out', [case('logged_in', condition='verify_password'),
+                                                      case('blocked', condition='check_logins'),
+                                                      default_case('logged_out')],
+                                       trigger='login'),
+                            transition('logged_in', 'logged_out', trigger='logout'),
+                        ]
+                    ),
+                    deleted=state(),
+                ),
+                transitions=[
+                    transition('new', 'active', trigger='activate'),
+                    transition('active', 'blocked', trigger='block'),
+                    transition('blocked', 'active', trigger='unblock'),
+                    transition('*', 'deleted', trigger='delete'),
+                ]
+            )
+
+            def __init__(self, username, max_logins=5):
+                super().__init__(state='new')
+                self.username = username
+                self.password = None
+                self.max_logins = max_logins
+                self.login_count = 0
+
+            @state.on_entry('active')
+            def set_password(self, password):
+                self.password = password
+
+            def verify_password(self, password):
+                return self.password == password
+
+            def check_logins(self, **ignored):
+                return self.login_count >= self.max_logins
+
+            @state.on_entry('active.logged_in', 'blocked')
+            def reset_login_count(self, **ignored):
+                self.login_count = 0
+
+            @state.on_transfer('active.logged_out',
+                               'active.logged_out')
+            def inc_login_count(self, **ignored):
+                self.login_count += 1
+
+        self.user_class = User
+
+    def test(self):
+        self.user_class.state.save_graph(filename='\data\graph.png')
 

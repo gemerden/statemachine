@@ -5,7 +5,7 @@ import unittest
 from contextlib import contextmanager
 from copy import deepcopy
 
-from states import StatefulObject, TransitionError, MachineError, states, state, transition, state_machine
+from states import StatefulObject, TransitionError, MachineError, states, state, transition, state_machine, case, default_case
 
 from ..tools import Path
 
@@ -471,8 +471,8 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
                     {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
                     {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
                     {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
-                    {"old_state": "broken", "trigger": "fix", "new_state": {"on": {"condition": "was_on"},
-                                                                            "off": {}}},
+                    {"old_state": "broken", "trigger": "fix", "new_state": [case("on", condition="was_on"),
+                                                                            default_case('off')]},
                 ],
             )
 
@@ -534,8 +534,8 @@ class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
             {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
             {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
             {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
-            {"old_state": "broken", "trigger": "fix", "new_state": {"off": {"condition": lambda o: True},
-                                                                    "broken": {}}},
+            {"old_state": "broken", "trigger": "fix", "new_state": [case("off", condition=lambda o: True),
+                                                                    default_case('broken')]},
             {"old_state": "broken", "new_state": "broken", "trigger": ["leave"]},
         ],
     )
@@ -549,8 +549,8 @@ class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
             {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
             {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
             {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
-            {"old_state": "broken", "trigger": "FIX", "new_state": {"off": {"condition": lambda o: True},
-                                                                    "broken": {}}},
+            {"old_state": "broken", "trigger": "FIX", "new_state": [case("off", condition=lambda o: True),
+                                                                    default_case('broken')]},
             {"old_state": "broken", "new_state": "broken", "trigger": "FIX"},
         ],
     )
@@ -565,9 +565,9 @@ class TestSwitchedDoubleTransitionStateMachine(unittest.TestCase):
             {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
             {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
             {"old_state": ["on", "off"], "new_state": "broken", "trigger": "smash"},
-            {"old_state": "broken", "trigger": "fix", "new_state": {"off": {"condition": lambda o: True,
-                                                                            "on_transfer": "do_after_transfer"},
-                                                                    "broken": {}},
+            {"old_state": "broken", "trigger": "fix", "new_state": [case("off", condition=lambda o: True,
+                                                                         on_transfer="do_after_transfer"),
+                                                                    default_case('broken')],
              "on_transfer": "do_before_transfer"},
             {"old_state": "broken", "new_state": "broken", "trigger": "leave"},
         ],
@@ -798,8 +798,8 @@ class TestSwitchedTransition(unittest.TestCase):
                 {"old_state": "off", "new_state": "on", "trigger": ["turn_on", "switch"]},
                 {"old_state": "on", "new_state": "off", "trigger": ["turn_off", "switch"]},
                 {"old_state": "*", "new_state": "broken", "trigger": "smash"},
-                {"old_state": "broken", "new_state": {"off": {"condition": lambda obj: random.random() > 0.5},
-                                                      "on": {}},
+                {"old_state": "broken", "new_state": [case("off", condition=lambda obj: random.random() > 0.5),
+                                                      default_case('on')],
                  "trigger": "fix"},
             ]
         )
@@ -825,13 +825,7 @@ class TestSwitchedTransition(unittest.TestCase):
 
     def test_machine_errors(self):
         config = deepcopy(self.machine_config)
-        Path("transitions.3.new_state.off.condition").set_in(config, ())
-        with self.assertRaises(MachineError):
-            class Washer(StatefulObject):
-                state = state_machine(**config)
-
-        config = deepcopy(self.machine_config)
-        Path("transitions.3.new_state.off").set_in(config, {})
+        Path("transitions.3.new_state.0.condition").set_in(config, ())
         with self.assertRaises(MachineError):
             class Washer(StatefulObject):
                 state = state_machine(**config)

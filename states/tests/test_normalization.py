@@ -12,29 +12,44 @@ def count(it, key):
 
 class TestStatemachineStandardizarion(unittest.TestCase):
 
-    def iter_configs(self, config, include_leaves=False):
+    def iter_configs(self, config, include_leaves=True):
         yield config
         if config.get('states'):
             for state_config in config['states'].values():
                 if state_config.get('states') or include_leaves:
                     yield from self.iter_configs(state_config)
 
-    def assert_transition(self, trans, config):
+    def states(self, config):
+        states = set()
+        for config in self.iter_configs(config):
+            states_dict = config.get('states', {})
+            states.update(states_dict)
+        return states
+
+    def transitions(self, config):
+        transitions = []
+        for config in self.iter_configs(config):
+            trans_list = config.get('transitions', [])
+            transitions.extend(trans_list)
+        return transitions
+
+    def assert_transition(self, trans, config, states):
         old_state = trans['old_state']
         new_state = trans['new_state']
         assert isinstance(old_state, str)
         assert isinstance(new_state, str)
         assert '*' not in old_state
         assert '*' not in new_state
-        old_path = Path(old_state)
-        new_path = Path(new_state)
-        assert old_path[0] in config['states']
-        assert new_path[0] in config['states']
+        for name in Path(old_state):
+            assert name in states
+        for name in Path(new_state):
+            assert name in states
 
     def assert_standard_config(self, config):
+        states = self.states(config)
         for state_config in self.iter_configs(config):
-            for trans in state_config['transitions']:
-                self.assert_transition(trans, state_config)
+            for trans in state_config.get('transitions', ()):
+                self.assert_transition(trans, state_config, states)
 
     """ actual tests """
 
@@ -58,9 +73,10 @@ class TestStatemachineStandardizarion(unittest.TestCase):
         standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
-        assert len(standard_config['transitions']) == 4
-        assert set((t['old_state'], t['new_state']) for t in standard_config['transitions']) == set(product(('on', 'off'),
-                                                                                                            ('on', 'off')))
+        standard_transitions = self.transitions(standard_config)
+        assert len(standard_transitions) == 4
+        assert set((t['old_state'], t['new_state']) for t in standard_transitions) == set(product(('on', 'off'),
+                                                                                                  ('on', 'off')))
 
     def test_with_multiple_old_states(self):
         config = dict(states=states(off=state(info="not turned on"),
@@ -71,9 +87,10 @@ class TestStatemachineStandardizarion(unittest.TestCase):
         standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
-        assert len(standard_config['transitions']) == 4
-        assert set((t['old_state'], t['new_state']) for t in standard_config['transitions']) == set(product(('on', 'off'),
-                                                                                                            ('on', 'off')))
+        standard_transitions = self.transitions(standard_config)
+        assert len(standard_transitions) == 4
+        assert set((t['old_state'], t['new_state']) for t in standard_transitions) == set(product(('on', 'off'),
+                                                                                                  ('on', 'off')))
 
     def test_with_callbacks(self):
         """ bit moot """
@@ -102,15 +119,15 @@ class TestStatemachineStandardizarion(unittest.TestCase):
         standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
-        assert len(standard_config['transitions']) == 6
-        assert count(standard_config['transitions'], key=lambda t: t['condition']) == 1
+        standard_transitions = self.transitions(standard_config)
+        assert len(standard_transitions) == 6
+        assert count(standard_transitions, key=lambda t: t['condition']) == 1
 
     def test_with_nested_states(self):
         config = dict(
             states=states(off=state(states(working=state(),
                                            broken=state()),
-                                    transitions(transition('working', 'broken', trigger='smash'),
-                                                transition('broken', 'working', trigger='fix'))),
+                                    transitions(transition('broken', 'working', trigger='fix'))),
                           on=state(states(waiting=state(),
                                           washing=state(),
                                           drying=state()),
@@ -119,20 +136,19 @@ class TestStatemachineStandardizarion(unittest.TestCase):
             transitions=transitions(transition('off.working', 'on', trigger="turn_on"),
                                     transition('on.washing', 'on.drying', trigger='dry'),  # to test push-down -> 'on'
                                     transition('on', 'off', trigger="turn_off"),
-                                    transition(('on.*', 'off'), 'off.broken', trigger=["smash"]),  # also testing 'merge'
+                                    transition(('on.*', 'off'), 'off.broken', trigger=["smash"]),
                                     transition('off.working', 'on.drying', trigger=["just_dry_already"]))
         )
 
         standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
+        standard_transitions = self.transitions(standard_config)
+        assert len(standard_transitions) == 14
+
         assert list(standard_config['states'].keys()) == ['off', 'on']
         assert list(standard_config['states']['off']['states'].keys()) == ['working', 'broken']
         assert list(standard_config['states']['on']['states'].keys()) == ['waiting', 'washing', 'drying']
-        assert len(standard_config['states']['on']['transitions']) == 3
-        assert len(standard_config['states']['off']['transitions']) == 3
-
-        # assert config == standard_config  # to print out the diff in pycharm
 
     def test_multiple_old_states_with_conditions(self):
         config = dict(
@@ -149,5 +165,6 @@ class TestStatemachineStandardizarion(unittest.TestCase):
         standard_config = normalize_statemachine_config(**config)
         self.assert_standard_config(standard_config)
 
-        assert len(standard_config['transitions']) == 8
-        assert count(standard_config['transitions'], key=lambda t: t['condition']) == 2
+        standard_transitions = self.transitions(standard_config)
+        assert len(standard_transitions) == 8
+        assert count(standard_transitions, key=lambda t: t['condition']) == 2
