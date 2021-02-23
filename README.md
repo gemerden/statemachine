@@ -325,12 +325,45 @@ assert user.state == 'active.logged_out'
   
 * This completes a basic state machine for the user flow for application access, it might seem little code, but it accomplished quite a lot:
     * The user must provide a password to become active,
+    
     * the user must be active to be able to log in,
+    
     * the user must provide the correct password to login,
+    
     * the user is be provided with different feedback for each occasion, 
-    * the user can be blocked and unblocked and he/she cannot login when blocked,
+    
+    * the user can be blocked and unblocked and he/she cannot login when blocked.
+    
+      
 
-Lets extend the example one more time:
+> **Intermezzo: another way to configure conditional transitions (and other callbacks) **
+>
+> For clarity sake there is another way to configure conditional transitions:
+>
+> ```python
+> from states import states, transition, state, case, default_case
+> 
+> active=state(
+>     states=states('logged_out', 'logged_in'),
+>     transitions=[
+>         transition('logged_out', [case('logged_in', condition='verify_password'),
+>                                   default_case('logged_out')],
+>                    trigger='log_in'),
+>         transition('logged_in', 'logged_out', trigger='log_out')
+>     ]
+> )
+> ```
+>
+> * The second argument of `transition` is replaced with a list of cases, indicating different end states of the transition,
+> * `case` and `default_case` are function that help configuration (e.g. validate); they define the states the transition might lead to and return dictionaries,
+> * `condition='verify_password'` refers to the method `verify_password` on the state managed object. If the condition argument is a string it will be looked up on the (in this case) User class. If it's a function, it will be used as is,
+> * Similarly other callbacks can be configured directly in the state machine config (not through decorators). For example you could do `active=state(on_entry='set_password', ...)`,
+> * This way of configuration is especially useful for conditional transitions, because they are part of the 'structure' of the state machine; the other callbacks are (in my mind) better added through decorators, for clarity sake.
+
+
+
+Let's extend the example one more time:
+
 * We want to block the user after 5 failed login attempts (because 3 is soo limiting ;-)
 * Let's add a 'deleted' state for users you want to get rid of (for some reason),
 * Let's also add some logging, we want to know about state transitions,
@@ -520,6 +553,13 @@ This state machine is pure python, but very optimized; on a normal PC a state tr
 ### Change Log
 
 This is a new section of the readme, starting at version 0.4.0.
+
+#### Version 0.5.8
+
+**Features**
+
+* more flexibility in configuration of conditional transitions (in some somewhat rare cases),
+* Nicer graphs (with e.g. conditional transitions clearly shown).
 
 #### Version 0.5.7
 
