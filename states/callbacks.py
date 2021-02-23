@@ -92,9 +92,6 @@ class Callbacks(Mapping):
             self._callbacks[name].extend(listify(callback))
         self._clear_cache(*callbacks)
 
-    def has(self, name):
-        return bool(self._callbacks.get(name))
-
     def _clear_cache(self, *names):
         if len(names):
             for name in names:
