@@ -286,7 +286,7 @@ def save_graph(machine, filename='png', view=True, prefix=' ', **options):
     try:
         import graphviz
     except Exception as error:
-        raise RuntimeError(f"graphviz cannot be imported to save graph iamage: {error}")
+        raise RuntimeError(f"graphviz cannot be imported to save graph image: {error}")
 
     graph_name = f"{machine.owner_cls.__name__}_{machine.name}"
     file_parts = filename.rsplit('.', 1)

@@ -144,7 +144,6 @@ class TestDictClasses(unittest.TestCase):
                                              transition("a", switch(case("a", condition="x"),
                                                                     default_case("b")),
                                                         trigger="t3")))
-
         assert len(args) == 3
         assert len(kwargs) == 2
 
@@ -158,7 +157,6 @@ class TestDictClasses(unittest.TestCase):
                                                                   default_case("b")),
                                                       trigger="t3"),
                                            a=state(), b=state())
-
         assert len(args) == 3
         assert len(kwargs) == 2
 
