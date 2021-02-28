@@ -489,7 +489,7 @@ The state machine has a couple of other options and niceties to enhance the expe
   User.state.save_graph('user_state.png')  # see image at top of readme
   ```
 
-   The options are passed to `graphviz` as the options for the graph itself. It must be installed on your system; see [graphviz](https://graphviz.readthedocs.io/en/stable/manual.html).
+   The options are passed to `graphviz` as the options for both nodes and edges, see [graphviz](https://graphviz.readthedocs.io/en/stable/manual.html).
 
 ---
 
