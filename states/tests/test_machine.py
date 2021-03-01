@@ -1148,28 +1148,39 @@ class TestContextManager(unittest.TestCase):
 
             def __init__(self):
                 super().__init__()
-                self.managed = False
+                self.ctx1 = False
+                self.ctx2 = False
 
             @state.on_entry('on', 'off')
-            def on_action(self, context, **kwargs):
-                assert context == 'ctx'
-                assert self.managed is True
+            def on_action(self, context):
+                assert context == 'ctx1'
+                assert self.ctx1 is True
+                assert self.ctx2 is True
 
             @state.contextmanager('context')
-            def object_manager(self, **kwargs):
-                self.managed = True
-                yield 'ctx'
-                self.managed = False
+            def object_manager(self):
+                self.ctx1 = True
+                yield 'ctx1'
+                self.ctx1 = False
+
+            @state.contextmanager()
+            def object_manager(self):
+                self.ctx2 = True
+                yield 'ctx2'
+                self.ctx2 = False
 
         self.object_class = Radio
 
     def test_manager(self):
         radio = self.object_class()
-        assert radio.managed is False
+        assert radio.ctx1 is False
+        assert radio.ctx2 is False
         radio.flick()
-        assert radio.managed is False
+        assert radio.ctx1 is False
+        assert radio.ctx2 is False
         radio.flick()
-        assert radio.managed is False
+        assert radio.ctx1 is False
+        assert radio.ctx2 is False
 
 
 class TestCallbackArguments(unittest.TestCase):

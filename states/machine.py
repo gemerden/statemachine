@@ -425,10 +425,11 @@ class StateMachine(ParentState):
         self._reset_on_new_callback()
         return func
 
-    def contextmanager(self, keyword):
-        for ctx_mgr in self.callbacks['contextmanager']:
-            if ctx_mgr.__keyword__ == keyword:
-                raise MachineError(f"contextmanager with keyword '{keyword}' already exists")
+    def contextmanager(self, keyword=None):
+        if keyword:
+            for ctx_mgr in self.callbacks['contextmanager']:
+                if ctx_mgr.__keyword__ == keyword:
+                    raise MachineError(f"contextmanager with keyword '{keyword}' already exists")
 
         def register(gen):
             ctx_manager = contextlib.contextmanager(gen)
@@ -439,33 +440,27 @@ class StateMachine(ParentState):
         return register
 
     def _get_contextmanager(self):
-        context_managers = self.callbacks['contextmanager']
-        keywords = [c.__keyword__ for c in context_managers]
+        ctx_mgrs = self.callbacks['contextmanager']
 
-        def check_keywords(kwargs):
-            for kw in keywords:
-                if kw in kwargs:
-                    raise TransitionError(f"cannot use context from contextmanager: "
-                                          f"trigger called with argument in '{keywords}'")
-
-        if len(context_managers) == 0:
+        if len(ctx_mgrs) == 0:
             create_context = None
-        elif len(context_managers) == 1:
-            context_manager = context_managers[0]
+        elif len(ctx_mgrs) == 1:
+            context_manager = ctx_mgrs[0]
+            keyword = context_manager.__keyword__
 
             @contextlib.contextmanager
             def create_context(obj, *args, **kwargs):
-                check_keywords(kwargs)
                 with context_manager(obj, *args, **kwargs) as context:
-                    yield {context_manager.__keyword__: context}
+                    yield {keyword: context} if keyword else None
         else:
+            keywords = [c.__keyword__ for c in ctx_mgrs]
 
             @contextlib.contextmanager
             def create_context(obj, *args, **kwargs):
-                check_keywords(kwargs)
                 with contextlib.ExitStack() as stack:
                     enter = stack.enter_context
-                    yield {cm.__keyword__: enter(cm(obj, *args, **kwargs)) for cm in context_managers}
+                    contexts = [enter(cm(obj, *args, **kwargs)) for cm in ctx_mgrs]
+                    yield {kw: ctx for kw, ctx in zip(keywords, contexts) if kw}
 
         return create_context
 
@@ -479,11 +474,10 @@ class StateMachine(ParentState):
 
         ctx_mgr = self._get_contextmanager()
         if ctx_mgr:
-            with ctx_mgr(obj, *args, **kwargs) as ctx:
-                kwargs.update(ctx)
+            with ctx_mgr(obj, *args, **kwargs) as context:
                 for state in Path(getattr(obj, self.name)).iter_in(self):
-                    state.callbacks.on_entry(obj, *args, **kwargs)
-                    state.parent.callbacks.after_entry(obj, *args, **kwargs)
+                    state.callbacks.on_entry(obj, *args, **context, **kwargs)
+                    state.parent.callbacks.after_entry(obj, *args, **context, **kwargs)
         else:
             for state in Path(getattr(obj, self.name)).iter_in(self):
                 state.callbacks.on_entry(obj, *args, **kwargs)
