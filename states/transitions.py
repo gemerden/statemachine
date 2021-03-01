@@ -1,6 +1,7 @@
 __author__ = "lars van gemerden"
 
 import json
+from itertools import zip_longest
 
 from .callbacks import Callbacks
 from .tools import Path, lazy_property
@@ -117,6 +118,11 @@ class Transition(object):
     def add_condition(self, callback):
         self.callbacks.register(condition=callback)
         self.states[0].update_transitions(self.trigger)
+
+    def match(self, *paths, trigger=None):
+        if trigger and trigger != self.trigger:
+            return False
+        return all(p == getattr(s, 'path', None) for p, s in zip_longest(paths, self.states))
 
     def as_json_dict(self):
         result = dict(states=[str(s.path) for s in self.states],

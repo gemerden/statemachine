@@ -1,6 +1,7 @@
 import contextlib
 import json
 from collections import defaultdict
+from itertools import product
 from operator import attrgetter, itemgetter
 from typing import Mapping
 
@@ -102,15 +103,15 @@ class ParentState(BaseState, Mapping):
             return key.get_in(self)
         raise KeyError(f"key '{key}' does not exist in state {self.name}")
 
-    def iter_states(self, filter=lambda s: True):
-        if filter(self):
+    def iter_states(self, key=lambda s: True):
+        if key(self):
             yield self
         for state in self.sub_states.values():
-            yield from state.iter_states(filter)
+            yield from state.iter_states(key)
 
-    def iter_transitions(self, filter=lambda t: True):
+    def iter_transitions(self, key=lambda t: True):
         for state in self.sub_states.values():
-            yield from state.iter_transitions(filter)
+            yield from state.iter_transitions(key)
 
     @lazy_property
     def triggers(self):
@@ -154,7 +155,7 @@ class LeafState(ChildState, DummyMapping):
 
     def _init_transitions(self):
         """creates a dictionary of (old state name, new state name): Transition key value pairs"""
-        self.trigger_transitions = defaultdict(dict)
+        self.trigger_transitions = defaultdict(list)
         for trans_dict in self._trans_configs:
             del trans_dict['old_state']  # we are already there
             target_names = trans_dict.pop('new_state')
@@ -164,26 +165,21 @@ class LeafState(ChildState, DummyMapping):
 
     def create_transition(self, targets, **trans_dict):
         transition = Transition(self, *targets, **trans_dict)
-        self.trigger_transitions[transition.trigger][transition.states[-1].path] = transition
+        self.trigger_transitions[transition.trigger].append(transition)
         self.update_transitions(transition.trigger)
 
     def update_transitions(self, trigger):
         """ keep the transitions without condition (potential default) last """
-        transitions = list(self.trigger_transitions[trigger].values())
-        self.trigger_transitions[trigger].clear()
-        transitions = sorted(transitions, key=lambda t: not t.callbacks.get('condition'))
-        for transition in transitions:
-            self.trigger_transitions[trigger][transition.states[-1].path] = transition
-        return list(self.trigger_transitions[trigger].values())
+        self.trigger_transitions[trigger].sort(key=lambda t: not t.callbacks.get('condition'))
 
-    def iter_states(self, filter=lambda s: True):
-        if filter(self):
+    def iter_states(self, key=lambda s: True):
+        if key(self):
             yield self
 
-    def iter_transitions(self, filter=lambda t: True):
-        for transition_dict in self.trigger_transitions.values():
-            for transaction in transition_dict.values():
-                if filter(transaction):
+    def iter_transitions(self, key=lambda t: True):
+        for transitions in self.trigger_transitions.values():
+            for transaction in transitions:
+                if key(transaction):
                     yield transaction
 
     @lazy_property
@@ -192,7 +188,8 @@ class LeafState(ChildState, DummyMapping):
 
     def validate_transitions(self):
         for trigger in self.trigger_transitions:
-            transitions = self.update_transitions(trigger)
+            self.update_transitions(trigger)
+            transitions = self.trigger_transitions[trigger]
             for transition in transitions[:-1]:
                 if not transition.conditions:
                     raise MachineError(f"missing condition in transition {str(transition)} in machine '{self.name}'")
@@ -201,9 +198,8 @@ class LeafState(ChildState, DummyMapping):
                     raise MachineError(f"default transition for conditional transitions from '{str(self.path)}' "
                                        f"with trigger '{trigger}' cannot be created, same state transition "
                                        f"already exists in machine '{self.name}'")
-                default_transition = Transition(self, trigger=trigger,
-                                                info="auto-generated default transition")
-                self.trigger_transitions[trigger][self.path] = default_transition
+                transitions.append(Transition(self, trigger=trigger,
+                                              info="auto-generated default transition"))
 
     def as_json_dict(self, **extra):
         return super().as_json_dict(transitions=[t.as_json_dict() for t in self.iter_transitions()], **extra)
@@ -336,22 +332,22 @@ class StateMachine(ParentState):
                                          getter=lambda p: self[p])
         return [path.get_in(self) for path in state_paths]
 
-    def _lookup_transitions(self, old_state_name_s, new_state_name_s, trigger=None):
-        old_state_name_s = listify(old_state_name_s)
-        new_state_name_s = listify(new_state_name_s)
+    def _lookup_transitions(self, *state_name_s, trigger=None):
+
+        def get_paths(names):
+            return get_expanded_paths(*listify(names), getter=lambda p: self[p], extend=True)
+
+        all_paths = [get_paths(ns) for ns in state_name_s]
+
         transitions = []
-        getter = lambda p: self[p]
-        for old_path in get_expanded_paths(*old_state_name_s, getter=getter, extend=True):
-            trans_dict = old_path.get_in(self).trigger_transitions
-            triggers = [trigger] if trigger else list(trans_dict)
-            for new_path in get_expanded_paths(*new_state_name_s, getter=getter, extend=True):
-                for trigg in triggers:
-                    transition = trans_dict[trigg].get(new_path)
-                    if transition is not None:
-                        transitions.append(transition)
+        for transition in self.iter_transitions():
+            for paths in product(*all_paths):
+                if transition.match(*paths, trigger=trigger):
+                    transitions.append(transition)
+
         if not len(transitions):
             raise MachineError(
-                f"no transitions found from '{old_state_name_s}' to '{new_state_name_s}' with trigger '{trigger}'")
+                f"no transitions found over '{state_name_s}' with trigger '{trigger}'")
         return transitions
 
     def _register_state_callback(self, key, *state_names):
@@ -395,8 +391,8 @@ class StateMachine(ParentState):
                                f"to '{self.name}' after class construction")
         return self._register_state_callback('constraint', *state_names)
 
-    def on_transfer(self, old_state_name_s, new_state_name_s, trigger=None):
-        transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger=trigger)
+    def on_transfer(self, *state_name_s, trigger=None):
+        transitions = self._lookup_transitions(*state_name_s, trigger=trigger)
 
         def register(func):
             for transition in transitions:
@@ -406,15 +402,15 @@ class StateMachine(ParentState):
         self._reset_on_new_callback()
         return register
 
-    def condition(self, old_state_name_s, new_state_name_s, trigger=None):
+    def condition(self, *state_name_s, trigger=None):
         if self.validated:
             raise MachineError(f"cannot dynamically add condition in '{self.name}' after class construction")
-        all_transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger)
+        all_transitions = self._lookup_transitions(*state_name_s, trigger=trigger)
         grouped_transitions = group_by(all_transitions, key=lambda t: str(t.states[0].path))  # old_state
         for old_state_name, transitions in grouped_transitions.items():
             if len(transitions) > 1:
                 raise MachineError(f"multiple transition(s) found when setting condition for transition "
-                                   f"from '{old_state_name}' to '{new_state_name_s}' with '{trigger}' trigger")
+                                   f"over '{state_name_s}' with '{trigger}' trigger")
 
         def register(func):
             for transitions in grouped_transitions.values():
@@ -462,7 +458,7 @@ class StateMachine(ParentState):
         use_getattr = self.use_attr
 
         def get_callbacks(state_name):
-            transactions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
+            transactions = Path(state_name).get_in(self).trigger_transitions[trigger]
             if transactions:
                 return [(t.conditions or None, t.effective_callbacks) for t in transactions]  # resolve falsehood
             raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in machine '{self.name}'")
