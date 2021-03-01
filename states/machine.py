@@ -157,14 +157,14 @@ class LeafState(ChildState, DummyMapping):
         self.trigger_transitions = defaultdict(dict)
         for trans_dict in self._trans_configs:
             del trans_dict['old_state']  # we are already there
-            target_name = trans_dict.pop('new_state')
-            target = Path(target_name).get_in(self.root)
-            self.create_transition(target, **trans_dict)
+            target_names = trans_dict.pop('new_state')
+            targets = [Path(n).get_in(self.root) for n in target_names]
+            self.create_transition(targets, **trans_dict)
         del self._trans_configs
 
-    def create_transition(self, target, **trans_dict):
-        transition = Transition(state=self, target=target, **trans_dict)
-        self.trigger_transitions[transition.trigger][transition.target.path] = transition
+    def create_transition(self, targets, **trans_dict):
+        transition = Transition(self, *targets, **trans_dict)
+        self.trigger_transitions[transition.trigger][transition.states[-1].path] = transition
         self.update_transitions(transition.trigger)
 
     def update_transitions(self, trigger):
@@ -173,7 +173,7 @@ class LeafState(ChildState, DummyMapping):
         self.trigger_transitions[trigger].clear()
         transitions = sorted(transitions, key=lambda t: not t.callbacks.get('condition'))
         for transition in transitions:
-            self.trigger_transitions[trigger][transition.target.path] = transition
+            self.trigger_transitions[trigger][transition.states[-1].path] = transition
         return list(self.trigger_transitions[trigger].values())
 
     def iter_states(self, filter=lambda s: True):
@@ -195,15 +195,13 @@ class LeafState(ChildState, DummyMapping):
             transitions = self.update_transitions(trigger)
             for transition in transitions[:-1]:
                 if not transition.conditions:
-                    raise MachineError(f"missing condition in transitions from '{str(self.path)}' to "
-                                       f"'{str(transition.target.path)}' with trigger '{trigger}' "
-                                       f"in machine '{self.name}'")
+                    raise MachineError(f"missing condition in transition {str(transition)} in machine '{self.name}'")
             if transitions[-1].conditions:
-                if any(t.state is t.target for t in transitions):
+                if any(t.is_same_state for t in transitions):
                     raise MachineError(f"default transition for conditional transitions from '{str(self.path)}' "
                                        f"with trigger '{trigger}' cannot be created, same state transition "
                                        f"already exists in machine '{self.name}'")
-                default_transition = Transition(state=self, target=self, trigger=trigger,
+                default_transition = Transition(self, trigger=trigger,
                                                 info="auto-generated default transition")
                 self.trigger_transitions[trigger][self.path] = default_transition
 
@@ -221,7 +219,7 @@ class StateMachine(ParentState):
             transitions = []
             for old_state in states:
                 for new_state in states:
-                    transitions.append(dict(old_state=old_state, new_state=new_state, trigger='goto_' + new_state))
+                    transitions.append(dict(old_state=old_state, new_state=[new_state], trigger='goto_' + new_state))
         normalized_config = normalize_statemachine_config(states=states, transitions=transitions, **config)
         return cls(name=name, **normalized_config)
 
@@ -410,9 +408,9 @@ class StateMachine(ParentState):
 
     def condition(self, old_state_name_s, new_state_name_s, trigger=None):
         if self.validated:
-            raise MachineError(f"cannot dynamically add condition to '{self.name}' after class construction")
+            raise MachineError(f"cannot dynamically add condition in '{self.name}' after class construction")
         all_transitions = self._lookup_transitions(old_state_name_s, new_state_name_s, trigger)
-        grouped_transitions = group_by(all_transitions, key=lambda t: str(t.state.path))  # old_state
+        grouped_transitions = group_by(all_transitions, key=lambda t: str(t.states[0].path))  # old_state
         for old_state_name, transitions in grouped_transitions.items():
             if len(transitions) > 1:
                 raise MachineError(f"multiple transition(s) found when setting condition for transition "

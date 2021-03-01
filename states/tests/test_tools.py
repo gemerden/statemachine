@@ -2,7 +2,7 @@ import unittest
 
 from states.configuration import default_case
 from states.tools import Path, copy_struct
-from states import state, transition, switch, case
+from states import state, transition, case
 
 __author__ = "lars van gemerden"
 
@@ -115,6 +115,11 @@ class TestPath(unittest.TestCase):
         assert str(tail_x) == 'a'
         assert str(tail_y) == 'b'
 
+        x = 'a.b'
+        common, *tails = Path.splice(x)
+        assert str(common) == 'a.b'
+        assert tails == [Path()]
+
     def test_partition(self):
         l, k, r = Path('a.b.c').partition(key='a')
         assert (l, k, r) == (Path(), 'a', Path('b.c'))
@@ -141,8 +146,8 @@ class TestDictClasses(unittest.TestCase):
         args, kwargs = dummy_state_machine(a=state(), b=state(),
                                            *(transition("a", "b", trigger="t1"),
                                              transition("a", "b", trigger="t2"),
-                                             transition("a", switch(case("a", condition="x"),
-                                                                    default_case("b")),
+                                             transition("a", [case("a", condition="x"),
+                                                              default_case("b")],
                                                         trigger="t3")))
         assert len(args) == 3
         assert len(kwargs) == 2
@@ -153,8 +158,8 @@ class TestDictClasses(unittest.TestCase):
 
         args, kwargs = dummy_state_machine(transition("a", "b", trigger="t1"),
                                            transition("b", "a", trigger="t2"),
-                                           transition("a", switch(case("a", condition="x"),
-                                                                  default_case("b")),
+                                           transition("a", [case("a", condition="x"),
+                                                            default_case("b")],
                                                       trigger="t3"),
                                            a=state(), b=state())
         assert len(args) == 3
@@ -164,10 +169,10 @@ class TestDictClasses(unittest.TestCase):
 class TestFunctions(unittest.TestCase):
 
     def test_copy_struct(self):
-        struct = {'a': [1,2,3],
-                  'b': (4,5),
+        struct = {'a': [1, 2, 3],
+                  'b': (4, 5),
                   'c': 'c',
-                  'd': {'a': [1,2], 'b': 'skjdfh'}}
+                  'd': {'a': [1, 2], 'b': 'skjdfh'}}
         copy = copy_struct(struct)
         assert struct == copy
         assert id(struct['a']) != id(copy['a'])
@@ -176,5 +181,3 @@ class TestFunctions(unittest.TestCase):
 
         def f():
             pass
-
-

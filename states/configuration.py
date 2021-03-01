@@ -36,34 +36,28 @@ def transitions(*transitions_):
     return list(transitions_)
 
 
-def transition(old_state, new_state, trigger, on_transfer=None, condition=None, info=""):
-    if isinstance(new_state, Mapping) and case:
+def transition(old_state, *new_state, trigger, on_transfer=None, condition=None, info=""):
+    if any(isinstance(ns, (list, tuple)) for ns in new_state) and condition:
         raise MachineError(f"transitions with multiple (switched) end-states cannot have a single condition")
 
     result = dict(old_state=old_state, new_state=new_state, trigger=trigger,
                   on_transfer=on_transfer or [], condition=condition or [], info=info)
-    return validate_dict(result, 'old_state', 'new_state', 'trigger', type_=(dict, str))
+    return validate_dict(result, 'old_state', 'trigger', type_=(dict, str))
 
 
-def switch(*state_conditions):
-    if not all(isinstance(c, dict) for c in state_conditions):
-        raise MachineError(f"all values in 'switch' must be 'dict'")
-    return list(state_conditions)
-
-
-def case(state, condition, on_transfer=None, info=""):
-    result = dict(state=state, condition=condition, on_transfer=on_transfer or [], info=info)
+def case(*states, condition, on_transfer=None, info=""):
+    result = dict(state=states, condition=condition, on_transfer=on_transfer or [], info=info)
     return validate_dict(validate_dict(result, 'state'), 'condition', type_=(str, Callable))
 
 
-def default_case(state, on_transfer=None, info=""):
+def default_case(*state, on_transfer=None, info=""):
     result = dict(state=state, condition=(), on_transfer=on_transfer or [], info=info)
     return validate_dict(result, 'state')
 
 def validate_dict(dct, *keys, type_=str):
     def check_type(key, value):
         if not isinstance(value, type_):
-            raise MachineError(f"incorrect type {type_.__name__} for argument {key} in state machine configuration")
+            raise MachineError(f"incorrect type for argument {key} in state machine configuration")
 
     def check_value(key, value):
         if not value:

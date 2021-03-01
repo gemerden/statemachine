@@ -1,9 +1,8 @@
-from states import StateMachine, StatefulObject, states, state, transition, switch
-from states.tools import condition
+from states import StatefulObject, states, state, transition, case, default_case, state_machine
 
 
 class Room(StatefulObject):
-    state = StateMachine(
+    state = state_machine(
         states=states(
             empty=state(on_entry=["turn_off_lights", "write_empty"]),
             occupied=state(on_entry=["turn_on_lights", "write_occupied"],
@@ -11,8 +10,8 @@ class Room(StatefulObject):
         ),
         transitions=[
             transition('*', "occupied", trigger='enter', on_transfer='increment'),
-            transition('occupied', switch(empty=condition("becomes_empty"),
-                                          occupied=condition()),
+            transition('occupied', [case('empty', condition="becomes_empty"),
+                                    default_case('occupied')],
                        trigger='leave')
         ]
     )
@@ -46,7 +45,7 @@ class Room(StatefulObject):
 
 
 class Person(StatefulObject):
-    state = StateMachine(
+    state = state_machine(
         states=states(
             outside=state(on_entry="leave_room"),
             inside=state(on_entry="enter_room"),
@@ -72,7 +71,7 @@ class Person(StatefulObject):
 
 
 class Light(StatefulObject):
-    state = StateMachine(
+    state = state_machine(
         states=states(
             off=state(on_entry="write"),
             on=state(on_entry="write"),

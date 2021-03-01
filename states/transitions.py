@@ -9,26 +9,36 @@ from .tools import Path, lazy_property
 class Transition(object):
     """class for the internal representation of transitions in the state machine"""
 
-    def __init__(self, state, target, trigger,
+    def __init__(self, state, *states, trigger,
                  on_transfer=(), condition=(), info=""):
         self.callbacks = Callbacks(on_transfer=on_transfer,
                                    condition=condition)
-        self.state = state
-        self.target = target
+        states = list(states)
+        while states and states[0] is state:
+            del states[0]
+        self.states = [state] + states
         self.trigger = trigger
         self.info = info
 
     @lazy_property
-    def common_state(self):
-        common, _, _ = Path.splice(self.state.path,
-                                   self.target.path)
-        return common.get_in(self.state.root)
+    def is_same_state(self):
+        return len(self.states) == 1
+
+    @lazy_property
+    def root(self):
+        return self.states[0].root
+
+    def common_state(self, *states):
+        states = states or self.states
+        common_path, *_ = Path.splice(*(s.path for s in states))
+        return common_path.get_in(self.root)
 
     @property
     def conditions(self):
         conditions = [*self.callbacks['condition']]
-        for state in self.target.up:
-            conditions.extend(state.callbacks['constraint'])
+        for target in self.states[1:]:
+            for state in target.up:
+                conditions.extend(state.callbacks['constraint'])
         return [c for c in conditions if c]
 
     @property
@@ -36,54 +46,57 @@ class Transition(object):
         return self.callbacks['on_transfer']
 
     @property
-    def on_exits(self):
-        on_exits = []
-        common = False
-        for state in self.state.up:
-            if state.parent:
-                on_exits.extend(state.parent.callbacks['before_exit'])
-            if state is self.common_state:
-                common = True
-            if not common:
-                on_exits.extend(state.callbacks['on_exit'])
-        return [e for e in on_exits if e]
+    def before_exits(self):
+        if self.is_same_state:
+            return []
+        all_exits = sum((s.parent.callbacks['before_exit'] for s in self.states[0].up if s.parent), [])
+        return list(reversed([e for e in all_exits if e]))
 
     @property
-    def on_entries(self):
+    def after_entries(self):
+        if self.is_same_state:
+            return []
+        all_entries = sum((s.parent.callbacks['after_entry'] for s in self.states[-1].up if s.parent), [])
+        return [e for e in all_entries if e]
+
+    def on_exits(self, old_state, new_state):
+        on_exits = []
+        common_state = self.common_state(old_state,
+                                         new_state)
+        for state in old_state.up:
+            if state is common_state:
+                break
+            on_exits.extend(state.callbacks['on_exit'])
+        return [e for e in on_exits if e]
+
+    def on_entries(self, old_state, new_state):
         on_entries = []
-        common = False
-        for state in self.target.up:
-            if state.parent:
-                on_entries.extend(state.parent.callbacks['after_entry'])
-            if state is self.common_state:
-                common = True
-            if not common:
-                on_entries.extend(state.callbacks['on_entry'])
+        common_state = self.common_state(old_state,
+                                         new_state)
+        for state in new_state.up:
+            if state is common_state:
+                break
+            on_entries.extend(state.callbacks['on_entry'])
         return list(reversed([e for e in on_entries if e]))
 
     @property
-    def inner_stays(self):
-        return sum((s.callbacks['on_stay'] for s in self.state.up if s.callbacks['on_stay']), [])
+    def on_stays(self):
+        return sum((s.callbacks['on_stay'] for s in self.common_state().up if s.callbacks['on_stay']), [])
 
-    @property
-    def outer_stays(self):
-        return sum((s.callbacks['on_stay'] for s in self.common_state.up if s.callbacks['on_stay']), [])
-
-    @property
-    def set_state(self):
-        return self.state.root.set_state_callback(str(self.target.path))
+    def set_state(self, state):
+        return self.root.set_state_callback(str(state.path))
 
     @property
     def effective_callbacks(self):
-        if self.state is self.target:
-            return [*self.on_transfers,
-                    *self.inner_stays]
-        else:
-            return [*self.on_exits,
-                    self.set_state,
-                    *self.on_transfers,
-                    *self.outer_stays,
-                    *self.on_entries]
+        callbacks = [*self.before_exits]
+        for old_state, new_state in zip(self.states, self.states[1:]):
+            callbacks.extend([*self.on_exits(old_state, new_state),
+                              self.set_state(new_state),
+                              *self.on_entries(old_state, new_state)])
+        callbacks.extend(self.on_transfers)
+        callbacks.extend(self.on_stays)
+        callbacks.extend(self.after_entries)
+        return callbacks
 
     @property
     def execute(self):
@@ -107,11 +120,10 @@ class Transition(object):
 
     def add_condition(self, callback):
         self.callbacks.register(condition=callback)
-        self.state.update_transitions(self.trigger)
+        self.states[0].update_transitions(self.trigger)
 
     def as_json_dict(self):
-        result = dict(old_state=str(self.state.path),
-                      new_state=str(self.target.path),
+        result = dict(states=[str(s.path) for s in self.states],
                       trigger=self.trigger)
         result.update(self.callbacks.as_json_dict())
         if len(self.info):
@@ -120,7 +132,7 @@ class Transition(object):
 
     def __str__(self):
         """ string representing the transition """
-        return f"Transition({self.state.path}, {self.target.path}, trigger={self.trigger})"
+        return f"Transition({', '.join([str(s.path) for s in self.states])}, trigger={self.trigger})"
 
     def __repr__(self):
         return json.dumps(self.as_json_dict(), indent=4)

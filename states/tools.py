@@ -218,15 +218,16 @@ class Path(tuple):
     def trace_out(self, target, first=True, last=True):
         return reversed(list(self.trace_in(target, last, first)))
 
-    def splice(self, other):
-        self, other = Path(self), Path(other)
+    def splice(self, *others):
+        self_ = Path(self)
+        others = list(map(Path, others))
         common = []
-        for i, (s, o) in enumerate(zip_longest(self, other)):
-            if s == o:
+        for i, (s, *os) in enumerate(zip_longest(self_, *others)):
+            if all(o == s for o in os):
                 common.append(s)
             else:
-                return Path(common), self[i:], other[i:]
-        return self, Path(), Path()
+                return (Path(common), self_[i:], *(o[i:] for o in others))
+        return (self_, *(Path() for _ in range(len(others)+1)))
 
     def partition(self, key):
         if not len(self):
@@ -301,14 +302,14 @@ def save_graph(machine, filename='png', view=True, prefix=' ', **options):
                            edge_attr=options)
 
     def create_edge(transition):
-        dot.edge(str(transition.state.path),
-                 str(transition.target.path),
+        dot.edge(str(transition.states[0].path),
+                 str(transition.states[-1].path),
                  label=prefix + transition.trigger)
 
     def create_split_edge(transitions):
         splitter_node_key = str(random())
         dot.node(splitter_node_key, label='', shape='circle', width='0.2')
-        dot.edge(str(transitions[0].state.path),
+        dot.edge(str(transitions[0].states[0].path),
                  splitter_node_key,
                  prefix + str(transitions[0].trigger))
         for transition in transitions:
@@ -317,7 +318,7 @@ def save_graph(machine, filename='png', view=True, prefix=' ', **options):
             else:
                 condition_name = ''
             dot.edge(splitter_node_key,
-                     str(transition.target.path),
+                     str(transition.states[-1].path),
                      condition_name)
 
     for state in machine.iter_states(filter=lambda s: len(s) == 0):  #leaf states

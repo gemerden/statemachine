@@ -104,8 +104,8 @@ def normalize_statemachine_config(**root_config):
     """
     config_listify_keys = ('transitions', 'prepare')
     state_listify_keys = ('on_entry', 'on_exit', 'on_stay', 'constraint')
-    trans_listify_keys = ('old_state', 'trigger', 'on_transfer', 'condition')
-    case_listify_keys = ('on_transfer', 'condition')
+    trans_listify_keys = ('old_state', 'new_state', 'trigger', 'on_transfer', 'condition')
+    case_listify_keys = ('new_state', 'on_transfer', 'condition')
 
     def listify_by_keys(dct, *keys):
         for k in keys:
@@ -150,11 +150,12 @@ def normalize_statemachine_config(**root_config):
     def state_getter(path, conf=None):
         return config_getter(path, conf).get('states', {})
 
-    def validate_states(old_state, new_state):
-        validate_new_state(new_state)
-        for state_name in (old_state, new_state):
+    def validate_states(*states):
+        for state_name in states[1:]:
+            validate_new_state(state_name)
+        for state_name in states:
             config_getter(state_name, root_config)
-        return old_state, new_state
+        return states
 
     def initial_state(state_name, conf=None):
         state_config = config_getter(state_name, conf)
@@ -168,12 +169,10 @@ def normalize_statemachine_config(**root_config):
     def normalize_config(config):
         for _, state_config in iter_configs(config):
             listify_by_keys(state_config, *config_listify_keys)
-        # return config
 
     def normalize_states(config):
         for _, state_config in iter_configs(config):
             listify_by_keys(state_config.get('states', {}), *state_listify_keys)
-        # return copy_struct(config)
 
     def normalize_transitions(config):
 
@@ -183,7 +182,7 @@ def normalize_statemachine_config(**root_config):
                 seen_keys = set()
                 for transitions in transitions_dict.values():
                     for trans in transitions:
-                        key = (trans['old_state'], trans['new_state'], trans['trigger'])
+                        key = (trans['old_state'], tuple(trans['new_state']), trans['trigger'])
                         if key in seen_keys:
                             raise MachineError(f"double transition from '{key[0]}' to '{key[1]}' with trigger '{key[2]}'")
                         seen_keys.add(key)
@@ -193,19 +192,19 @@ def normalize_statemachine_config(**root_config):
             def expand_transitions(state_path, state_config, transitions_dict):
                 get_state = partial(state_getter, conf=state_config)
 
-                def create_new(transition, old_state, new_state, on_transfer, case=None, **kwargs):
-                    new_state = initial_state(new_state, state_config)
-                    old_state, new_state = validate_states(old_state, new_state)
+                def create_new(transition, old_state, new_states, on_transfer, case=None, **kwargs):
+                    new_states = [initial_state(s, state_config) for s in new_states]
+                    old_state, *new_states = validate_states(old_state, *new_states)
                     if case:
                         case = listify_by_keys(case, *case_listify_keys)
                         on_transfer = on_transfer + case.get('on_transfer', [])
                         kwargs['info'] = case.get('info', transition.get('info', ''))
                         if transition.get('condition'):
                             raise MachineError(
-                                f"transition from {old_state} to {new_state} cannot have outside 'new_state' argument")
+                                f"transition over {[old_state] + new_states} cannot have outside 'condition' argument")
                         kwargs['condition'] = case.get('condition', [])
                     new_transition = copy_struct(transition)
-                    new_transition.update(old_state=old_state, new_state=new_state, on_transfer=on_transfer, **kwargs)
+                    new_transition.update(old_state=old_state, new_state=new_states, on_transfer=on_transfer, **kwargs)
                     return new_transition
 
                 for transition in state_config.pop('transitions', ()):
@@ -218,9 +217,9 @@ def normalize_statemachine_config(**root_config):
                     for old_path in get_expanded_paths(*old_states, getter=get_state,
                                                        base_path=state_path, extend=True):
                         for trigger in triggers:
-                            if isinstance(new_states, (list, tuple)):
-                                for case in new_states:
-                                    new_transition = create_new(transition, str(old_path), case['state'],
+                            if isinstance(new_states[-1], (list, tuple)):
+                                for case in new_states[-1]:
+                                    new_transition = create_new(transition, str(old_path), new_states[:-1] + case['state'],
                                                                 trigger=trigger, on_transfer=on_transfer, case=case)
                                     transitions_dict[old_path].append(new_transition)
 

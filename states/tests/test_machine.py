@@ -6,7 +6,7 @@ from collections import defaultdict
 from ..exception import TransitionError, MachineError
 from ..machine import state_machine
 from ..stateful import StatefulObject
-from ..configuration import transitions, default_case, states, state, transition, switch, case
+from ..configuration import default_case, states, transitions, state, transition, case
 from ..tools import Path, stopwatch
 
 
@@ -540,13 +540,14 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
                 states=states(on=state(),
                               off=state(),
                               broken=state()),
-                transitions=transitions(transition('off', 'on', trigger=["turn_on", "switch"]),
-                                        transition('on', 'off', trigger=["turn_off", "switch"]),
-                                        transition(["on", "off"], 'broken', trigger="smash"),
-                                        transition('broken', switch(case('on', 'was_on'),
-                                                                    default_case('off', on_transfer='fix_to_off')),
-                                                   on_transfer='in_any_case',
-                                                   trigger='fix')),
+                transitions=[transition('off', 'on', trigger=["turn_on", "switch"]),
+                             transition('on', 'off', trigger=["turn_off", "switch"]),
+                             transition(["on", "off"], 'broken', trigger="smash"),
+                             transition('broken', [case('on', condition='was_on'),
+                                                   default_case('off', on_transfer='fix_to_off')],
+                                        on_transfer='in_any_case',
+                                        trigger='fix')
+                             ],
             )
 
             def __init__(self, state=None):
@@ -606,8 +607,8 @@ class TestSwitchedTransitionStateMachine(unittest.TestCase):
                 transitions=(transition('off', 'on', trigger=["turn_on", "switch"]),
                              transition('on', 'off', trigger=["turn_off", "switch"]),
                              transition(["on", "off"], 'broken', trigger="smash"),
-                             transition('broken', switch(default_case('off'),  # wrong order is fixed
-                                                         case('on', 'was_on')),
+                             transition('broken', [default_case('off'),  # wrong order is fixed automatically
+                                                   case('on', condition='was_on')],
                                         trigger='fix'))
             )
 
@@ -629,14 +630,14 @@ class TestNestedStateMachine(unittest.TestCase):
         self.machine = state_machine(
             states=states(off=state(states(working=state(),
                                            broken=state()),
-                                    transitions(transition('broken', 'working', trigger='fix'))),
+                                    [transition('broken', 'working', trigger='fix')]),
 
                           on=state(states(waiting=state(),
                                           washing=state(),
                                           drying=state()),
-                                   transitions(transition('waiting', 'washing', trigger='wash'),
-                                               transition('washing', 'drying', trigger='dry'),
-                                               transition('drying', 'waiting', trigger='stop')))),
+                                   [transition('waiting', 'washing', trigger='wash'),
+                                    transition('washing', 'drying', trigger='dry'),
+                                    transition('drying', 'waiting', trigger='stop')])),
             transitions=(transition('off.working', 'on', trigger=["turn_on", "flick"]),
                          transition('on', 'off', trigger=["turn_off", "flick"]),
                          transition(('on.*', 'off'), 'off.broken', trigger=["smash"]),
@@ -876,13 +877,13 @@ class TestCallbackDecorators(unittest.TestCase):
         self.machine = state_machine(
             states=states(off=state(states(working=state(),
                                            broken=state()),
-                                    transitions(transition('broken', 'working', trigger='fix'))),
+                                    transitions=[transition('broken', 'working', trigger='fix')]),
                           on=state(states(waiting=state(),
                                           washing=state(),
                                           drying=state()),
-                                   transitions(transition('waiting', 'washing', trigger='wash'),
-                                               transition('washing', 'drying', trigger='dry'),
-                                               transition('drying', 'waiting', trigger='stop')))),
+                                   transitions=[transition('waiting', 'washing', trigger='wash'),
+                                                transition('washing', 'drying', trigger='dry'),
+                                                transition('drying', 'waiting', trigger='stop')])),
             transitions=(transition('off.working', 'on', trigger="turn_on"),
                          transition('on', 'off', trigger="turn_off"),
                          transition(('on', 'off'), 'off.broken', trigger="smash"))
@@ -1830,4 +1831,3 @@ class TestGraphviz(unittest.TestCase):
             self.user_class.state.save_graph(filename='\data\graph.png')
         except RuntimeError as error:
             print('graphviz test:', error)
-

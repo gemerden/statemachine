@@ -2,7 +2,7 @@ import unittest
 from itertools import product
 
 from ..tools import Path
-from ..configuration import transitions, default_case, states, state, transition, switch, case
+from ..configuration import transitions, default_case, states, state, transition, case
 from ..normalize import normalize_statemachine_config
 
 
@@ -37,13 +37,14 @@ class TestStatemachineStandardizarion(unittest.TestCase):
         old_state = trans['old_state']
         new_state = trans['new_state']
         assert isinstance(old_state, str)
-        assert isinstance(new_state, str)
+        assert all(isinstance(ns, str) for ns in new_state)
         assert '*' not in old_state
         assert '*' not in new_state
         for name in Path(old_state):
             assert name in states
-        for name in Path(new_state):
-            assert name in states
+        for state in new_state:
+            for name in Path(state):
+                assert name in states
 
     def assert_standard_config(self, config):
         states = self.states(config)
@@ -75,8 +76,8 @@ class TestStatemachineStandardizarion(unittest.TestCase):
 
         standard_transitions = self.transitions(standard_config)
         assert len(standard_transitions) == 4
-        assert set((t['old_state'], t['new_state']) for t in standard_transitions) == set(product(('on', 'off'),
-                                                                                                  ('on', 'off')))
+        assert set((t['old_state'], *t['new_state']) for t in standard_transitions) == set(product(('on', 'off'),
+                                                                                                   ('on', 'off')))
 
     def test_with_multiple_old_states(self):
         config = dict(states=states(off=state(info="not turned on"),
@@ -89,8 +90,8 @@ class TestStatemachineStandardizarion(unittest.TestCase):
 
         standard_transitions = self.transitions(standard_config)
         assert len(standard_transitions) == 4
-        assert set((t['old_state'], t['new_state']) for t in standard_transitions) == set(product(('on', 'off'),
-                                                                                                  ('on', 'off')))
+        assert set((t['old_state'], *t['new_state']) for t in standard_transitions) == set(product(('on', 'off'),
+                                                                                                   ('on', 'off')))
 
     def test_with_callbacks(self):
         """ bit moot """
@@ -112,8 +113,8 @@ class TestStatemachineStandardizarion(unittest.TestCase):
             transitions=transitions(transition('off', 'on', trigger="flip"),
                                     transition('on', 'off', trigger="flip"),
                                     transition(["on", "off"], 'broken', trigger="smash"),
-                                    transition('broken', switch(case('on', 'condition_func'),
-                                                                default_case('off')),
+                                    transition('broken', [case('on', condition='condition_func'),
+                                                          default_case('off')],
                                                trigger='fix')),
         )
         standard_config = normalize_statemachine_config(**config)
@@ -158,8 +159,8 @@ class TestStatemachineStandardizarion(unittest.TestCase):
             transitions=transitions(transition('off', 'on', trigger="flip"),
                                     transition('on', 'off', trigger="flip"),
                                     transition(["on", "off"], 'broken', trigger="smash"),
-                                    transition(('broken', 'off'), switch(case('on', 'condition_func'),
-                                                                         default_case('off')),
+                                    transition(('broken', 'off'), [case('on', condition='condition_func'),
+                                                                   default_case('off')],
                                                trigger='fix')),
         )
         standard_config = normalize_statemachine_config(**config)
