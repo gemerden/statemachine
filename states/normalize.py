@@ -2,12 +2,11 @@ __author__ = "lars van gemerden"
 
 from contextlib import contextmanager
 from functools import partial
-from typing import Mapping, Set
+from typing import Set
 from collections import deque, defaultdict
 
 from .tools import listify, Path, copy_struct
 from .exception import MachineError
-from .configuration import transition
 
 
 def validate_new_state(state_name_s):

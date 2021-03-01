@@ -321,9 +321,9 @@ def save_graph(machine, filename='png', view=True, prefix=' ', **options):
                      str(transition.states[-1].path),
                      condition_name)
 
-    for state in machine.iter_states(filter=lambda s: len(s) == 0):  #leaf states
+    for state in machine.iter_states(key=lambda s: len(s) == 0):  #leaf states
         for trigger in state.triggers:
-            transitions = list(state.trigger_transitions[trigger].values())
+            transitions = state.trigger_transitions[trigger]
             if len(transitions) == 1:
                 create_edge(transitions[0])
             elif len(transitions) > 1:

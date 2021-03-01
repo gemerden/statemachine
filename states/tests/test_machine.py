@@ -113,7 +113,7 @@ class TestSimpleStateMachine(unittest.TestCase):
 
     def test_info(self):
         self.assertEqual(type(self.lamp).state.sub_states["on"].info, "not turned off")
-        self.assertEqual(type(self.lamp).state['off'].trigger_transitions['flick'][Path('on')].info, "turn the light on")
+        self.assertEqual(type(self.lamp).state['off'].trigger_transitions['flick'][0].info, "turn the light on")
 
 
 class TestStateMachine(unittest.TestCase):
@@ -1895,8 +1895,7 @@ class TestMultiTransition(unittest.TestCase):
         assert washer.state == 'off.working'
         washer.smash()
         assert washer.state == 'off.broken'
-        washer.cycle()
         washer.just_do_it()
-        assert washer.before_history == ['off.working', 'on.washing', 'on.drying']
-        assert washer.after_history == ['on.washing', 'on.drying', 'on.waiting']
+        assert washer.before_history == ['off.working']
+        assert washer.after_history == ['off.broken']
 
