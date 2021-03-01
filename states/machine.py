@@ -219,13 +219,13 @@ class StateMachine(ParentState):
         normalized_config = normalize_statemachine_config(states=states, transitions=transitions, **config)
         return cls(name=name, **normalized_config)
 
-    def __init__(self, name=None, states=None, on_stay=(), prepare=(), contextmanager=None, info=""):
+    def __init__(self, name=None, states=None, on_stay=(), prepare=(), contextmanager=(), info=""):
         self.path = Path()
         self.root = self
         self.up = [self]
-        super().__init__(name=name, states=states or {}, on_stay=on_stay, prepare=prepare, info=info)
+        super().__init__(name=name, states=states or {}, on_stay=on_stay,
+                         prepare=prepare, contextmanager=contextmanager, info=info)
         self._init_transitions()
-        self._contextmanager = contextmanager
         self._callback_cache = defaultdict(dict)  # cache for transition lookup when trigger is called
         self.use_attr = False
         self.owner_cls = None
@@ -425,10 +425,49 @@ class StateMachine(ParentState):
         self._reset_on_new_callback()
         return func
 
-    def contextmanager(self, func):
-        self._contextmanager = contextlib.contextmanager(func)
+    def contextmanager(self, keyword):
+        for ctx_mgr in self.callbacks['contextmanager']:
+            if ctx_mgr.__keyword__ == keyword:
+                raise MachineError(f"contextmanager with keyword '{keyword}' already exists")
+
+        def register(gen):
+            ctx_manager = contextlib.contextmanager(gen)
+            ctx_manager.__keyword__ = keyword
+            self.callbacks.register(contextmanager=ctx_manager)
+
         self._reset_on_new_callback()
-        return func
+        return register
+
+    def _get_contextmanager(self):
+        context_managers = self.callbacks['contextmanager']
+        keywords = [c.__keyword__ for c in context_managers]
+
+        def check_keywords(kwargs):
+            for kw in keywords:
+                if kw in kwargs:
+                    raise TransitionError(f"cannot use context from contextmanager: "
+                                          f"trigger called with argument in '{keywords}'")
+
+        if len(context_managers) == 0:
+            create_context = None
+        elif len(context_managers) == 1:
+            context_manager = context_managers[0]
+
+            @contextlib.contextmanager
+            def create_context(obj, *args, **kwargs):
+                check_keywords(kwargs)
+                with context_manager(obj, *args, **kwargs) as context:
+                    yield {context_manager.__keyword__: context}
+        else:
+
+            @contextlib.contextmanager
+            def create_context(obj, *args, **kwargs):
+                check_keywords(kwargs)
+                with contextlib.ExitStack() as stack:
+                    enter = stack.enter_context
+                    yield {cm.__keyword__: enter(cm(obj, *args, **kwargs)) for cm in context_managers}
+
+        return create_context
 
     def init_entry(self, obj, *args, **kwargs):
         """
@@ -438,11 +477,10 @@ class StateMachine(ParentState):
         if self.callbacks.prepare:
             self.callbacks.prepare(obj, *args, **kwargs)
 
-        if self._contextmanager:
-            with self._contextmanager(obj, *args, **kwargs) as context:
-                if context in kwargs:
-                    raise TransitionError(f"cannot pass context from contextmanager: trigger called with argument 'context'")
-                kwargs['context'] = context
+        ctx_mgr = self._get_contextmanager()
+        if ctx_mgr:
+            with ctx_mgr(obj, *args, **kwargs) as ctx:
+                kwargs.update(ctx)
                 for state in Path(getattr(obj, self.name)).iter_in(self):
                     state.callbacks.on_entry(obj, *args, **kwargs)
                     state.parent.callbacks.after_entry(obj, *args, **kwargs)
@@ -486,11 +524,11 @@ class StateMachine(ParentState):
                     def trigger_func(obj, *args, **kwargs):
                         prepare_(obj, *args, **kwargs)
                         with contextmanager_(obj, *args, **kwargs) as context:
-                            return execute_(obj, *args, context=context, **kwargs)
+                            return execute_(obj, *args, **context, **kwargs)
                 else:
                     def trigger_func(obj, *args, **kwargs):
                         with contextmanager_(obj, *args, **kwargs) as context:
-                            return execute_(obj, *args, context=context, **kwargs)
+                            return execute_(obj, *args, **context, **kwargs)
             else:
                 if prepare_:
                     def trigger_func(obj, *args, **kwargs):
@@ -501,7 +539,7 @@ class StateMachine(ParentState):
 
             return trigger_func
 
-        return get_trigger_func(execute, self.callbacks.prepare, self._contextmanager)
+        return get_trigger_func(execute, self.callbacks.prepare, self._get_contextmanager())
 
     def validate_transitions(self):
         super().validate_transitions()
