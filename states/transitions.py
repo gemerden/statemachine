@@ -13,10 +13,7 @@ class Transition(object):
                  on_transfer=(), condition=(), info=""):
         self.callbacks = Callbacks(on_transfer=on_transfer,
                                    condition=condition)
-        states = list(states)
-        while states and states[0] is state:
-            del states[0]
-        self.states = [state] + states
+        self.states = [state] + list(states)
         self.trigger = trigger
         self.info = info
 
@@ -35,7 +32,7 @@ class Transition(object):
 
     @property
     def conditions(self):
-        conditions = [*self.callbacks['condition']]
+        conditions = self.callbacks['condition']
         for target in self.states[1:]:
             for state in target.up:
                 conditions.extend(state.callbacks['constraint'])
@@ -60,7 +57,7 @@ class Transition(object):
         return [e for e in all_entries if e]
 
     def on_exits(self, old_state, new_state):
-        on_exits = []
+        on_exits = self.before_exits
         common_state = self.common_state(old_state,
                                          new_state)
         for state in old_state.up:
@@ -77,7 +74,7 @@ class Transition(object):
             if state is common_state:
                 break
             on_entries.extend(state.callbacks['on_entry'])
-        return list(reversed([e for e in on_entries if e]))
+        return list(reversed([e for e in on_entries if e])) + self.after_entries
 
     @property
     def on_stays(self):
@@ -88,14 +85,13 @@ class Transition(object):
 
     @property
     def effective_callbacks(self):
-        callbacks = [*self.before_exits]
+        callbacks = []
         for old_state, new_state in zip(self.states, self.states[1:]):
             callbacks.extend([*self.on_exits(old_state, new_state),
                               self.set_state(new_state),
                               *self.on_entries(old_state, new_state)])
         callbacks.extend(self.on_transfers)
         callbacks.extend(self.on_stays)
-        callbacks.extend(self.after_entries)
         return callbacks
 
     @property

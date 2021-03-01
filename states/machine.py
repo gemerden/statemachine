@@ -465,7 +465,7 @@ class StateMachine(ParentState):
             transactions = list(Path(state_name).get_in(self).trigger_transitions[trigger].values())
             if transactions:
                 return [(t.conditions or None, t.effective_callbacks) for t in transactions]  # resolve falsehood
-            raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in '{self.name}'")
+            raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in machine '{self.name}'")
 
         def execute(obj, *args, **kwargs):
             if use_getattr:

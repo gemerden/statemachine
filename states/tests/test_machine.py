@@ -1828,6 +1828,75 @@ class TestGraphviz(unittest.TestCase):
 
     def test(self):
         try:
-            self.user_class.state.save_graph(filename='\data\graph.png')
+            self.user_class.state.save_graph(filename='/data/graph.png')
         except RuntimeError as error:
             print('graphviz test:', error)
+
+
+class TestMultiTransition(unittest.TestCase):
+
+    def setUp(self):
+        """called before any individual test method"""
+        # create a machine config based on phase changes of matter (solid, liquid, gas)
+        self.machine = state_machine(
+            states=states(off=state(states('working', 'broken'),
+                                    transitions=[transition('broken', 'working', trigger='fix')]),
+                          on=state(states('waiting', 'washing', 'drying'),
+                                   transitions=[transition('waiting', 'washing', trigger='wash'),
+                                                transition('washing', 'drying', trigger='dry'),
+                                                transition('drying', 'waiting', trigger='stop'),
+                                                transition('waiting', 'washing', 'drying', 'waiting', trigger='cycle')])),
+            transitions=(transition('off.working', 'on', trigger="turn_on"),
+                         transition('on', 'off', trigger="turn_off"),
+                         transition(('on', 'off'), 'off.broken', trigger="smash"),
+                         transition('off', 'on.washing', 'on.drying', 'on.waiting', trigger='just_do_it'))
+        )
+
+        class WashingMachine(StatefulObject):
+            state = self.machine
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.before_history = []
+                self.after_history = []
+
+            @state.constraint('on')
+            def is_working(self, **kwargs):
+                return self.state != 'off.broken'
+
+            @state.before_exit()
+            def update_before_history(self, **kwargs):
+                self.before_history.append(self.state)
+
+            @state.after_entry()
+            def update_after_history(self, **kwargs):
+                self.after_history.append(self.state)
+
+        self.object_class = WashingMachine
+
+    def test_cycle(self):
+        washer = self.object_class()
+        assert washer.state == 'off.working'
+        washer.turn_on()
+        assert washer.state == 'on.waiting'
+        washer.cycle()
+        assert washer.state == 'on.waiting'
+        assert washer.before_history == ['off.working', 'on.waiting', 'on.washing', 'on.drying']
+        assert washer.after_history == ['on.waiting', 'on.washing', 'on.drying', 'on.waiting']
+
+    def test_just_do_it(self):
+        washer = self.object_class()
+        washer.just_do_it()
+        assert washer.before_history == ['off.working', 'on.washing', 'on.drying']
+        assert washer.after_history == ['on.washing', 'on.drying', 'on.waiting']
+
+    def test_just_do_it_broken(self):
+        washer = self.object_class()
+        assert washer.state == 'off.working'
+        washer.smash()
+        assert washer.state == 'off.broken'
+        washer.cycle()
+        washer.just_do_it()
+        assert washer.before_history == ['off.working', 'on.washing', 'on.drying']
+        assert washer.after_history == ['on.washing', 'on.drying', 'on.waiting']
+
