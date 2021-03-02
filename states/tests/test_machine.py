@@ -1849,13 +1849,14 @@ class TestMultiTransition(unittest.TestCase):
     def setUp(self):
         """called before any individual test method"""
         # create a machine config based on phase changes of matter (solid, liquid, gas)
-        self.machine = state_machine(
+        machine = state_machine(
             states=states(off=state(states('working', 'broken'),
                                     transitions=[transition('broken', 'working', trigger='fix')]),
                           on=state(states('waiting', 'washing', 'drying'),
                                    transitions=[transition('waiting', 'washing', trigger='wash'),
                                                 transition('washing', 'drying', trigger='dry'),
                                                 transition('drying', 'waiting', trigger='stop'),
+                                                transition('waiting', trigger='dont'),
                                                 transition('waiting', 'washing', 'drying', 'waiting', trigger='cycle')])),
             transitions=(transition('off.working', 'on', trigger="turn_on"),
                          transition('on', 'off', trigger="turn_off"),
@@ -1864,12 +1865,13 @@ class TestMultiTransition(unittest.TestCase):
         )
 
         class WashingMachine(StatefulObject):
-            state = self.machine
+            state = machine
 
             def __init__(self, **kwargs):
                 super().__init__(**kwargs)
                 self.before_history = []
                 self.after_history = []
+                self.stay_history = []
 
             @state.constraint('on')
             def is_working(self, **kwargs):
@@ -1882,6 +1884,10 @@ class TestMultiTransition(unittest.TestCase):
             @state.after_entry()
             def update_after_history(self, **kwargs):
                 self.after_history.append(self.state)
+
+            @state.on_stay('on')
+            def update_stay_history(self, **kwargs):
+                self.stay_history.append(self.state)
 
         self.object_class = WashingMachine
 
@@ -1909,4 +1915,15 @@ class TestMultiTransition(unittest.TestCase):
         washer.just_do_it()
         assert washer.before_history == ['off.working']
         assert washer.after_history == ['off.broken']
+
+    def test_single_state_transition(self):
+        washer = self.object_class()
+        assert washer.state == 'off.working'
+        washer.turn_on()
+        assert washer.state == 'on.waiting'
+        washer.dont()
+        assert washer.state == 'on.waiting'
+        assert washer.before_history == ['off.working']
+        assert washer.after_history == ['on.waiting']
+        assert washer.stay_history == ['on.waiting']
 

@@ -43,22 +43,20 @@ class Transition(object):
     def on_transfers(self):
         return self.callbacks['on_transfer']
 
-    @property
-    def before_exits(self):
+    def before_exits(self, state):
         if self.is_same_state:
             return []
-        all_exits = sum((s.parent.callbacks['before_exit'] for s in self.states[0].up if s.parent), [])
+        all_exits = sum((s.parent.callbacks['before_exit'] for s in state.up if s.parent), [])
         return list(reversed([e for e in all_exits if e]))
 
-    @property
-    def after_entries(self):
+    def after_entries(self, state):
         if self.is_same_state:
             return []
-        all_entries = sum((s.parent.callbacks['after_entry'] for s in self.states[-1].up if s.parent), [])
+        all_entries = sum((s.parent.callbacks['after_entry'] for s in state.up if s.parent), [])
         return [e for e in all_entries if e]
 
     def on_exits(self, old_state, new_state):
-        on_exits = self.before_exits
+        on_exits = []
         common_state = self.common_state(old_state,
                                          new_state)
         for state in old_state.up:
@@ -75,7 +73,7 @@ class Transition(object):
             if state is common_state:
                 break
             on_entries.extend(state.callbacks['on_entry'])
-        return list(reversed([e for e in on_entries if e])) + self.after_entries
+        return list(reversed([e for e in on_entries if e]))
 
     @property
     def on_stays(self):
@@ -87,10 +85,12 @@ class Transition(object):
     @property
     def effective_callbacks(self):
         callbacks = []
-        for old_state, new_state in zip(self.states, self.states[1:]):
-            callbacks.extend([*self.on_exits(old_state, new_state),
+        for old_state, new_state in zip(self.states[:-1], self.states[1:]):
+            callbacks.extend([*self.before_exits(old_state),
+                              *self.on_exits(old_state, new_state),
                               self.set_state(new_state),
-                              *self.on_entries(old_state, new_state)])
+                              *self.on_entries(old_state, new_state),
+                              *self.after_entries(new_state)])
         callbacks.extend(self.on_transfers)
         callbacks.extend(self.on_stays)
         return callbacks
@@ -102,7 +102,7 @@ class Transition(object):
 
         if conditions:
             def execute(obj, *args, **kwargs):
-                if any(c(obj, *args, **kwargs) for c in conditions):
+                if all(c(obj, *args, **kwargs) for c in conditions):
                     for callback in callbacks:
                         callback(obj, *args, **kwargs)
                     return True

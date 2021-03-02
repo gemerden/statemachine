@@ -441,28 +441,26 @@ class StateMachine(ParentState):
 
     def _get_contextmanager(self):
         ctx_mgrs = self.callbacks['contextmanager']
+        if not ctx_mgrs:
+            return None
 
-        if len(ctx_mgrs) == 0:
-            create_context = None
-        elif len(ctx_mgrs) == 1:
+        if len(ctx_mgrs) == 1:
             context_manager = ctx_mgrs[0]
             keyword = context_manager.__keyword__
 
-            @contextlib.contextmanager
             def create_context(obj, *args, **kwargs):
                 with context_manager(obj, *args, **kwargs) as context:
                     yield {keyword: context} if keyword else None
         else:
             keywords = [c.__keyword__ for c in ctx_mgrs]
 
-            @contextlib.contextmanager
             def create_context(obj, *args, **kwargs):
                 with contextlib.ExitStack() as stack:
                     enter = stack.enter_context
                     contexts = [enter(cm(obj, *args, **kwargs)) for cm in ctx_mgrs]
                     yield {kw: ctx for kw, ctx in zip(keywords, contexts) if kw}
 
-        return create_context
+        return contextlib.contextmanager(create_context)
 
     def init_entry(self, obj, *args, **kwargs):
         """
@@ -487,7 +485,7 @@ class StateMachine(ParentState):
         """ returns the function that executes when a trigger is called """
         callback_cache = self._callback_cache[trigger]
         attr_name = self.name
-        use_getattr = self.use_attr
+        use_attr = self.use_attr
 
         def get_callbacks(state_name):
             transactions = Path(state_name).get_in(self).trigger_transitions[trigger]
@@ -496,7 +494,7 @@ class StateMachine(ParentState):
             raise TransitionError(f"no transition from '{state_name}' with trigger '{trigger}' in machine '{self.name}'")
 
         def execute(obj, *args, **kwargs):
-            if use_getattr:
+            if use_attr:
                 state_name = getattr(obj, attr_name)
             else:
                 state_name = obj.__dict__[attr_name]
@@ -506,7 +504,7 @@ class StateMachine(ParentState):
                 condition_callbacks = callback_cache[state_name] = get_callbacks(state_name)
 
             for conditions, callbacks in condition_callbacks:
-                if conditions is None or any(c(obj, *args, **kwargs) for c in conditions):
+                if conditions is None or all(c(obj, *args, **kwargs) for c in conditions):
                     for callback in callbacks:
                         callback(obj, *args, **kwargs)
                     return obj

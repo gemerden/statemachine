@@ -216,7 +216,7 @@ def normalize_statemachine_config(**root_config):
                     for old_path in get_expanded_paths(*old_states, getter=get_state,
                                                        base_path=state_path, extend=True):
                         for trigger in triggers:
-                            if isinstance(new_states[-1], (list, tuple)):
+                            if len(new_states) and isinstance(new_states[-1], (list, tuple)):
                                 for case in new_states[-1]:
                                     new_transition = create_new(transition, str(old_path), new_states[:-1] + case['state'],
                                                                 trigger=trigger, on_transfer=on_transfer, case=case)
