@@ -216,6 +216,10 @@ def normalize_statemachine_config(**root_config):
                     for old_path in get_expanded_paths(*old_states, getter=get_state,
                                                        base_path=state_path, extend=True):
                         for trigger in triggers:
+                            for state in new_states[:-1]:
+                                if not isinstance(state, str):
+                                    raise MachineError(f"only the last state in the transition from "
+                                                       f"'{old_states}' to '{str(new_states)}' can be conditional")
                             if len(new_states) and isinstance(new_states[-1], (list, tuple)):
                                 for case in new_states[-1]:
                                     new_transition = create_new(transition, str(old_path), new_states[:-1] + case['state'],
