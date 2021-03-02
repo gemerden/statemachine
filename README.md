@@ -32,7 +32,7 @@ The following basic state machine concepts are used:
 * *callback*: different functions called on state transitions by the state machine,
 * *condition*: conditions that allow a specific state transition to take place.
 
-## Code Example
+## Code Sample
 
 Here is a simple state machine to give some idea of what the configuration looks like.
 ```python
@@ -55,7 +55,7 @@ lightswitch = LightSwitch(state="off")
 lightswitch.flick(name="Bob")  # prints: "Bob turned the light on"
 lightswitch.flick(name="Ann")  # prints: "Ann turned the light off"   
 ```
-> Note that this configuration works for the versions >= 0.5.0.
+
 
 ## Features
 The module has the following basic and some more advanced features:
@@ -105,7 +105,12 @@ class User(StatefulObject):
 * `state_machine` is the factory function that takes a configuration and turns it in a fully fledged state machine.
 * Notice you can set the initial state through the `state` (or any other name you gave the state machine), argument of `__init__`.
 
-lets add some states: 
+---
+
+
+
+Let's add some states: 
+
 * `new`: a user that has just been created, without password, etc.
 * `active`: a user that is active on the server, has been authenticated at least once, ...
 * `blocked`: a user that has been blocked access for whatever reason.
@@ -122,14 +127,22 @@ class User(StatefulObject):
         super().__init__(state='new')
         self.username = username
         self.password = None
+        
+user = User('rosemary')
+user.goto_active()
+assert user.state == 'active'
  ```
 
 * `state_machine` takes a parameter `states`, preferable created with the `states` function that returns a validated dictionary.
-* The initial state can be set as above; if not given, the first state of the state machine will be the initial state,
-* In this example transitions will be automatically added to the state machine. All possible transitions and related triggers are generated and can be called as `goto_[statename](...)`, so e.g. `user.goto_active(...)`,
+* The initial state can be set as above; if not given, the first state of the state machine will be used as the initial state,
+* When no transitions are explicitly defined, transitions will be automatically added to the state machine. All possible transitions and related triggers are generated and can be called as `goto_[statename](...)`,
 * `states('new', 'active', 'blocked')` is shorthand for `states(new=state(), active=state(), blocked=state())`; the longer form is only needed when extra configuration of the states is needed,
 
-Most of the time you might want to define the transitions yourself, to configure them and to limit possible transitions (e.g. reduce the chance of users logging in without password).
+---
+
+
+
+Most of the time you would want to define the transitions yourself, to configure them and to limit possible transitions (e.g. reduce the chance of users logging in without password).
 
 ```python
 from states import StatefulObject, state_machine, states, transition
@@ -160,7 +173,13 @@ assert user.state == 'active'  # this is the current state of the user
 * We also created a user, with initial state 'new' and triggered a transition: `user.activate()`, after which the user had the new state 'active'.
 * trigger functions like `User.activate()` and `User.block()` are auto-generated during state machine construction, 
 * Similarly, now the user has state 'active', we could call `user.block()` and after `user.unblock()`, but only in that order,
-However, a user needs to have a password to be 'active'. Lets use `activate` to set the password of the user (leaving out the `__init__` method, it will stay the same for now):
+However, a user needs to have a password to be 'active'. 
+
+---
+
+
+
+Lets use `activate` to set the password of the user (leaving out the `__init__` method; it will stay the same for now):
 
 ```python
 from states import StatefulObject, state_machine, states, transition
@@ -187,11 +206,16 @@ assert user.password == 'very_secret'
 ```
 
 * The decorator `@state.on_entry('active')` basically sets `set_password` to be called on entry of the state `active` by the user.
+* Note that in `@state.on_entry`, the name of the state machine attribute from `state=state_machine(...)` is used, 
 * Remember that to go to the state 'active' the trigger function`user.activate(...)` needs to be called:
     * All arguments passed to the trigger function will be passed to ALL callbacks that are called as a result,
     * Tip: use keyword arguments in callbacks and when calling trigger functions in other than trivial cases,
     * if there are multiple arguments needed by different callbacks, they can be defined like e.g. `callback(used_args, .., **ignored)` to ignore all unneeded arguments by this callback, but possibly needed by others.
 * We can similarly set callbacks for `on_exit`, `on_stay`.
+
+---
+
+
 
 To make the possibilities of callbacks clearer, let's have some more:
 
@@ -229,6 +253,10 @@ class User(StatefulObject):
 * for callback decorators `on_entry`, `on_exit` and `on_stay`, multiple comma separated states can be given (e.g. `@state.on_exit('new', active')`) and the callback will be installed on each state,
 * If an action is required on a specific transition, this can be achieved with  `@state.on_transfer(old_state, new_state)`; if too many `on_transfer` callbacks are required on a state machine, there might be a problem in the state definitions, 
 
+---
+
+
+
 To make this state machine a bit more useful, let us include a basic login process. To do this we will add 2 sub-states to the 'active' state:
 
 ```python
@@ -256,6 +284,10 @@ class User(StatefulObject):
     * actual construction of the sub-states is left to the main `state_machine`
 * the transition `transition('new', 'active', trigger='activate')` will now put the user in the `active.logged_out` state (because it is first in the list of sub-states of `active`)
 * the transition `transition('active', 'blocked', trigger='block')` will put the user in the `blocked` state independent of the `active` sub-state the user was in,
+
+---
+
+
 
 Of course the user needs to be able to login and logout and during login, a password must be checked:
 
@@ -344,21 +376,23 @@ assert user.state == 'active.logged_out'
 > from states import states, transition, state, case, default_case
 > 
 > active=state(
->     states=states('logged_out', 'logged_in'),
->     transitions=[
->         transition('logged_out', [case('logged_in', condition='verify_password'),
->                                   default_case('logged_out')],
->                    trigger='log_in'),
->         transition('logged_in', 'logged_out', trigger='log_out')
->     ]
+>        states=states('logged_out', 'logged_in'),
+>        transitions=[
+>            transition('logged_out', [case('logged_in', condition='verify_password'),
+>                                      default_case('logged_out')],  # stay in logged_out
+>                       trigger='log_in'),
+>            transition('logged_in', 'logged_out', trigger='log_out')
+>        ]
 > )
 > ```
 >
 > * The second argument of `transition` is replaced with a list of cases, indicating different end states of the transition,
 > * `case` and `default_case` are function that help configuration (e.g. validate); they define the states the transition might lead to and return dictionaries,
 > * `condition='verify_password'` refers to the method `verify_password` on the state managed object. If the condition argument is a string it will be looked up on the (in this case) User class. If it's a function, it will be used as is,
-> * Similarly other callbacks can be configured directly in the state machine config (not through decorators). For example you could do `active=state(on_entry='set_password', ...)`,
+> * Similarly other callbacks can be configured directly in the state machine config (not through decorators). For example you could do `active=state(on_entry='set_password')`,
 > * This way of configuration is especially useful for conditional transitions, because they are part of the 'structure' of the state machine; the other callbacks are (in my mind) better added through decorators, for clarity sake.
+
+---
 
 
 
@@ -451,28 +485,40 @@ assert user.state == 'blocked'
 * Notice also that we have replaced the `@state.condition('active.logged_out', 'active.logged_in')` decorator with the `@state.constraint('active.logged_in')`, decorator; a way to restrict all transitions going into a state (`active.logged_in` in this case),
 * The `@state.after_entry('somestate')` decorator applies to any entry of a (sub-) sub-state of the state. No argument means the root state machine: `@state.after_entry()`. Similarly there is `@state.before_exit(...)`. 
 
+---
+
+
+
 **Options & Niceties**
 
 The state machine has a couple of other options and niceties to enhance the experience:
 
 * A prepare callback that if present will be called before any transition: the `@[state machine name].prepare` decorator will install it on the machine. Note that the decorator takes no arguments,
 
-* A context manager callback that if present, can create a context for all transitions: it can be installed as follows:
+* You can define more then 2 states in a single transition, for example:
 
   ```python
-  @[state machine name].contextmanager
+  transition('new', 'active.logged_out', 'active.logged_in', trigger='log_through')
+  ```
+
+  This will call all related defined callbacks.
+
+* One or more context managers callback that if present, can create a context for all transitions: it can be installed as follows:
+
+  ```python
+  @[state machine attribute name].contextmanager('some_keyword')
   def some_context(obj, *args, **kwargs):
       ...  # initialize context
       yield context
       ...  # finalize context
   ```
 
-  *Important*: it will pass the context as a keyword argument to all callbacks called within the transitions (all but `prepare`), so the callbacks must be able to take the `context` argument, as in for example:
+  *Important*: it will pass the context as a keyword argument to all callbacks called within the transitions (all but `prepare`), so the callbacks must be able to take the defined keyword argument (in this case `some_keyword`) argument, as in:
 
   ```python
   @some_machine.on_exit('somestate')
-  def some_callback(obj, context, ...):
-      pass  # do something with the context
+  def some_callback(obj, some_keyword, ...):
+      pass  # do something with the context argument
   ```
 
    or
@@ -480,10 +526,12 @@ The state machine has a couple of other options and niceties to enhance the expe
   ```python
   @some_machine.on_exit('somestate')
   def some_callback(obj, some_args, **ignored):
-      pass  # ignore the context
+      pass  # ignore the context argument
   ```
 
-* You can save the graph of the state machine in different formats using `.save_graph(filename, **options)` as in:
+  If no keyword is given (as in `@some_machine.contextmanager()`), no context will be passed to the callbacks,  
+
+* You can save the graph of the state machine in different file formats using `.save_graph(filename, **options)` as in:
 
   ```python
   User.state.save_graph('user_state.png')  # see image at top of readme
@@ -532,7 +580,7 @@ With `obj` the state managed object and `*args` and `**kwargs` the arguments pas
 | condition      | `@machine.condition('old_state', 'new_state', trigger='some')` | set a condition on a transition (`trigger` is optional for occasional disambiguation), called before a transition takes place, callback should return `True` or `False` |
 | constraint     | `@machine.constraint('state_name')`                          | sets a constraint on entering the state, basically adds the callback as a condition on all transition going to the state. |
 
-Notes:
+**Notes**:
 
 * No callback is required, use as needed, mostly you can do what you want with only a few callbacks,
 * None  of these callbacks (apart from the `contextmanager`), need to be a single method; if multiple callbacks are decorated for the same transition, there are added to a list of callbacks for that occasion,
@@ -540,25 +588,38 @@ Notes:
 * The decorators do not change the callback in any way, they are not nested in another function, but returned as is,
 * The 'state_name' can include wildcards `*` meaning any sub-state,
 
-Call order:
+**Call order**:
 
-* In cases where the stateful object does not change state: `prepare`, `contextmanager`, *, `on_stay`, `parent.on_stay`, [repeat for any parent states up the tree],  `on_transfer`, [exit `contextmanager`],
-* For an actual state transition: `prepare`, `contextmanager`, *, `parent.before_exit`, `on_exit,`  [repeat for parent states up the tree that are exitted], [ *actual state change*],  [`parent.on_stay` for any parents the transition does not exit],  `on_transfer`,  `on_entry`, `parent.after_entry`,  [repeat for parent states down the tree that are entered], [exit `contextmanager`]
-* See the * in the items above? This where the conditions on the transition and constraints on the new_state are checked. If one of these fail, another transition is checked, until the conditions pass, or there is no condition. The state machine is checked during construction for there always being a default condition-less transition to fall back to.
+* In cases where the stateful object does not change state: `prepare`, `contextmanager`, `on_transfer`, `on_stay`, `parent.on_stay`, ...,   [exit `contextmanager`],
+* For an actual state transition: `prepare`, `contextmanager`, *, `parent.before_exit` , `on_exit,`  [ *actual state change*],    `on_entry`, `parent.after_entry`,  [`parent.on_stay` for any parents the transition does not exit],  `on_transfer`, [exit `contextmanager`],
+* Note the ***** in the above? This where the conditions on the transition and constraints on the new_state are checked. If one of these fail, another transition is checked, until the conditions pass, or there is no condition. The state machine is checked during construction for there always being a default condition-less transition to fall back to,
+* In case of nested states, parent callbacks will also be called if applicable, e.g. if a user goes from `active.logged_out` to `blocked`: `on_exit` of `active.logged_out` *and* `on_exit` of `active` will be called, because the `active` state is also exitted.
+
+
 
 ## A Short Note on Performance
 
-This state machine is pure python, but very optimized; on a normal PC a state transition with a single callback will take place in ~1 microsecond. The final performance is in most cases determined by the performance of the callbacks, although adding conditions, constraints and contextmanagers will add a little extra overhead
+This state machine is pure python, but very optimized; on a normal PC a state transition with a single callback will take place in ~1 microsecond. The final performance is in most cases determined by the performance of the callbacks, although adding conditions, constraints and contextmanagers will add some extra overhead.
 
-### Change Log
+
+
+## Change Log
 
 This is a new section of the readme, starting at version 0.4.0.
+
+#### Version 0.6.0
+
+**Features/Changes**
+
+* Transitions can be defines with more then 2 states,
+* The `contextmanager` decorator now takes a keyword for the name under which the context is passed to the callbacks,
+* Transitions directly back to the same state should be defined with a single state name.
 
 #### Version 0.5.8
 
 **Features**
 
-* more flexibility in configuration of conditional transitions (in some somewhat rare cases),
+* more flexibility in configuration of conditional transitions (for some somewhat rare cases),
 * Nicer graphs (with e.g. conditional transitions clearly shown).
 
 #### Version 0.5.7
@@ -676,21 +737,21 @@ The state machine in the module has the following rules for setting up states an
     * (A, B, C)  : states of a state managed object (called 'object' from now)
     * (A(B, C)) : state A with nested states B, C,
     * A.B : sub-state B of A; A.B is called a state path,
-    * <A, B>   : transition between state A and state B
+    * <A, B>   : transition between state A and state B,
     * <A, B or C>: transition from A to B or C, depending on condition functions,
     * <*, B>: shorthand for all transitions to state B,
 * allowed transitions, given states A,  B, C(E, F) and D(G, H):
-    * <A, B>: basic transition, configured as {"old_state": "A", "new_state": "B"}
-    * <A, A>: transition from a state to itself
-    * <C.E, A>: transition from a specific sub-state of C to A
-    * <C, D.G>: transition from any sub-state of C to specific state D.G
-    * <A, C>: transition from A to C.E, E being the initial state of C because it was explicitly set or because it is the first state in E
+    * <A, B>: basic transition,
+    * <A,>: transition from state A to itself,
+    * <C.E, A>: transition from a specific sub-state of C.E to A,
+    * <C, D.G>: transition from any sub-state of C to specific state D.G,
+    * <A, C>: transition from A to C.E (if it exists), E being the default state of C because it was explicitly set or its the first state configured in E,
     * <C.F, D.H>: transitioning from one sub-state in a state to another sub-state in another state. Note that this would call (if present) on_exit on F and C and on_entry on D and H in that order.
 * adding conditional transitions, given transition <A, B or C or D>:
     * <A, B> and <A, C> must have conditions attached, these condition will be checked in order of configuration; 
-    * D does not need to have a condition attached meaning it will always be the next state if the conditions on <A, B> and <A, C> fail,
+    * D has no condition attached meaning it will always be the next state if the conditions on <A, B> and <A, C> fail,
     * (If <A, D> does have a condition attached, a default state transition <A, A> will be created during state machine construction),
-* an object cannot just be in state A if A has substates: given state A(B, C), the object can be in A.B or A.C, not in A
+* an object cannot just be in state A if A has sub-states: given state A(B, C), the object can be in A.B or A.C, not in A.
 
 ## Authors
 
