@@ -364,11 +364,11 @@ class StateMachine(ParentState):
 
     @property
     def states(self):
-        return [s.name for s in self.iter_states()]
+        return [s.name for s in self.iter_states() if s is not self]
 
     @property
     def transitions(self):
-        return [(str(t.state.path), str(t.target.path)) for t in self.iter_transitions()]
+        return [tuple(map(str, (s.path for s in t.states))) for t in self.iter_transitions()]
 
     def on_entry(self, state_name, *state_names):
         return self._register_state_callback('on_entry', state_name, *state_names)

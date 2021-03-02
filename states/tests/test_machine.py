@@ -90,6 +90,7 @@ class TestSimpleStateMachine(unittest.TestCase):
                 self.off_count += 1
 
         self.lamp = Lamp()
+        self.obj_class = Lamp
 
     def test_setup(self):
         pass
@@ -114,6 +115,11 @@ class TestSimpleStateMachine(unittest.TestCase):
     def test_info(self):
         self.assertEqual(type(self.lamp).state.sub_states["on"].info, "not turned off")
         self.assertEqual(type(self.lamp).state['off'].trigger_transitions['flick'][0].info, "turn the light on")
+
+    def test_utils(self):
+        assert self.obj_class.state.states == ['off', 'on']
+        assert self.obj_class.state.transitions == [('off', 'on'), ('on', 'off')]
+        assert self.obj_class.state.triggers == {'flick'}
 
 
 class TestStateMachine(unittest.TestCase):
@@ -1926,4 +1932,3 @@ class TestMultiTransition(unittest.TestCase):
         assert washer.before_history == ['off.working']
         assert washer.after_history == ['on.waiting']
         assert washer.stay_history == ['on.waiting']
-
