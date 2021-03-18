@@ -97,7 +97,6 @@ def normalize_statemachine_config(**root_config):
      - all single callbacks are turned into lists of callbacks
      - extra validations
 
-    :param _parent_config: configuration of the containing state(-machine) for recursion
     :param root_config: configuration written by user-developer
     :return: normalized configuration
     """
@@ -200,7 +199,7 @@ def normalize_statemachine_config(**root_config):
                         kwargs['info'] = case.get('info', transition.get('info', ''))
                         if transition.get('condition'):
                             raise MachineError(
-                                f"transition over {[old_state] + new_states} cannot have outside 'condition' argument")
+                                f"transition over {[old_state] + new_states} cannot have uncased 'condition' argument")
                         kwargs['condition'] = case.get('condition', [])
                     new_transition = copy_struct(transition)
                     new_transition.update(old_state=old_state, new_state=new_states, on_transfer=on_transfer, **kwargs)
