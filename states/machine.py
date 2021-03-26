@@ -178,9 +178,9 @@ class LeafState(ChildState, DummyMapping):
 
     def iter_transitions(self, key=lambda t: True):
         for transitions in self.trigger_transitions.values():
-            for transaction in transitions:
-                if key(transaction):
-                    yield transaction
+            for transition in transitions:
+                if key(transition):
+                    yield transition
 
     @lazy_property
     def triggers(self):

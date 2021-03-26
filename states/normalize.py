@@ -2,8 +2,8 @@ __author__ = "lars van gemerden"
 
 from contextlib import contextmanager
 from functools import partial
-from typing import Set
 from collections import deque, defaultdict
+from typing import Set
 
 from .tools import listify, Path, copy_struct
 from .exception import MachineError
@@ -92,8 +92,8 @@ _marker = object()
 def normalize_statemachine_config(**root_config):
     """
     normalizes the state-machine configuration:
-     - all transitions are placed under correct state,
-     - transition old_states and new_states are split into multiple transitions without wildcards and with full paths
+     - all transitions are placed under correct state (nested start state of transition) ,
+     - transition old_states and new_states are split into multiple transitions without wildcards and with full paths,
      - all single callbacks are turned into lists of callbacks
      - extra validations
 
