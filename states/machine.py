@@ -236,16 +236,13 @@ class StateMachine(ParentState):
         if self.owner_cls:
             self.install_triggers(self.owner_cls)
 
-    def __set_name__(self, cls, name):
+    def bind(self, cls, name):
         self.owner_cls = cls
-        if not cls._state_machines:
-            cls._state_machines = []
-        cls._state_machines.append(self)
-
+        name = self._validate_name(name)
         if self.name and self.name != name:
             self.use_attr = True
         else:
-            self.name = self._validate_name(name)
+            self.name = name
 
     def __get__(self, obj, cls=None):
         if obj is None:

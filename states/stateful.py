@@ -1,20 +1,24 @@
 __author__ = "lars van gemerden"
 
+from states.machine import StateMachine
+from states.tools import class_attributes
+
+
 class StatefulObject(object):
     """
     Base class for objects with one or more state machine managed states. State can change by calling triggers as defined in
     transitions of the state machine.
     """
-    _state_machines = None
-
     def __init_subclass__(cls, **kwargs):
-        """ moved from StateMachine.__set_class__ for better error handling (no RunTimeError)"""
+        """ moved from StateMachine.__set_class__ for better error handling (no RunTimeError) and late binding """
         super().__init_subclass__(**kwargs)
-        if cls._state_machines:
-            for machine in cls._state_machines:
-                machine.resolve_callbacks(cls)
-                machine.validate_transitions()
-                machine.install_triggers(cls)
+        machine_dict = class_attributes(cls, filter=lambda a: isinstance(a, StateMachine))
+        cls._state_machines = list(machine_dict.values())
+        for name, machine in machine_dict.items():
+            machine.bind(cls, name)
+            machine.resolve_callbacks(cls)
+            machine.validate_transitions()
+            machine.install_triggers(cls)
 
     def __init__(self, *args, **kwargs):
         """
