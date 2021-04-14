@@ -31,6 +31,15 @@ def listify(list_or_item):
         return [list_or_item]
 
 
+def class_attributes(cls, filter=lambda a: True):
+    result_dict = {}
+    for name in dir(cls):
+        attr = getattr(cls, name)
+        if filter(attr):
+            result_dict[name] = attr
+    return result_dict
+
+
 _marker = object()
 
 
