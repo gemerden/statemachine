@@ -840,6 +840,31 @@ class TestNestedStateMachine(unittest.TestCase):
         self.assertEqual(washer.state, "on.drying")
         self.assert_counters(washer, 5, 5, 3, 2)
 
+    def test_trigger_by_name(self):
+        washer = self.object_class()
+        self.assertEqual(washer.state, "off.working")
+        self.assert_counters(washer, 0, 0, 0, 0)
+
+        washer.trigger('flick')
+        self.assertEqual(washer.state, "on.waiting")
+        self.assert_counters(washer, 1, 1, 1, 1)
+
+        washer.trigger('wash')
+        self.assertEqual(washer.state, "on.washing")
+        self.assert_counters(washer, 2, 2, 1, 1)
+
+        washer.trigger('dry')
+        self.assertEqual(washer.state, "on.drying")
+        self.assert_counters(washer, 3, 3, 1, 1)
+
+        washer.trigger('flick')
+        self.assertEqual(washer.state, "off.working")
+        self.assert_counters(washer, 4, 4, 2, 1)
+
+        washer.trigger('just_dry_already')
+        self.assertEqual(washer.state, "on.drying")
+        self.assert_counters(washer, 5, 5, 3, 2)
+
     def test_state_string(self):
         assert str(self.object_class.state["on"]) == "State('on')"
         assert str(self.object_class.state["on"]["washing"]) == "State('on.washing')"

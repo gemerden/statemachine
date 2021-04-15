@@ -43,3 +43,10 @@ class StatefulObject(object):
         for machine in self._state_machines:
             machine.init_entry(self, *args, **kwargs)
 
+    def trigger(self, trigger_name, *args, **kwargs):
+        """
+        method to call trigger functions by name
+        """
+        return getattr(self, trigger_name)(*args, **kwargs)
+
+
