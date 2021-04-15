@@ -49,4 +49,12 @@ class StatefulObject(object):
         """
         return getattr(self, trigger_name)(*args, **kwargs)
 
+    def goto(self, state_name, *args, **kwargs):
+        """
+        Causes transition to state with 'state_name' from any state. This only works if the state machine is not
+        nested and no transitions have been explicitly defined. In (only) this case goto_[state_name] trigger methods
+        have been auto-generated.
+        """
+        return getattr(self, 'goto_' + state_name)(*args, **kwargs)
+
 

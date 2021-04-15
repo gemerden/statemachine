@@ -66,6 +66,23 @@ class TestSimplestStateMachine(unittest.TestCase):
         self.assertEqual(self.lamp.off_count, 2)
         assert self.lamp.stays == dict(on=["b"], off=["d"])
 
+    def test_goto(self):
+        """test the basio trigger functions and the resultig states"""
+        self.assertEqual(self.lamp.state, "off")
+        self.lamp.goto('on')
+        self.assertEqual(self.lamp.state, "on")
+        self.lamp.goto('off')
+        self.assertEqual(self.lamp.state, "off")
+        self.lamp \
+            .goto('on', "a") \
+            .goto('on', "b") \
+            .goto('off', "c") \
+            .goto('off', "d")
+        self.assertEqual(self.lamp.state, "off")
+        self.assertEqual(self.lamp.on_count, 2)
+        self.assertEqual(self.lamp.off_count, 2)
+        assert self.lamp.stays == dict(on=["b"], off=["d"])
+
 
 class TestSimpleStateMachine(unittest.TestCase):
 
