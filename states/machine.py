@@ -304,7 +304,7 @@ class StateMachine(ParentState):
                 trigger_function = funcs[0]
             else:
                 def trigger_function(obj, *args, __fs=funcs, **kwargs):
-                    for f in __fs:  # one f per state machine
+                    for f in __fs:  # one function per state machine
                         f(obj, *args, **kwargs)
                     return obj
 
