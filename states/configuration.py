@@ -1,9 +1,9 @@
-from typing import Mapping, Callable
+from typing import Callable
 
 from .exception import MachineError
 
 """
-Functions to validate and make the state machine config more readable.
+Functions to validate and make the state machine config easier to process.
 """
 
 
@@ -13,6 +13,9 @@ def states(*state_names, **state_configs):
         raise MachineError(f"all state names in 'states' should be of type 'str'")
     if not all(isinstance(s, dict) for s in state_configs.values()):
         raise MachineError(f"all states in 'states' should be of type 'dict'")
+    for name in state_names:
+        if name in state_configs:
+            raise MachineError(f"double state name: {name}")
     all_state_configs = {s: state() for s in state_names}  # generate state configs
     all_state_configs.update(state_configs)
     if not len(all_state_configs):
